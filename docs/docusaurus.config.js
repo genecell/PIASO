@@ -41,9 +41,9 @@ const darkCodeTheme = require('prism-react-renderer/themes/dracula');
     /** @type {import('@docusaurus/preset-classic').ThemeConfig} */
     ({
       navbar: {
-        title: 'My Site',
+        title: 'PIASO',
         logo: {
-          alt: 'My Site Logo',
+          alt: 'PIASO Logo',
           src: 'img/logo.svg',
         },
         items: [
@@ -58,6 +58,10 @@ const darkCodeTheme = require('prism-react-renderer/themes/dracula');
             href: 'https://github.com/facebook/docusaurus',
             label: 'GitHub',
             position: 'right',
+          },
+	  {
+            label: 'API',
+            href: '/docs-api/index.html',
           },
         ],
       },

@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="./">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>piaso module &#8212; PIASO 0.1.0 documentation</title>
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=4f649999" />
+    <link rel="stylesheet" type="text/css" href="_static/alabaster.css?v=039e1c02" />
+    <script src="_static/documentation_options.js?v=01f34227"></script>
+    <script src="_static/doctools.js?v=888ff710"></script>
+    <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+   
+  <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <section id="module-piaso">
+<span id="piaso-module"></span><h1>piaso module<a class="headerlink" href="#module-piaso" title="Link to this heading">¶</a></h1>
+<dl class="py function">
+<dt class="sig sig-object py" id="piaso.addNonOverlappingPeaks">
+<span class="sig-prename descclassname"><span class="pre">piaso.</span></span><span class="sig-name descname"><span class="pre">addNonOverlappingPeaks</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">base_peak_file</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">additional_peak_file</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_peak_file</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bedtools_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#piaso.addNonOverlappingPeaks" title="Link to this definition">¶</a></dt>
+<dd><p>Adds peaks from the ‘additional_peak_file’ that don’t overlap with peaks in ‘base_peak_file’ 
+and then merges the result to ensure a sorted non-overlapping peak list while retaining original peak names.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>base_peak_file</strong> – Path to the main peak file.</p></li>
+<li><p><strong>additional_peak_file</strong> – Path to the additional peak file.</p></li>
+<li><p><strong>output_peak_file</strong> – Path where the merged and sorted peak list will be saved.</p></li>
+<li><p><strong>bedtools_path</strong> – Optional path to the directory containing the bedtools executable. 
+If None, bedtools command available in the PATH will be used. Default is None.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="piaso.buildADJ">
+<span class="sig-prename descclassname"><span class="pre">piaso.</span></span><span class="sig-name descname"><span class="pre">buildADJ</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">adata</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_rep</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'X_svd'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_nearest_neighbors</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">10</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">include_self</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#piaso.buildADJ" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="piaso.calculateAdjacentPeakSimilarityChunkwindow">
+<span class="sig-prename descclassname"><span class="pre">piaso.</span></span><span class="sig-name descname"><span class="pre">calculateAdjacentPeakSimilarityChunkwindow</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">peaks1</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mat1</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">csr_matrix</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">peaks2</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mat2</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">csr_matrix</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">window_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">100000</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">chunk_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">100</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">return_df</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#piaso.calculateAdjacentPeakSimilarityChunkwindow" title="Link to this definition">¶</a></dt>
+<dd><p>Calculate cosine similarities between each peak in mat1 and its adjacent peaks in mat2 within a specified window size.
+The peaks need to be pre-sorted.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>peaks1</strong> – List of sorted peak strings associated with mat1.</p></li>
+<li><p><strong>mat1</strong> – A csr_matrix where each row corresponds to a peak in the <cite>peaks1</cite> list.</p></li>
+<li><p><strong>peaks2</strong> – List of sorted peak strings associated with mat2.</p></li>
+<li><p><strong>mat2</strong> – A csr_matrix where each row corresponds to a peak in the <cite>peaks2</cite> list.</p></li>
+<li><p><strong>window_size</strong> – The genomic distance within which to calculate similarities.</p></li>
+<li><p><strong>chunk_size</strong> – The number of rows to be processed in each chunk.</p></li>
+<li><p><strong>return_df</strong> – Whether to return the result as a DataFrame. If False, returns a csr_matrix.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A csr_matrix or DataFrame representing the cosine similarity between peaks in mat1 and mat2.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="piaso.calculateCellMetrics">
+<span class="sig-prename descclassname"><span class="pre">piaso.</span></span><span class="sig-name descname"><span class="pre">calculateCellMetrics</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">adata</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">AnnData</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">layer</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#piaso.calculateCellMetrics" title="Link to this definition">¶</a></dt>
+<dd><p>Calculate the number of fragments overlapping peaks and the number of peaks 
+for each cell and store them in adata.obs.</p>
+<p>Parameters:
+adata (AnnData): An AnnData object with cells in rows and peaks in columns.
+layer (str, optional): The layer of AnnData to use. If None, the default .X layer is used.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="piaso.calculatePeakMetrics">
+<span class="sig-prename descclassname"><span class="pre">piaso.</span></span><span class="sig-name descname"><span class="pre">calculatePeakMetrics</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">adata</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">AnnData</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">layer</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#piaso.calculatePeakMetrics" title="Link to this definition">¶</a></dt>
+<dd><p>Calculate the number of cells in which each peak is active (non-zero counts) for an AnnData object,
+and then add this information to the <cite>adata.var[‘n_cells’]</cite> attribute.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>adata</strong> – AnnData object containing cell x peak matrix.</p></li>
+<li><p><strong>layer</strong> – Specify which layer of the AnnData object to use. If None, use the main matrix (.X attribute).</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="piaso.check_software_availability">
+<span class="sig-prename descclassname"><span class="pre">piaso.</span></span><span class="sig-name descname"><span class="pre">check_software_availability</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#piaso.check_software_availability" title="Link to this definition">¶</a></dt>
+<dd><p>Checks the availability of the required software in the system’s PATH.
+Raises an EnvironmentError if any software is not available.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="piaso.chr_split_func">
+<span class="sig-prename descclassname"><span class="pre">piaso.</span></span><span class="sig-name descname"><span class="pre">chr_split_func</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">line</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#piaso.chr_split_func" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="piaso.convertBamToFragment">
+<span class="sig-prename descclassname"><span class="pre">piaso.</span></span><span class="sig-name descname"><span class="pre">convertBamToFragment</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">bam_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_gz_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bgzip_path</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tabix_path</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bgzip_n_cores</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">20</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">buffer_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1000000</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">barcode_tag</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'CB'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#piaso.convertBamToFragment" title="Link to this definition">¶</a></dt>
+<dd><p>Convert a BAM file to a fragment count file with cell barcodes and then create a tabix index.</p>
+<p>Parameters:
+- bam_path (str): Path to the input BAM file.
+- output_gz_path (str): Path to the output bgzipped fragment count file.
+- bgzip_path (str, optional): Path to the bgzip executable. Defaults to None (system path).
+- tabix_path (str, optional): Path to the tabix executable. Defaults to None (system path).
+- bgzip_n_cores (int, optional): Number of cores for bgzip compression. Defaults to 20.
+- buffer_size (int, optional): Number of lines to buffer before writing to output. Helps control memory usage. Defaults to 1 million.
+- barcode_tag (str): Tag for cell barcodes in bam file. Default is ‘CB’.</p>
+<p>Returns:
+- None. Writes results to <cite>output_gz_path</cite> and creates a <cite>.tbi</cite> index.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="piaso.createCOSGDataFrameLong">
+<span class="sig-prename descclassname"><span class="pre">piaso.</span></span><span class="sig-name descname"><span class="pre">createCOSGDataFrameLong</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">adata</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">key</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'cosg'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#piaso.createCOSGDataFrameLong" title="Link to this definition">¶</a></dt>
+<dd><p>Converts marker genes and their corresponding scores stored in adata.uns into a long-format DataFrame.</p>
+<p>Parameters:
+- adata (anndata.AnnData): An annotated data matrix.
+- key (str): The key used to access the names and scores in adata.uns dictionary.</p>
+<p>Returns:
+- cosg_long (pd.DataFrame): A long-format DataFrame with columns ‘Group’, ‘Name’, ‘Score’, and ‘Rank’.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="piaso.filterFragmentByBarcode">
+<span class="sig-prename descclassname"><span class="pre">piaso.</span></span><span class="sig-name descname"><span class="pre">filterFragmentByBarcode</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_fragment_file</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_fragment_file</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">filtered_barcodes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bgzip_n_cores</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">20</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bgzip_dir</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tabix_dir</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">chunk_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">10000000</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#piaso.filterFragmentByBarcode" title="Link to this definition">¶</a></dt>
+<dd><p>Filters the input fragment file and keeps only those rows where the barcode is 
+in the provided list of filtered barcodes.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>input_fragment_file</strong> – str, Path to the input gz compressed fragment file.</p></li>
+<li><p><strong>output_fragment_file</strong> – str, Path to the output file where the filtered fragments will be written.</p></li>
+<li><p><strong>filtered_barcodes</strong> – np.ndarray, Numpy array containing the list of filtered cell barcodes.</p></li>
+<li><p><strong>bgzip_n_cores</strong> – int, Optional; Number of cores to be used by bgzip. Default is 20.</p></li>
+<li><p><strong>chunk_size</strong> – int, Optional; Size of the chunk to be written at once to bgzip.stdin during the bgzipping process. Default is 10_000_000.</p></li>
+<li><p><strong>bgzip_dir</strong> – Optional; Directory path containing the bgzip executable. Default is None (uses system PATH).</p></li>
+<li><p><strong>tabix_dir</strong> – Optional; Directory path containing the tabix executable. Default is None (uses system PATH).</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="piaso.filterFragmentByRegion">
+<span class="sig-prename descclassname"><span class="pre">piaso.</span></span><span class="sig-name descname"><span class="pre">filterFragmentByRegion</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">fragment_file</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sorted_bed</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_fragment_file</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bedtools_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bgzip_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tabix_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bgzip_n_cores</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">20</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#piaso.filterFragmentByRegion" title="Link to this definition">¶</a></dt>
+<dd><p>Filter fragments using a sorted BED file and then compress and index the results.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>fragment_file</strong> – Path to the input fragment file.</p></li>
+<li><p><strong>sorted_bed</strong> – Path to the sorted BED file.</p></li>
+<li><p><strong>output_fragment_file</strong> – Path to the output compressed fragment file.</p></li>
+<li><p><strong>bedtools_path</strong> – Optional path to the directory containing the bedtools executable.</p></li>
+<li><p><strong>bgzip_path</strong> – Optional path to the directory containing the bgzip executable.</p></li>
+<li><p><strong>tabix_path</strong> – Optional path to the directory containing the tabix executable.</p></li>
+<li><p><strong>bgzip_n_cores</strong> – Number of cores for bgzip. Defaults to 20.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="piaso.filterFragments">
+<span class="sig-prename descclassname"><span class="pre">piaso.</span></span><span class="sig-name descname"><span class="pre">filterFragments</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_fragment_file</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_fragment_file</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fragment_count_file</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">min_fragments</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1000</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bgzip_n_cores</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">20</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">chunk_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">10000000</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#piaso.filterFragments" title="Link to this definition">¶</a></dt>
+<dd><p>Filters the fragments based on the minimum number of fragments in each cell.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>input_fragment_file</strong> – str, Path to the input gz compressed fragment file.</p></li>
+<li><p><strong>output_fragment_file</strong> – str, Path to the output file where the filtered fragments will be written.</p></li>
+<li><p><strong>fragment_count_file</strong> – str, Path to the csv file where the number of unique fragments per cell will be written.</p></li>
+<li><p><strong>min_fragments</strong> – int, Optional; Minimum number of fragments required for a cell barcode to be considered valid. Default is 1000.</p></li>
+<li><p><strong>bgzip_n_cores</strong> – int, Optional; Number of cores to be used by bgzip. Default is 1.</p></li>
+<li><p><strong>chunk_size</strong> – int, Optional; Size of the chunk to be written at once to bgzip.stdin during the bgzipping process. Default is 1_000_000.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="piaso.generateBigWigByCellType">
+<span class="sig-prename descclassname"><span class="pre">piaso.</span></span><span class="sig-name descname"><span class="pre">generateBigWigByCellType</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_fragment_file</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">chrom_sizes_file</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">celltype_barcode_df</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_dir</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bedtools_exec_dir</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">samtools_exec_dir</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bamCoverage_exec_dir</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bamCoverage_ncores</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bamCoverage_binSize</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bamCoverage_normalizeMethod</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'BPM'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">samtools_ncores</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">20</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sort_bam</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#piaso.generateBigWigByCellType" title="Link to this definition">¶</a></dt>
+<dd><p>Generates BigWig files for each cell type from the fragment file.</p>
+<p>Parameters:
+- input_fragment_file (str): Path to the input fragment file (gzip format).
+- chrom_sizes_file (str): Path to the chromosome sizes file.
+- celltype_barcode_df (DataFrame): A DataFrame with cell types and their corresponding barcodes.
+- output_dir (str): Directory to save the generated BAM and BigWig files.
+- bedtools_exec_dir (str): Directory containing bedtools executable.
+- samtools_exec_dir (str): Directory containing samtools executable.
+- bamCoverage_exec_dir (str): Directory containing bamCoverage executable.
+- bamCoverage_ncores (int, optional): Number of processors for bamCoverage. Default is 10.
+- bamCoverage_binSize (int, optional): Bin size for bamCoverage. Default is 1.
+- bamCoverage_normalizeMethod (str, optional): Normalization method for bamCoverage. Default is “BPM”.
+- samtools_ncores (int, optional): Number of processors for samtools. Default is 20.
+- sort_bam (bool, optional): Whether to sort the BAM file by coordinate after creation. If True, the BAM file will be sorted by coordinate and the unsorted version will be deleted. Default is False.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="piaso.handler">
+<span class="sig-prename descclassname"><span class="pre">piaso.</span></span><span class="sig-name descname"><span class="pre">handler</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">signum</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">frame</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#piaso.handler" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="piaso.intersectPeak">
+<span class="sig-prename descclassname"><span class="pre">piaso.</span></span><span class="sig-name descname"><span class="pre">intersectPeak</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">peak_file</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reference_file</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_file</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bedtools_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#piaso.intersectPeak" title="Link to this definition">¶</a></dt>
+<dd><p>Calculates the overlapping regions of two BED files using bedtools.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>peak_file</strong> – Path to the input peak file.</p></li>
+<li><p><strong>reference_file</strong> – Path to the reference gene file.</p></li>
+<li><p><strong>output_file</strong> – Path to the output file where overlapping regions will be saved.</p></li>
+<li><p><strong>bedtools_path</strong> – Optional path to the directory containing the bedtools executable. 
+If None, bedtools command available in the PATH will be used. Default is None.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="piaso.intersectPeakSlop">
+<span class="sig-prename descclassname"><span class="pre">piaso.</span></span><span class="sig-name descname"><span class="pre">intersectPeakSlop</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">peak1_bed_file</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">peak2_bed_file</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">chrom_sizes_file</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_file</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bedtools_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">slop_distance</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">100000</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#piaso.intersectPeakSlop" title="Link to this definition">¶</a></dt>
+<dd><p>This function extends the regions of the second peak file (peak2) by the given slop_distance,
+then computes the intersections between peak1 and the slopped peak2 regions, and saves the results
+to the specified output file.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>peak1_bed_file</strong> – Path to the first peak BED file.</p></li>
+<li><p><strong>peak2_bed_file</strong> – Path to the second peak BED file.</p></li>
+<li><p><strong>chrom_sizes_file</strong> – Path to the chromosome sizes file.</p></li>
+<li><p><strong>output_file</strong> – Path to save the intersected results.</p></li>
+<li><p><strong>bedtools_path</strong> – Optional path to the directory containing the bedtools executable. 
+If None, bedtools command available in the PATH will be used. Default is None.</p></li>
+<li><p><strong>slop_distance</strong> – Distance to add on both sides of the regions from peak2. Default is 100,000 bases.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="piaso.loadFragmentAsTile">
+<span class="sig-prename descclassname"><span class="pre">piaso.</span></span><span class="sig-name descname"><span class="pre">loadFragmentAsTile</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">fragment_file</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tile_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">500</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#piaso.loadFragmentAsTile" title="Link to this definition">¶</a></dt>
+<dd><p>Load the data from a fragment file and return a sparse matrix, a DataFrame containing 
+cell barcodes and their indices, and a DataFrame containing tiles and their indices.</p>
+<p>Parameters:
+fragment_file (str): The path to the fragment file.
+tile_size (int): The size of the tiles.</p>
+<p>Returns:
+An AnnData object with a sparse matrix where rows represent cells, and columns represent tiles.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="piaso.match_and_retrieve_values">
+<span class="sig-prename descclassname"><span class="pre">piaso.</span></span><span class="sig-name descname"><span class="pre">match_and_retrieve_values</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">query_array</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reference_array</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reference_value_array</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">ndarray</span></span></span><a class="headerlink" href="#piaso.match_and_retrieve_values" title="Link to this definition">¶</a></dt>
+<dd><p>This function receives three 1-D numpy arrays: query_array, reference_array, and reference_value_array.
+For each element in query_array, the function finds the corresponding index of its first occurrence in reference_array and 
+returns the corresponding value from reference_value_array. If an element in query_array does not exist in reference_array, 
+the corresponding value is np.nan.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>query_array</strong> – 1-D numpy array - the array whose elements’ indices are to be found in reference_array</p></li>
+<li><p><strong>reference_array</strong> – 1-D numpy array - the array in which to find the indices of elements of query_array</p></li>
+<li><p><strong>reference_value_array</strong> – 1-D numpy array - the array from which to retrieve the values corresponding to the indices found in reference_array</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>1-D numpy array of values from reference_value_array corresponding to the position of elements in query_array in reference_array</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="piaso.mergeFragmentFiles">
+<span class="sig-prename descclassname"><span class="pre">piaso.</span></span><span class="sig-name descname"><span class="pre">mergeFragmentFiles</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">fragment_files</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">temp_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">merged_file_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bgzip_n_cores</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">20</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">chunk_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">10000000</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#piaso.mergeFragmentFiles" title="Link to this definition">¶</a></dt>
+<dd><p>Merges fragment files from different data directories.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>fragment_file (List[str]): List of paths to the fragment files.
+temp_dir (str): Path to the temporary directory to store intermediate files.
+save_dir (str): Path to the directory to save the final output.
+merged_file_name (str): Name of the final merged file (without extension).
+bgzip_n_cores (int): Number of cores to be used by the bgzip command. Default is 20.
+chunk_size (int): Number of lines to process at once, A chunk size of around 23.8 million lines would occupy roughly 1 GB of memory. Around 40 bytes for a line</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="piaso.mergePeakFile">
+<span class="sig-prename descclassname"><span class="pre">piaso.</span></span><span class="sig-name descname"><span class="pre">mergePeakFile</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_file</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">file_extension</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'.narrowPeak'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bedtools_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#piaso.mergePeakFile" title="Link to this definition">¶</a></dt>
+<dd><p>Merge all the peak files (either .narrowPeak or .bed) in the provided directory.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>input_dir</strong> – Directory containing peak files.</p></li>
+<li><p><strong>output_file</strong> – Path to the merged output file.</p></li>
+<li><p><strong>file_extension</strong> – Extension of the peak files, either ‘.narrowPeak’ or ‘.bed’. Default is ‘.narrowPeak’.</p></li>
+<li><p><strong>bedtools_path</strong> – Path to the directory containing the bedtools executable. 
+If None, bedtools command available in the PATH will be used. Default is None.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="piaso.minusPeak">
+<span class="sig-prename descclassname"><span class="pre">piaso.</span></span><span class="sig-name descname"><span class="pre">minusPeak</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">peaks1_bed_file</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">peaks2_bed_file</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_peak_file</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bedtools_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#piaso.minusPeak" title="Link to this definition">¶</a></dt>
+<dd><p>Retains only the peaks from ‘peaks1_bed_file’ that don’t overlap with peaks in ‘peaks2_bed_file’.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>peaks1_bed_file</strong> – Path to the peaks1 bed file.</p></li>
+<li><p><strong>peaks2_bed_file</strong> – Path to the peaks2 bed file.</p></li>
+<li><p><strong>output_peak_file</strong> – Path where the result peak list will be saved.</p></li>
+<li><p><strong>bedtools_path</strong> – Optional path to the directory containing the bedtools executable. 
+If None, bedtools command available in the PATH will be used. Default is None.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="piaso.parsePeak">
+<span class="sig-prename descclassname"><span class="pre">piaso.</span></span><span class="sig-name descname"><span class="pre">parsePeak</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">peak</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#piaso.parsePeak" title="Link to this definition">¶</a></dt>
+<dd><p>Parse peak string into a tuple containing chromosome, start, and end.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>peak</strong> – A string representing a peak, e.g. “chr:start-end” or “chr-start-end”.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A tuple containing chromosome as a string, start and end as integers.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="piaso.processTSSbed">
+<span class="sig-prename descclassname"><span class="pre">piaso.</span></span><span class="sig-name descname"><span class="pre">processTSSbed</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">bedtools_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tss_bed_file</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">genome_size_file</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">slop_l</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">slop_r</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">shift</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_dir</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">prefix</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'tss'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#piaso.processTSSbed" title="Link to this definition">¶</a></dt>
+<dd><p>A function to process bed files: slop, left shift, and right shift operations are performed.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>bedtools_path</strong> – str, the path to the bedtools binaries.</p></li>
+<li><p><strong>tss_bed_file</strong> – str, the path to the input TSS bed file.</p></li>
+<li><p><strong>genome_size_file</strong> – str, the path to the genome size file.</p></li>
+<li><p><strong>slop_l</strong> – int, the amount to slop (extend) the features to the left.</p></li>
+<li><p><strong>slop_r</strong> – int, the amount to slop (extend) the features to the right.</p></li>
+<li><p><strong>shift</strong> – int, the amount to shift the features to the left and right.</p></li>
+<li><p><strong>output_dir</strong> – str, the directory where the output files will be saved.</p></li>
+<li><p><strong>prefix</strong> – str, a prefix for naming output files. Default is “tss”.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="piaso.process_celltype">
+<span class="sig-prename descclassname"><span class="pre">piaso.</span></span><span class="sig-name descname"><span class="pre">process_celltype</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">args</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#piaso.process_celltype" title="Link to this definition">¶</a></dt>
+<dd><p>Processes each cell type: filters fragments, converts to BAM, and then to BigWig.</p>
+<p>Parameters:
+- args (tuple):
+- input_fragment_file (str): Path to the input fragment file (gzip format).
+- chrom_sizes_file (str): Path to the chromosome sizes file.
+- celltype (str): Name of the cell type currently being processed.
+- group (DataFrame): A DataFrame containing barcodes for the current cell type.
+- output_dir (str): Directory to save the generated BAM and BigWig files.
+- bedtools_exec_dir (str): Directory containing bedtools executable.
+- samtools_exec_dir (str): Directory containing samtools executable.
+- bamCoverage_exec_dir (str): Directory containing bamCoverage executable.
+- bamCoverage_ncores (int): Number of processors for bamCoverage.
+- bamCoverage_binSize (int): Bin size for bamCoverage.
+- bamCoverage_normalizeMethod (str): Normalization method for bamCoverage.
+- samtools_ncores (int): Number of processors for samtools.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="piaso.process_fragment_file">
+<span class="sig-prename descclassname"><span class="pre">piaso.</span></span><span class="sig-name descname"><span class="pre">process_fragment_file</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">idx</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">atac_fragments_gz</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">temp_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#piaso.process_fragment_file" title="Link to this definition">¶</a></dt>
+<dd><p>Processes the specified directory to create a prefix file.
+Args:
+-idx (int): Index to append to the prefix of each line in the output file.
+-atac_fragments_gz (str): Full path to the fragment file to process.
+-temp_dir (str): Path to the temporary directory to store intermediate files.
+Returns:
+str: Path to the created prefix file.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="piaso.quantifyPeakActivity">
+<span class="sig-prename descclassname"><span class="pre">piaso.</span></span><span class="sig-name descname"><span class="pre">quantifyPeakActivity</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">fragment_file</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">peak_file</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bedtools_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#piaso.quantifyPeakActivity" title="Link to this definition">¶</a></dt>
+<dd><p>Process fragment and peak files and returns an AnnData object</p>
+<p>Parameters:
+:param fragment_file: Path to the fragment file
+:param peak_file: Path to the peak file
+:param bedtools_path: Path to the directory containing the bedtools executable. If None, bedtools command available in the PATH will be used. Default is None.</p>
+<p>Returns: An AnnData object</p>
+<p>Examples:
+adata=quantifyPeakActivity(
+fragment_file=’./atac_fragments.tsv.gz’,
+peak_file=’./macs2_peaks.bed’
+)</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="piaso.runMACS2">
+<span class="sig-prename descclassname"><span class="pre">piaso.</span></span><span class="sig-name descname"><span class="pre">runMACS2</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">fragment_file</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">macs_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">genome_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'1.87e+9'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">keep_dup</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'1'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">extsize</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">200</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">shift</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">-100</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">file_format</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'BED'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">macs2_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">macs2_silent</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#piaso.runMACS2" title="Link to this definition">¶</a></dt>
+<dd><p>Call the MACS2 to perform peak calling.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>fragment_file</strong> – str, path to the fragment file.</p></li>
+<li><p><strong>macs_name</strong> – str, name string of the experiment.</p></li>
+<li><p><strong>output_dir</strong> – str, path to the output directory.</p></li>
+<li><p><strong>genome_size</strong> – str, size of the genome or abbreviation of the organism:
+‘hs’ for Homo sapiens (default),
+‘mm’ for Mus musculus,
+‘ce’ for Caenorhabditis elegans,
+‘dm’ for Drosophila melanogaster.
+Any other input will be considered as a direct size value. Default is ‘1.87e+9’.</p></li>
+<li><p><strong>genome_size</strong> – str, whether to keep the duplicates at the same location. Default is ‘1’. Choose ‘all’ if you want to ask MACS2 to keep all.</p></li>
+<li><p><strong>extsize</strong> – int, the extsize parameter for macs2. Default is 200.</p></li>
+<li><p><strong>shift</strong> – int, the shift parameter for macs2. Default is -100.</p></li>
+<li><p><strong>file_format</strong> – str, format of the input file. Default is ‘BED’.</p></li>
+<li><p><strong>macs2_path</strong> – str, path to the directory containing macs2 executable. 
+If None, ‘macs2’ command available in the PATH will be used. Default is None.</p></li>
+<li><p><strong>macs2_silent</strong> – bool, if set to True, suppresses the MACS2 command output.
+Default is True.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="piaso.runMACS2Parallel">
+<span class="sig-prename descclassname"><span class="pre">piaso.</span></span><span class="sig-name descname"><span class="pre">runMACS2Parallel</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">genome_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'1.87e+9'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">keep_dup</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'1'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">extsize</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">200</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">shift</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">-100</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">file_format</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'BAM'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">macs2_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">macs2_silent</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_threads</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">10</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#piaso.runMACS2Parallel" title="Link to this definition">¶</a></dt>
+<dd><p>Call MACS2 in parallel for multiple files in a given input directory.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>input_dir</strong> – str, path to the directory containing input files.</p></li>
+<li><p><strong>output_dir</strong> – str, path to the directory where MACS2 output will be saved.</p></li>
+<li><p><strong>genome_size</strong> – str, size of the genome or abbreviation of the organism:
+‘hs’ for Homo sapiens (default),
+‘mm’ for Mus musculus,
+‘ce’ for Caenorhabditis elegans,
+‘dm’ for Drosophila melanogaster.
+Any other input will be considered as a direct size value.</p></li>
+<li><p><strong>keep_dup</strong> – str, whether to keep the duplicates at the same location. Default is ‘1’. 
+Choose ‘all’ if you want MACS2 to keep all.</p></li>
+<li><p><strong>extsize</strong> – int, the extsize parameter for MACS2. Default is 200.</p></li>
+<li><p><strong>shift</strong> – int, the shift parameter for MACS2. Default is -100.</p></li>
+<li><p><strong>file_format</strong> – str, expected format of the input files. Supports ‘BAM’, ‘BAMPE’, ‘BED’, ‘BEDPE’. Default is ‘BAM’.</p></li>
+<li><p><strong>macs2_path</strong> – str, path to the directory containing the macs2 executable. 
+If None, ‘macs2’ command available in the PATH will be used. Default is None.</p></li>
+<li><p><strong>macs2_silent</strong> – bool, if set to True, suppresses the MACS2 command output.
+Default is True.</p></li>
+<li><p><strong>max_threads</strong> – int, maximum number of threads to use for parallel execution. Default is 10.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>None. The results will be saved in the specified output directory.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="piaso.runMFE">
+<span class="sig-prename descclassname"><span class="pre">piaso.</span></span><span class="sig-name descname"><span class="pre">runMFE</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">adata</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">groupby</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_gene</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">30</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mu</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">resolution</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scoring_method</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">roeg_layer</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'raw'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#piaso.runMFE" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="piaso.runSVD">
+<span class="sig-prename descclassname"><span class="pre">piaso.</span></span><span class="sig-name descname"><span class="pre">runSVD</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">adata</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">AnnData</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_highly_variable</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_components</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">50</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">random_state</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">10</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scale_data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">key_added</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'X_svd'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">layer</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#piaso.runSVD" title="Link to this definition">¶</a></dt>
+<dd><p>Run Truncated Singular Value Decomposition (SVD) on the AnnData object and stores the result in adata.obsm[key_added].</p>
+<p>Parameters:
+adata (AnnData): The annotated data matrix.
+use_highly_variable (bool): Whether to use highly variable genes/features only. Default is True.
+n_components (int): Desired dimensionality of output data. Must be strictly less than the number of features. Default is 50.
+random_state (int, optional): Random seed for reproducibility. Default is 10.
+scale_data (bool): Whether to scale the data using StandardScaler. Default is False.
+key_added (str): Key in adata.obsm to store the result. Default is ‘X_svd’.
+layer (str, optional): Specify the layer to use. If None, use adata.X. Default is None.</p>
+<p>Usage:
+<code class="docutils literal notranslate"><span class="pre">`python</span>
+<span class="pre">runSVD(adata,</span> <span class="pre">use_highly_variable=True,</span> <span class="pre">n_components=50,</span> <span class="pre">random_state=10,</span> <span class="pre">scale_data=False,</span> <span class="pre">key_added='X_svd',</span> <span class="pre">layer='raw')</span>
+<span class="pre">`</span></code>
+This will run SVD on the specified layer ‘raw’ of the adata object, and will store the result in adata.obsm[‘X_svd’].</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="piaso.run_tfidf">
+<span class="sig-prename descclassname"><span class="pre">piaso.</span></span><span class="sig-name descname"><span class="pre">run_tfidf</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">adata</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">AnnData</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">layer</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scale_factor</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">10000.0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#piaso.run_tfidf" title="Link to this definition">¶</a></dt>
+<dd><p>Compute the TF-IDF (Term Frequency - Inverse Document Frequency) matrix for the input 
+peak count data.</p>
+<section id="parameters">
+<h2>Parameters<a class="headerlink" href="#parameters" title="Link to this heading">¶</a></h2>
+<dl class="simple">
+<dt>adata<span class="classifier">AnnData</span></dt><dd><p>An AnnData object containing the peak count data.</p>
+</dd>
+<dt>scale_factor<span class="classifier">float, optional</span></dt><dd><p>A scaling factor to multiply the resulting TF-IDF matrix by. Default is 1e4.</p>
+</dd>
+</dl>
+</section>
+<section id="returns">
+<h2>Returns<a class="headerlink" href="#returns" title="Link to this heading">¶</a></h2>
+<dl class="simple">
+<dt>None</dt><dd><p>The method modifies the input <cite>data</cite> object in place by setting its <cite>X</cite> attribute to 
+the computed TF-IDF matrix.</p>
+</dd>
+</dl>
+</section>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="piaso.saveBEDFromArray">
+<span class="sig-prename descclassname"><span class="pre">piaso.</span></span><span class="sig-name descname"><span class="pre">saveBEDFromArray</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">regions</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_bed_file</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#piaso.saveBEDFromArray" title="Link to this definition">¶</a></dt>
+<dd><p>Saves a BED file derived from a numpy array of genomic regions.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>regions</strong> – numpy array containing the genomic regions.</p></li>
+<li><p><strong>output_bed_file</strong> – Full path including filename where the BED file will be saved.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="piaso.sortBED">
+<span class="sig-prename descclassname"><span class="pre">piaso.</span></span><span class="sig-name descname"><span class="pre">sortBED</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_bed</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_bed</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#piaso.sortBED" title="Link to this definition">¶</a></dt>
+<dd><p>Sort a .bed file based on two keys: 
+1) The first field (as a string)
+2) The second field (as a number)</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>input_bed</strong> – Path to the input .bed file</p></li>
+<li><p><strong>output_bed</strong> – Path to the output .bed file</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="piaso.sortBamByCBCoords">
+<span class="sig-prename descclassname"><span class="pre">piaso.</span></span><span class="sig-name descname"><span class="pre">sortBamByCBCoords</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_bam_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_bam_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">samtools_path</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">memory_per_thread</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'512M'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_threads</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">4</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tmp_dir</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#piaso.sortBamByCBCoords" title="Link to this definition">¶</a></dt>
+<dd><p>Sort a BAM file first by the cell barcode (CB tag) and then by coordinates.</p>
+<p>Parameters:
+:param input_bam_path: Path to the input BAM file.
+:param output_bam_path: Path to the output BAM file that will be sorted.
+:param samtools_path: Optional path to the directory containing the samtools executable. If None, samtools command available in the PATH will be used. Default is None.
+:param memory_per_thread: Maximum memory per thread to use. Default is “512M”.
+:param n_threads: Number of threads to use. Default is 4.
+:param tmp_dir: Path to the directory to be used for temporary files. If None, system default is used. Default is None.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="piaso.sortDictByKeys">
+<span class="sig-prename descclassname"><span class="pre">piaso.</span></span><span class="sig-name descname"><span class="pre">sortDictByKeys</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">my_dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">keys</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ascending</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#piaso.sortDictByKeys" title="Link to this definition">¶</a></dt>
+<dd><p>Sorts a given list of keys based on their corresponding values in the provided dictionary 
+and returns a DataFrame with sorted keys and their corresponding values.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>my_dict</strong> (<em>dict</em>) – Dictionary containing key-value pairs.</p></li>
+<li><p><strong>keys</strong> (<em>list</em>) – List of keys to be sorted.</p></li>
+<li><p><strong>ascending</strong> (<em>bool</em>) – Boolean to decide whether the sorting should be in ascending order. Default is False (descending).</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>DataFrame with one column containing the sorted keys and another containing the corresponding values.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>pd.DataFrame</p>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="index.html">PIASO</a></h1>
+
+
+
+
+
+
+
+
+<h3>Navigation</h3>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="index.html">Documentation overview</a><ul>
+  </ul></li>
+</ul>
+</div>
+<div id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</div>
+<script>document.getElementById('searchbox').style.display = "block"</script>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2023, Min Dai.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 7.2.6</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.13</a>
+      
+      |
+      <a href="_sources/piaso.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>
