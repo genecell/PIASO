@@ -8,7 +8,7 @@ const darkCodeTheme = require('prism-react-renderer/themes/dracula');
   tagline: 'Precise Integration Analysis for Single-cell Omics',
   url: 'https://genecell.github.io',
   baseUrl: '/PIASO/',
-  onBrokenLinks: 'throw',
+  onBrokenLinks: 'warn',
   onBrokenMarkdownLinks: 'warn',
   favicon: 'img/favicon.ico',
   organizationName: 'Min Dai', // Usually your GitHub org/user name.
@@ -50,18 +50,19 @@ const darkCodeTheme = require('prism-react-renderer/themes/dracula');
           {
             type: 'doc',
             docId: 'intro',
-            position: 'left',
+            position: 'right',
             label: 'Tutorial',
           },
           {to: '/blog', label: 'Blog', position: 'left'},
           {
-            href: 'https://github.com/facebook/docusaurus',
-            label: 'GitHub',
+	    href: '/docs-api/index.html',            
+	    label: 'API',
             position: 'right',
           },
-	  {
-            label: 'API',
-            href: '/docs-api/index.html',
+          {
+            href: 'https://github.com/genecell/PIASO',
+            label: 'GitHub',
+            position: 'right',
           },
         ],
       },
