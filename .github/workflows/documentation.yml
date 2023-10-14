@@ -21,16 +21,19 @@ jobs:
 
       - name: Install and Build
         run: |
-          cd piaso-docs
+          cd docs
           yarn install
           yarn build
 
-      
       - name: Commit and Push to /docs in master branch
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
-          cp -R ./piaso-docs/build/* ./piaso-docs/
-          git add ./piaso-docs/
+          git remote set-url origin https://x-access-token:${GITHUB_TOKEN}@github.com/genecell/PIASO.git
+          cp -R ./docs/build/* ./docs/
+          git add ./docs/
           git commit -m "Deploy documentation" || echo "No changes to commit"
-          git push origin master
+          git push origin master     
+ 
