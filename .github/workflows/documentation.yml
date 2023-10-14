@@ -21,17 +21,16 @@ jobs:
 
       - name: Install and Build
         run: |
-          cd docs
+          cd piaso-docs
           yarn install
           yarn build
 
-      - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v3
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./docs/build/PIASO
-          user_name: 'github-actions[bot]'
-          user_email: 'github-actions[bot]@users.noreply.github.com'
-          commit_message: 'Deploy documentation'
-          branch: master
-
+      
+      - name: Commit and Push to /docs in master branch
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          cp -R ./piaso-docs/build/* ./piaso-docs/
+          git add ./piaso-docs/
+          git commit -m "Deploy documentation" || echo "No changes to commit"
+          git push origin master
