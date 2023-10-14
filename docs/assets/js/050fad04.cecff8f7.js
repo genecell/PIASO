@@ -1,1 +1,0 @@
-"use strict";(self.webpackChunkdocs=self.webpackChunkdocs||[]).push([[187],{4498:e=>{e.exports=JSON.parse('{"permalink":"/PIASO/blog","page":1,"postsPerPage":10,"totalPages":1,"totalCount":4,"previousPage":null,"nextPage":null,"blogDescription":"Blog","blogTitle":"Blog"}')}}]);

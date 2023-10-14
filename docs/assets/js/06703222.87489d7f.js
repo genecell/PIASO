@@ -1,1 +1,0 @@
-"use strict";(self.webpackChunkdocs=self.webpackChunkdocs||[]).push([[149],{5180:l=>{l.exports=JSON.parse('{"allTagsPath":"/PIASO/blog/tags","slug":"/PIASO/blog/tags/hello","name":"hello","count":2,"permalink":"/PIASO/blog/tags/hello"}')}}]);
