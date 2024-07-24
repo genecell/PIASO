@@ -1,5 +1,5 @@
 from ._runSVD import runSVDLazy
-from ._runSVD import runGDR
+from ._runGDR import runGDR
 
 
 

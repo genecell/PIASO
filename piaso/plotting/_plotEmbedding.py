@@ -33,7 +33,7 @@ def plot_embeddings_split(adata,
                           vmax=None,
                           vmin=None,
                           show_figure=True,
-                          layer:str='log1p',
+                          layer:str=None,
                           basis:str='X_umap',
                           fix_coordinate_ratio:bool=True, ### Fix the coordinate ratio
                           show_axis_ticks:bool=False, ### Whether to show the axis ticks and tick labels
@@ -214,7 +214,13 @@ def plot_embeddings_split(adata,
     else:
     
         ### Calculate the max values for all the plots
-        gene_df=pd.DataFrame(np.ravel(adata.layers[layer][:,np.where(adata.var_names==color)[0]].todense()))
+        if layer is not None:
+            gene_df=pd.DataFrame(np.ravel(adata.layers[layer][:,np.where(adata.var_names==color)[0]].todense()))
+        elif sparse.isspmatrix(adata.X):
+            gene_df=pd.DataFrame(np.ravel(adata.X[:,np.where(adata.var_names==color)[0]].todense()))
+        else:
+            ### Check whether adata.X is in sparse format or not
+            gene_df=pd.DataFrame(np.ravel(adata.X[:,np.where(adata.var_names==color)[0]]))
 
         
         if vmax is None:
