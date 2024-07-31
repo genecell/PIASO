@@ -43,7 +43,7 @@ def runGDR(adata,
             runSVDLazy(
                 adata,
                 copy=False,
-                n_components=n_dims,
+                n_components=n_svd_dims,
                 n_top_genes=n_highly_variable_genes,
                 use_highly_variable=use_highly_variable,
                 verbosity=verbosity,
@@ -51,16 +51,21 @@ def runGDR(adata,
                 trim_value=None,
                 key_added='X_svd'
             )
+            ### Because the verbosity will be reset in the above function
+            sc.settings.verbosity=0
+            
             ### Run clustering
             sc.pp.neighbors(adata,
                 use_rep='X_svd',
                 n_neighbors=15,random_state=10,knn=True,
                 method="umap")
             sc.tl.leiden(adata, resolution=resolution, key_added='gdr_local')
+            
             groupby='gdr_local'
             
-        
-        print('Number of clusters: ',len(np.unique(adata.obs[groupby])))
+        if verbosity>0:
+            print('Number of clusters: ',len(np.unique(adata.obs[groupby])))
+            
         ### Run marker gene identification
         if layer is None:
             cosg.cosg(adata,
@@ -82,7 +87,7 @@ def runGDR(adata,
                 n_genes_user=n_gene,
                 groupby=groupby
                      )
-
+        
         marker_gene=pd.DataFrame(adata.uns['cosg']['names'])
 
     
@@ -128,7 +133,7 @@ def runGDR(adata,
         ### Store the cell barcodes info
         cellbarcode_info=list()
         for batch_i in batch_list:
-            adata_i=adata[adata.obs[batch_key]==batch_i]
+            adata_i=adata[adata.obs[batch_key]==batch_i].copy()
         
             ### Extract marker gene signatures
             ### Calculate clustering labels if no clustering info was specified
@@ -137,7 +142,7 @@ def runGDR(adata,
                 runSVDLazy(
                     adata_i,
                     copy=False,
-                    n_components=n_dims,
+                    n_components=n_svd_dims,
                     n_top_genes=n_highly_variable_genes,
                     use_highly_variable=use_highly_variable,
                     verbosity=verbosity,
@@ -145,16 +150,21 @@ def runGDR(adata,
                     trim_value=None,
                     key_added='X_svd'
                 )
+                ### Because the verbosity will be reset in the above function, the good way is to remember the previous state of verbosity
+                sc.settings.verbosity=0
+                
                 ### Run clustering
                 sc.pp.neighbors(adata_i,
                     use_rep='X_svd',
                     n_neighbors=15,random_state=10,knn=True,
                     method="umap")
                 sc.tl.leiden(adata_i,resolution=resolution,key_added='gdr_local')
-                groupby='gdr_local'    
+                groupby_i='gdr_local'    
+            else:
+                groupby_i=groupby    
             
-        
-            print('Processing the batch ', batch_i ,' which contains ',len(np.unique(adata_i.obs[groupby])), ' clusters.')
+            if verbosity>0:
+                print('Processing the batch ', batch_i ,' which contains ',len(np.unique(adata_i.obs[groupby_i])), ' clusters.')
             cellbarcode_info.append(adata_i.obs_names.values)
             ### Run marker gene identification
             if layer is None:
@@ -166,7 +176,7 @@ def runGDR(adata,
                     expressed_pct=0.1,
                     remove_lowly_expressed=True,
                     n_genes_user=n_gene,
-                    groupby=groupby
+                    groupby=groupby_i
                          )
             else:
                 cosg.cosg(adata_i,
@@ -175,7 +185,7 @@ def runGDR(adata,
                     expressed_pct=0.1,
                     remove_lowly_expressed=True,
                     n_genes_user=n_gene,
-                    groupby=groupby
+                    groupby=groupby_i
                          )
 
             marker_gene=pd.DataFrame(adata_i.uns['cosg']['names'])

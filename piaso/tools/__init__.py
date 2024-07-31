@@ -1,4 +1,4 @@
-from ._runSVD import runSVD
+from ._runSVD import runSVD, runSVDLazy
 
 from ._runGDR import runGDR, predictCellTypeByGDR
 
