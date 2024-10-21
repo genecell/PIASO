@@ -146,7 +146,7 @@ def runGDR(adata,
                     n_top_genes=n_highly_variable_genes,
                     use_highly_variable=use_highly_variable,
                     verbosity=verbosity,
-                    batch_key=None,
+                    batch_key=None, ### Need to set as None, because the SVD is calculated in each batch separately
                     trim_value=None,
                     key_added='X_svd'
                 )
@@ -337,7 +337,7 @@ def predictCellTypeByGDR(
 
     from sklearn import preprocessing
     clf.fit(adata_combine[adata_combine.obs['batch']=='0'].obsm['X_gdr_harmony'],
-            adata_combine[adata_combine.obs['batch']=='0'].obs['CellTypes'])
+            adata_combine[adata_combine.obs['batch']=='0'].obs[reference_groupby])
     
     if key_added is not None:
         adata.obs[key_added]=clf.predict(adata_combine[adata_combine.obs['batch']=='1'].obsm['X_gdr_harmony'])
