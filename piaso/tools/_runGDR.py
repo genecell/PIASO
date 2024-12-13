@@ -67,7 +67,7 @@ def runGDR(adata,
             print('Number of clusters: ',len(np.unique(adata.obs[groupby])))
             
         ### Run marker gene identification
-        if layer is None:
+        if layer is not None:
             cosg.cosg(adata,
                 key_added='cosg',
                 use_raw=False,
@@ -283,15 +283,7 @@ def predictCellTypeByGDR(
         # adata_combine.X=adata_combine.layers[layer]
     
     print("Running GDR for the query dataset and the reference dataset:")
-    runGDR(
-        adata_combine,
-        batch_key='batch',
-        n_gene=n_genes,
-        groupby='gdr_by',
-        mu=mu
-       )
-    
-    
+
     runGDR(
         adata_combine,
         batch_key='batch',
