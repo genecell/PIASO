@@ -167,7 +167,7 @@ def runGDR(adata,
                 print('Processing the batch ', batch_i ,' which contains ',len(np.unique(adata_i.obs[groupby_i])), ' clusters.')
             cellbarcode_info.append(adata_i.obs_names.values)
             ### Run marker gene identification
-            if layer is None:
+            if layer is not None:
                 cosg.cosg(adata_i,
                     key_added='cosg',
                     use_raw=False,
