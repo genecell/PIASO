@@ -492,7 +492,8 @@ def calculateScoreParallel(
             If `gene_set` is pandas.DataFrame, columns correspond to the index of the columns.
         - list: The names of the gene sets.
     """
-    from scipy.sparse import isspmatrix_csr
+    # from scipy.sparse import isspmatrix_csr
+    from scipy.sparse import issparse
     from multiprocessing import shared_memory
     from concurrent.futures import ProcessPoolExecutor
     from functools import partial
@@ -506,13 +507,16 @@ def calculateScoreParallel(
     else:
         data = adata.X
 
-    # Set up shared memory
-    if isspmatrix_csr(data):
+    # Determine matrix type and set up shared memory
+    if issparse(data):
+        if not isinstance(data, csr_matrix):
+            raise ValueError("For the gene expression matrix, if you want to use sparse matrix, the format must be in CSR format.")
         shm_metadata = _setup_shared_memory_sparse(data)
         is_sparse = True
     else:
         shm_metadata = _setup_shared_memory_dense(data)
         is_sparse = False
+        
         
      
     # Preprocess gene sets to map to indices, and only keep the genes in the adata.var.index
@@ -552,6 +556,289 @@ def calculateScoreParallel(
     return score_matrix, gene_set_names
 
 
+#### Function to process the runCOSGParallel in each individual batches, and the shared memory will be used
+import os
+import sys
+import logging
+
+def _runCOSGParallel_single_batch(batch_key, shared_data, batch_i, groupby, n_svd_dims, n_highly_variable_genes, verbosity, resolution, mu, n_gene, use_highly_variable):
+    """
+    Process a single batch using shared memory and perform clustering and marker gene identification.
+
+    Parameters
+    ----------
+    batch_key : str
+        The key to identify batches in the data.
+    shared_data : dict
+        Dictionary containing shared memory and metadata to reconstruct the matrix.
+    batch_i : str or int
+        The batch identifier to process.
+    groupby : str or None
+        The key to group observations for clustering. If None, clustering will be performed.
+    n_svd_dims : int
+        Number of SVD components to calculate.
+    n_highly_variable_genes : int
+        Number of highly variable genes to use.
+    verbosity : int
+        Verbosity level.
+    resolution : float
+        Resolution parameter for clustering.
+    mu : float
+        Parameter for cosg.
+    n_gene : int
+        Number of genes to use in cosg.
+    use_highly_variable : bool
+        Whether to use highly variable genes for SVD.
+
+    Returns
+    -------
+    DataFrame
+        Marker gene DataFrame with batch-specific suffix.
+    """
+    # Reconstruct matrix from shared memory
+    if 'shm_indices' in shared_data:
+        data = np.ndarray(
+            shared_data['shapes']['data_shape'],
+            dtype=shared_data['dtypes']['data_dtype'],
+            buffer=shared_data['shm_data'].buf
+        )
+        indices = np.ndarray(
+            shared_data['shapes']['indices_shape'],
+            dtype=shared_data['dtypes']['indices_dtype'],
+            buffer=shared_data['shm_indices'].buf
+        )
+        indptr = np.ndarray(
+            shared_data['shapes']['indptr_shape'],
+            dtype=shared_data['dtypes']['indptr_dtype'],
+            buffer=shared_data['shm_indptr'].buf
+        )
+        matrix = csr_matrix((data, indices, indptr), shape=shared_data['shapes']['matrix_shape'])
+    else:
+        matrix = np.ndarray(
+            shared_data['shapes']['matrix_shape'],
+            dtype=shared_data['dtypes']['data_dtype'],
+            buffer=shared_data['shm_data'].buf
+        )
+
+    adata = sc.AnnData(matrix)
+    adata.obs = shared_data['obs'].copy()
+    ### No need to create a adata_i, because adata here is rebuilt from the matrix
+    # Filter the AnnData object for the current batch
+    adata = adata[adata.obs[batch_key] == batch_i].copy()
+    
+    
+    # Temporarily suppress Scanpy verbosity
+    original_verbosity = sc.settings.verbosity
+    sc.settings.verbosity = 0  # Suppress messages
+    
+    try:
+        # Extract marker gene signatures
+        if groupby is None:
+            # Run SVD lazily
+            runSVDLazy(
+                adata,
+                copy=False,
+                n_components=n_svd_dims,
+                n_top_genes=n_highly_variable_genes,
+                use_highly_variable=use_highly_variable,
+                verbosity=verbosity,
+                batch_key=None,
+                trim_value=None,
+                key_added='X_svd'
+            )
+            ### Because in runSVDLazy, it will reset the sc.settings.verbosity, so we need to set the verbosity again here
+            sc.settings.verbosity = 0  # Suppress messages
+
+            # Run clustering
+            sc.pp.neighbors(adata, use_rep='X_svd', n_neighbors=15, random_state=10, knn=True, method="umap")
+            sc.tl.leiden(adata, resolution=resolution, key_added='gdr_local')
+            groupby_i = 'gdr_local'
+
+        else:
+            groupby_i = groupby
+
+        if verbosity > 0:
+            print(f'Processing batch {batch_i} with {len(np.unique(adata.obs[groupby_i]))} clusters.')
+
+        
+        # Run marker gene identification
+        ### Because only one layer is transferred, so just use the adata.X
+        cosg.cosg(
+            adata,
+            key_added='cosg',
+            mu=mu,
+            expressed_pct=0.1,
+            remove_lowly_expressed=True,
+            n_genes_user=n_gene,
+            groupby=groupby_i
+        )
+
+        marker_gene = pd.DataFrame(adata.uns['cosg']['names'])
+        marker_gene = marker_gene.add_suffix(f'@{batch_i}')
+
+    finally:
+        # Restore original verbosity
+        sc.settings.verbosity = original_verbosity
+
+    return marker_gene
+
+### To record the progress
+from concurrent.futures import as_completed
+from tqdm import tqdm
+
+from scipy.sparse import issparse
+def runCOSGParallel(
+    adata: sc.AnnData,
+    batch_key: str,
+    groupby: str = None,
+    n_svd_dims: int = 50,
+    n_highly_variable_genes: int = 5000,
+    verbosity: int = 0,
+    resolution: float = 1.0,
+    layer: str = 'log1p',
+    mu: float = 1.0,
+    n_gene: int = 30,
+    use_highly_variable: bool = True,
+    return_gene_names: bool = False,
+    max_workers: int = 8
+):
+    """
+    Run COSG on batches in parallel using shared memory and multiprocessing.
+
+    Parameters
+    ----------
+    adata : AnnData
+        Annotated data matrix.
+    batch_key : str
+        The key in `adata.obs` used to identify batches.
+    groupby : str, optional (default: None)
+        The key in `adata.obs` used to group observations for clustering. If None, clustering will be performed.
+    n_svd_dims : int, optional (default: 50)
+        Number of SVD components to compute.
+    n_highly_variable_genes : int, optional (default: 5000)
+        Number of highly variable genes to use for SVD.
+    verbosity : int, optional (default: 0)
+        Level of verbosity for logging information.
+    resolution : float, optional (default: 1.0)
+        Resolution parameter for clustering.
+    layer : str, optional (default: 'log1p')
+        Layer of the `adata` object to use for COSG.
+    mu : float, optional (default: 1.0)
+        COSG parameter to control regularization.
+    n_gene : int, optional (default: 30)
+        Number of marker genes to compute for each cluster.
+    use_highly_variable : bool, optional (default: True)
+        Whether to use highly variable genes for SVD.
+    return_gene_names : bool, optional (default: False)
+        Whether to return gene names instead of indices in the marker gene DataFrame.
+    max_workers : int, optional (default: 8)
+        Maximum number of parallel workers to use. If None, defaults to the number of available CPU cores.
+
+    Returns
+    -------
+    DataFrame
+        Combined marker gene DataFrame with batch-specific suffixes.
+
+    Examples
+    --------
+    >>> import scanpy as sc
+    >>> import piaso
+    >>> adata = sc.read_h5ad('example_data.h5ad')
+    >>> marker_genes = piaso.tl.runCOSGParallel(
+    ...     adata=adata,
+    ...     batch_key='batch',
+    ...     groupby=None,
+    ...     n_svd_dims=50,
+    ...     n_highly_variable_genes=5000,
+    ...     verbosity=1,
+    ...     resolution=1.0,
+    ...     layer='log1p',
+    ...     mu=1.0,
+    ...     n_gene=30,
+    ...     use_highly_variable=True,
+    ...     return_gene_names=True,
+    ...     max_workers=4
+    ... )
+    >>> print(marker_genes.head())
+    """
+    # Generate batch list
+    batch_list = np.unique(adata.obs[batch_key])
+    
+    
+    
+    # Determine the input matrix
+    if layer is not None:
+        gene_expression_data = adata.layers[layer]
+    else:
+        gene_expression_data = adata.X
+    
+    # Determine matrix type and set up shared memory
+    if issparse(gene_expression_data):
+        if not isinstance(gene_expression_data, csr_matrix):
+            raise ValueError("For the gene expression matrix, if you want to use sparse matrix, the format must be in CSR format.")
+        shared_data = _setup_shared_memory_sparse(gene_expression_data)
+    else:
+        shared_data = _setup_shared_memory_dense(gene_expression_data)
+        
+        
+        
+    # Update shared_data['obs'] to handle groupby=None
+    shared_data['obs'] = adata.obs[[batch_key] + ([groupby] if groupby else [])].copy()
+
+    # Use ProcessPoolExecutor for parallel processing
+    marker_genes = []
+    batch_n_groups = []
+    with ProcessPoolExecutor(max_workers=max_workers) as executor:
+        futures = []
+        for batch_i in batch_list:
+            futures.append(
+                executor.submit(
+                    _runCOSGParallel_single_batch, batch_key, shared_data, batch_i, groupby,
+                    n_svd_dims, n_highly_variable_genes, verbosity, resolution,
+                    mu, n_gene, use_highly_variable
+                )
+            )
+            
+        # futures = {
+        #     executor.submit(
+        #         process_batch, batch_key, shared_data, batch_i, groupby,
+        #         n_svd_dims, n_highly_variable_genes, verbosity, resolution,
+        #         mu, n_gene, use_highly_variable
+        #     ): batch_i for batch_i in batch_list
+        # }
+        
+        # for future in futures:
+        for future in tqdm(as_completed(futures), total=len(futures), desc="Calculating marker genes in batches", unit="batch"):
+            marker_gene = future.result()
+            marker_genes.append(marker_gene)
+            ### Return the number of groups for each batch
+            batch_n_groups.append(marker_gene.shape[1])
+    
+    # Merge all marker gene DataFrames into one
+    marker_genes = pd.concat(marker_genes, axis=1)
+
+    # Convert gene indices to int
+    marker_genes = marker_genes.astype(int)
+
+    # Build a mapping dictionary for gene index to names
+    index_to_name_mapping = {i: name for i, name in enumerate(adata.var.index)}
+
+    # Convert gene indices to names if required
+    if return_gene_names:
+        marker_genes = marker_genes.applymap(lambda idx: index_to_name_mapping.get(idx, idx))
+
+    # Clean up shared memory
+    shared_data['shm_data'].close()
+    shared_data['shm_data'].unlink()
+    if 'shm_indices' in shared_data:
+        shared_data['shm_indices'].close()
+        shared_data['shm_indices'].unlink()
+        shared_data['shm_indptr'].close()
+        shared_data['shm_indptr'].unlink()
+    
+    
+    return marker_genes, batch_n_groups
+
 
 def runGDRParallel(
     adata,
@@ -572,7 +859,9 @@ def runGDRParallel(
 ):
 
     sc.settings.verbosity=0
-    score_list_collection_collection=[]
+    
+#     ### To store the scores
+#     score_list_collection_collection=[]
     
     if batch_key is None:
         nbatches=1
@@ -670,10 +959,9 @@ def runGDRParallel(
 
 
         score_list_collection=np.vstack(score_list_collection)
-        score_list_collection_collection.append(score_list_collection)
-
-        marker_gene_scores=np.hstack(score_list_collection_collection)
-
+        # score_list_collection_collection.append(score_list_collection)
+        # marker_gene_scores=np.hstack(score_list_collection_collection)
+        marker_gene_scores=score_list_collection
         sc.settings.verbosity=3
 
         ### Make sure the order are matched to the adata
@@ -684,105 +972,84 @@ def runGDRParallel(
                 
     ### Have multiple batches    
     else:
+        
+        
+        
+        ### Calculate the marker genes for each batch in parallel, the returned marker_genes data frame contains the marker gene lists combined from each individual batch
+        marker_gene, batch_n_groups=runCOSGParallel(
+            adata,
+            batch_key=batch_key,
+            groupby=groupby,
+            n_gene=n_gene,
+            mu=mu,
+            use_highly_variable=use_highly_variable,
+            n_highly_variable_genes=n_highly_variable_genes,
+            layer=layer,
+            n_svd_dims=n_svd_dims,
+            resolution=resolution,
+            verbosity=verbosity,
+            return_gene_names=True, ### Return the names, making it easier to be compatible with the calculateScoreParallel function
+            max_workers=max_workers
+
+        )
+        
+    
+        
+        
+        
+        ### Create the indices for each batch's corresponding marker gene sets' indices in the merged marker gene dataframe
+        batch_n_groups_indices = np.cumsum([0] + batch_n_groups)
+
+        ### Calculate scores
+        score_list_collection=[]
         ### Store the cell barcodes info
         cellbarcode_info=list()
-        for batch_i in batch_list:
-            adata_i=adata[adata.obs[batch_key]==batch_i].copy()
         
-            ### Extract marker gene signatures
-            ### Calculate clustering labels if no clustering info was specified
-            if groupby is None:
-                ### Run SVD in a lazy mode
-                runSVDLazy(
-                    adata_i,
-                    copy=False,
-                    n_components=n_svd_dims,
-                    n_top_genes=n_highly_variable_genes,
-                    use_highly_variable=use_highly_variable,
-                    verbosity=verbosity,
-                    batch_key=None, ### Need to set as None, because the SVD is calculated in each batch separately
-                    trim_value=None,
-                    key_added='X_svd'
-                )
-                ### Because the verbosity will be reset in the above function, the good way is to remember the previous state of verbosity
-                sc.settings.verbosity=0
-                
-                ### Run clustering
-                sc.pp.neighbors(adata_i,
-                    use_rep='X_svd',
-                    n_neighbors=15,random_state=10,knn=True,
-                    method="umap")
-                sc.tl.leiden(adata_i,resolution=resolution,key_added='gdr_local')
-                groupby_i='gdr_local'    
-            else:
-                groupby_i=groupby    
+        ### Scoring the geneset among different batches
+        # for batch_u in batch_list:
+        for batch_u in tqdm(batch_list, desc="Calculating cell embeddings", unit="batch"):
+            ### Store the cell barcodes for each batch
+            cellbarcode_info.append(adata.obs_names[adata.obs[batch_key]==batch_u].values)
             
-            if verbosity>0:
-                print('Processing the batch ', batch_i ,' which contains ',len(np.unique(adata_i.obs[groupby_i])), ' clusters.')
-            cellbarcode_info.append(adata_i.obs_names.values)
-            ### Run marker gene identification
-            if layer is not None:
-                cosg.cosg(adata_i,
-                    key_added='cosg',
-                    use_raw=False,
-                    layer=layer,
-                    mu=mu,
-                    expressed_pct=0.1,
-                    remove_lowly_expressed=True,
-                    n_genes_user=n_gene,
-                    groupby=groupby_i
-                         )
-            else:
-                cosg.cosg(adata_i,
-                    key_added='cosg',
-                    mu=mu,
-                    expressed_pct=0.1,
-                    remove_lowly_expressed=True,
-                    n_genes_user=n_gene,
-                    groupby=groupby_i
-                         )
+            # adata_u=adata[adata.obs[batch_key]==batch_u].copy()
 
-            marker_gene=pd.DataFrame(adata_i.uns['cosg']['names'])
-            
+            ### Single-CPU version of GDR
+            # score_list=[]
+            # # adata_u.X=adata_u.layers['log1p'] ## do not use log1p, sometimes raw counts is better here
+            # if score_layer is not None:
+            #     adata_u.X=adata_u.layers[score_layer]
+            # for i in marker_gene.columns:
+            #     marker_gene_i=marker_gene[i].values
+            #     sc.tl.score_genes(adata_u,
+            #                   marker_gene_i,
+            #                   score_name='markerGeneFeatureScore_i')
+            #     ### Need to add the .copy()
+            #     score_list.append(adata_u.obs['markerGeneFeatureScore_i'].values.copy())
+            # score_list=np.vstack(score_list).T
 
-            ### Calculate scores
-            score_list_collection=[]
-            
-            ### Scoring the geneset among different batches
-            for batch_u in batch_list:
-                adata_u=adata[adata.obs[batch_key]==batch_u].copy()
-                
-                ### Single-CPU version of GDR
-                # score_list=[]
-                # # adata_u.X=adata_u.layers['log1p'] ## do not use log1p, sometimes raw counts is better here
-                # if score_layer is not None:
-                #     adata_u.X=adata_u.layers[score_layer]
-                # for i in marker_gene.columns:
-                #     marker_gene_i=marker_gene[i].values
-                #     sc.tl.score_genes(adata_u,
-                #                   marker_gene_i,
-                #                   score_name='markerGeneFeatureScore_i')
-                #     ### Need to add the .copy()
-                #     score_list.append(adata_u.obs['markerGeneFeatureScore_i'].values.copy())
-                # score_list=np.vstack(score_list).T
-                
-                ### Use parallel computing of the gene set scores
-                score_list, gene_set_names=calculateScoreParallel(
-                    adata_u,
-                    gene_set=marker_gene,
-                    score_layer=score_layer,
-                    max_workers=max_workers
-                )
-                
-                ### Normalization
-                score_list=normalize(score_list,norm='l2',axis=0)
-                score_list=normalize(score_list,norm='l2',axis=1) ## Adding this is important
-                
-                score_list_collection.append(score_list)
-            score_list_collection=np.vstack(score_list_collection)
-            score_list_collection_collection.append(score_list_collection)
-            
-        marker_gene_scores=np.hstack(score_list_collection_collection)
+            ### Use parallel computing of the gene set scores
+            score_list, gene_set_names=calculateScoreParallel(
+                adata[adata.obs[batch_key]==batch_u],
+                gene_set=marker_gene,
+                score_layer=score_layer,
+                max_workers=max_workers
+            )
+
+            ### Normalization, within each batch
+            score_list=normalize(score_list,norm='l2',axis=0)
+            # score_list=normalize(score_list,norm='l2',axis=1) ## Adding this is important
+            # Block-wise L2-normalization, maybe could be better implemented with higher efficiency
+            # comparing different groups' marker gene scores
+            for start, end in zip(batch_n_groups_indices[:-1], batch_n_groups_indices[1:]):
+                score_list[:, start:end] = normalize(score_list[:, start:end], norm='l2', axis=1) ## Adding this is important
+
+            score_list_collection.append(score_list)
+        score_list_collection=np.vstack(score_list_collection)
+        
+        # score_list_collection_collection.append(score_list_collection)
+        # marker_gene_scores=np.hstack(score_list_collection_collection)
+        marker_gene_scores=score_list_collection
+        
         sc.settings.verbosity=3
         
         ### Make sure the order are matched to the adata
@@ -820,6 +1087,97 @@ def predictCellTypeByGDR(
     verbosity: int=0
 
 ):
+    """
+    Predicts cell types in a query dataset (`adata`) using the GDR dimensionality reduction method based on a reference dataset (`adata_ref`).
+    To use GDR for dimensionality reduction, please refer to `piaso.tl.runGDR` or `piaso.tl.runGDRParallel`.
+
+    Parameters:
+    ----------
+    adata : AnnData
+        The query single-cell AnnData object for which cell types are to be predicted.
+
+    adata_ref : AnnData
+        The reference single-cell AnnData object with known cell type annotations.
+
+    layer : str, optional (default: 'log1p')
+        The layer in `adata` to use for gene expression data. If `None`, uses the `.X` matrix.
+
+    layer_reference : str, optional (default: 'log1p')
+        The layer in `adata_ref` to use for reference gene expression data. If `None`, uses the `.X` matrix.
+
+    reference_groupby : str, optional (default: 'CellTypes')
+        The column in `adata_ref.obs` used to define reference cell type groupings.
+
+    query_groupby : str, optional (default: 'Leiden')
+        The column in `adata.obs` used to for GDR dimensionality reduction, such as clusters identified using Leiden or Louvain algorithms.
+
+    mu : float, optional (default: 10.0)
+        A regularization parameter for controlling the gene expression specificity, used in COSG (marker gene identification) and GDR.
+
+    n_genes : int, optional (default: 15)
+        The number of top specific genes per group, used in COSG and GDR.
+
+    return_integration : bool, optional (default: False)
+        If `True`, the function will return the integrated low-dimensional cell embeddings of the query dataset and reference dataset.
+
+    use_highly_variable : bool, optional (default: True)
+        Whether to use highly variable genes, used in GDR.
+
+    n_highly_variable_genes : int, optional (default: 5000)
+        The number of highly variable genes to select, if `use_highly_variable` is `True`, used in GDR.
+
+    n_svd_dims : int, optional (default: 50)
+        The number of dimensions to retain during SVD, used in GDR.
+
+    resolution : float, optional (default: 1.0)
+        Resolution parameter for clustering, used in GDR.
+
+    scoring_method : str, optional (default: None)
+        The method used for gene set scoring, used in GDR.
+
+    key_added : str, optional (default: None)
+        A key to add the predicted cell types or integration results to `adata.obs`. If `None`, `CellTypes_gdr` will be used.
+
+    verbosity : int, optional (default: 0)
+        The level of logging output. Higher values produce more detailed logs for debugging and monitoring progress.
+
+    Returns:
+    -------
+    None or AnnData
+        If `return_integration` is `True`, returns an AnnData object of merged reference and query datasets with integrated
+        cell embeddings and predicted cell types. Otherwise, updates `adata` in place with the predicted cell types.
+
+    Example:
+    --------
+    >>> import scanpy as sc
+    >>> # Load query dataset
+    >>> adata = sc.read_h5ad("query_data.h5ad")
+    >>> 
+    >>> # Load reference dataset with known cell type annotations
+    >>> adata_ref = sc.read_h5ad("reference_data.h5ad")
+    >>> 
+    >>> # Predict cell types for the query dataset
+    >>> piaso.tl.predictCellTypeByGDR(
+    >>>     adata=adata,
+    >>>     adata_ref=adata_ref,
+    >>>     layer='log1p',
+    >>>     layer_reference='log1p',
+    >>>     reference_groupby='CellTypes',
+    >>>     query_groupby='Leiden',
+    >>>     mu=10.0,
+    >>>     n_genes=20,
+    >>>     return_integration=False,
+    >>>     use_highly_variable=True,
+    >>>     n_highly_variable_genes=3000,
+    >>>     n_svd_dims=50,
+    >>>     resolution=0.8,
+    >>>     key_added='CellTypes_gdr',
+    >>>     verbosity=0
+    >>> )
+    >>> 
+    >>> # Access the predicted cell types in the query dataset
+    >>> print(adata.obs['CellTypes_gdr'])
+    """
     
     sc.settings.verbosity=verbosity
     
