@@ -460,7 +460,16 @@ def _safe_calculate_gene_set_score_shared(gene_indices, metadata, score_name, is
         traceback.print_exc()
         raise RuntimeError(f"Worker encountered an error: {e}")
 
-        
+
+
+# from scipy.sparse import isspmatrix_csr
+from scipy.sparse import issparse
+from multiprocessing import shared_memory
+from concurrent.futures import ProcessPoolExecutor
+from functools import partial
+import numpy as np
+import scanpy as sc
+
 def calculateScoreParallel(
     adata,
     gene_set,
@@ -492,13 +501,7 @@ def calculateScoreParallel(
             If `gene_set` is pandas.DataFrame, columns correspond to the index of the columns.
         - list: The names of the gene sets.
     """
-    # from scipy.sparse import isspmatrix_csr
-    from scipy.sparse import issparse
-    from multiprocessing import shared_memory
-    from concurrent.futures import ProcessPoolExecutor
-    from functools import partial
-    import numpy as np
-    import scanpy as sc
+    
     
     
     # Determine the input matrix
@@ -554,6 +557,185 @@ def calculateScoreParallel(
     score_matrix = np.vstack(score_list).T
     gene_set_names=list(valid_gene_sets.keys())
     return score_matrix, gene_set_names
+
+
+
+
+### Calculate gene set score for different batches, separately, but in parallel
+def _calculateScoreParallel_single_batch(batch_key,  shared_data, batch_i, marker_gene, marker_gene_n_groups_indices, max_workers):
+    """
+    Process a single batch to calculate scores, different marker gene sets will be calculated in parallel with `calculateScoreParallel` function.
+    """
+    # Reconstruct matrix from shared memory
+    if 'shm_indices' in shared_data:
+        data = np.ndarray(
+            shared_data['shapes']['data_shape'],
+            dtype=shared_data['dtypes']['data_dtype'],
+            buffer=shared_data['shm_data'].buf
+        )
+        indices = np.ndarray(
+            shared_data['shapes']['indices_shape'],
+            dtype=shared_data['dtypes']['indices_dtype'],
+            buffer=shared_data['shm_indices'].buf
+        )
+        indptr = np.ndarray(
+            shared_data['shapes']['indptr_shape'],
+            dtype=shared_data['dtypes']['indptr_dtype'],
+            buffer=shared_data['shm_indptr'].buf
+        )
+        matrix = csr_matrix((data, indices, indptr), shape=shared_data['shapes']['matrix_shape'])
+    else:
+        matrix = np.ndarray(
+            shared_data['shapes']['matrix_shape'],
+            dtype=shared_data['dtypes']['data_dtype'],
+            buffer=shared_data['shm_data'].buf
+        )
+
+    # adata = sc.AnnData(matrix)
+    # adata.obs = shared_data['obs'].copy()
+    # #### Need to reset the gene names, because this will be used in gene set scoring, need to know the genes
+    # adata.var_names=shared_data["var_names"].copy()
+    # ### No need to create a adata_i, because adata here is rebuilt from the matrix
+    # # Filter the AnnData object for the current batch
+    # adata = adata[adata.obs[batch_key] == batch_i].copy()
+    
+    ### Only directly select slices
+    batch_mask = shared_data['obs'][batch_key] == batch_i
+    adata = sc.AnnData(matrix[batch_mask])
+    adata.obs = shared_data['obs'][batch_mask].copy()
+    #### Need to reset the gene names, because this will be used in gene set scoring, need to know the genes
+    adata.var_names=shared_data["var_names"].copy()
+    
+    
+    
+    # Compute gene set scores, in parallel for different gene sets
+    score_list, gene_set_names = calculateScoreParallel(
+        adata,
+        gene_set=marker_gene,
+        score_layer=None, ## As the score layer already used in setting up the shared memory
+        max_workers=max_workers
+    )
+    # print(gene_set_names)
+    # print(marker_gene.columns)
+    # print('Gene set order not changed:', np.array_equal(gene_set_names, marker_gene.columns))
+
+    # Normalize scores
+    # Block-wise L2-normalization, maybe could be better implemented with higher efficiency
+    # comparing different groups' marker gene scores
+    score_list = normalize(score_list, norm="l2", axis=0)
+    for start, end in zip(marker_gene_n_groups_indices[:-1], marker_gene_n_groups_indices[1:]):
+        score_list[:, start:end] = normalize(score_list[:, start:end], norm="l2", axis=1)
+
+        
+    # Retrieve cell barcodes
+    cell_barcodes = adata.obs_names.values
+    
+    return score_list, cell_barcodes, gene_set_names
+
+
+def calculateScoreParallel_multiBatch(
+    adata: sc.AnnData,
+    batch_key: str,
+    marker_gene: pd.DataFrame,
+    marker_gene_n_groups_indices: list,
+    score_layer: str = None,
+    max_workers: int = 8
+):
+    """
+    Calculate gene set scores for each adata batch in parallel using shared memory. Different marker gene sets will be calculated in parallel as well.
+
+    Parameters
+    ----------
+    adata : AnnData
+        Annotated data matrix.
+    batch_key : str
+        The key in `adata.obs` used to identify batches.
+    marker_gene : DataFrame
+        The marker gene DataFrame.
+    marker_gene_n_groups_indices : list
+        Indices specifying the marker gene set group boundaries, used for score normalization within each marker gene set group.
+    score_layer : str
+        The layer of `adata` to use for scoring.
+    max_workers : int
+        Maximum number of parallel workers to use.
+
+    Returns
+    -------
+    tuple
+        - list: A list of normalized score arrays for each batch.
+        - list: A list of cell barcodes for each batch.
+        - list: A list of gene set names.
+        
+    Examples
+    --------
+    >>> import scanpy as sc
+    >>> from piaso
+    >>> adata = sc.read_h5ad('example_data.h5ad')
+    >>> score_list, cellbarcode_info, gene_set_names = piaso.tl.calculateScoreParallel_multiBatch(
+    ...     adata=adata,
+    ...     batch_key='batch',
+    ...     marker_gene=marker_gene,
+    ...     marker_gene_n_groups_indices=marker_gene_n_groups_indices,
+    ...     score_layer=None,
+    ...     max_workers=8
+    ... )
+    >>> print(score_list)
+    >>> print(cellbarcode_info)
+    """
+    # Extract gene expression data
+    if score_layer is not None:
+        gene_expression_data = adata.layers[score_layer]
+    else:
+        gene_expression_data = adata.X
+
+    # Set up shared memory
+    if issparse(gene_expression_data):
+        if not isinstance(gene_expression_data, csr_matrix):
+            raise ValueError("Sparse matrix must be in CSR format.")
+        shared_data = _setup_shared_memory_sparse(gene_expression_data)
+    else:
+        shared_data = _setup_shared_memory_dense(gene_expression_data)
+
+    shared_data["obs"] = adata.obs[[batch_key]].copy()
+    shared_data["var_names"] = adata.var_names.copy()
+
+    # Process batches in parallel
+    batch_list = np.unique(adata.obs[batch_key])
+    score_list_collection = []
+    cellbarcode_info = []
+    gene_set_names = None
+
+    try:
+        with ProcessPoolExecutor(max_workers=max_workers) as executor:
+            futures = [
+                executor.submit(
+                    _calculateScoreParallel_single_batch,
+                    batch_key,
+                    shared_data,
+                    batch_i,
+                    marker_gene,
+                    marker_gene_n_groups_indices,
+                    max_workers
+                ) for batch_i in batch_list
+            ]
+
+            for future in tqdm(as_completed(futures), total=len(futures), desc="Calculating cell embeddings/scores", unit="batch"):
+                score_list, cell_barcodes, gene_set_names = future.result()
+                score_list_collection.append(score_list)
+                cellbarcode_info.append(cell_barcodes)
+
+    finally:
+        # Clean up shared memory
+        shared_data['shm_data'].close()
+        shared_data['shm_data'].unlink()
+        if 'shm_indices' in shared_data:
+            shared_data['shm_indices'].close()
+            shared_data['shm_indices'].unlink()
+            shared_data['shm_indptr'].close()
+            shared_data['shm_indptr'].unlink()
+
+    return score_list_collection, cellbarcode_info, gene_set_names
+
 
 
 #### Function to process the runCOSGParallel in each individual batches, and the shared memory will be used
@@ -620,11 +802,17 @@ def _runCOSGParallel_single_batch(batch_key, shared_data, batch_i, groupby, n_sv
             buffer=shared_data['shm_data'].buf
         )
 
-    adata = sc.AnnData(matrix)
-    adata.obs = shared_data['obs'].copy()
-    ### No need to create a adata_i, because adata here is rebuilt from the matrix
-    # Filter the AnnData object for the current batch
-    adata = adata[adata.obs[batch_key] == batch_i].copy()
+    # adata = sc.AnnData(matrix)
+    # adata.obs = shared_data['obs'].copy()
+    # ### No need to create a adata_i, because adata here is rebuilt from the matrix
+    # # Filter the AnnData object for the current batch
+    # adata = adata[adata.obs[batch_key] == batch_i].copy()
+    
+
+    ### Only directly select slices
+    batch_mask = shared_data['obs'][batch_key] == batch_i
+    adata = sc.AnnData(matrix[batch_mask])
+    adata.obs = shared_data['obs'][batch_mask].copy()
     
     
     # Temporarily suppress Scanpy verbosity
@@ -846,17 +1034,93 @@ def runGDRParallel(
     groupby:str=None,
     n_gene:int=30,
     mu:float=1.0,
+    layer:str=None,
+    score_layer:str=None,
     use_highly_variable:bool=True,
     n_highly_variable_genes:int=5000,
-    layer:str='log1p',
-    score_layer:str='log1p',
     n_svd_dims:int=50,
     resolution:float=1.0,
     scoring_method:str=None,
     key_added:str=None,
     max_workers:int=8,
+    calculate_score_multiBatch:bool=False,
     verbosity: int=0,         
 ):
+    """
+    Run GDR (marker Gene-guided dimensionality reduction) in parallel using multi-cores and shared memeory.
+
+    Parameters:
+    -----------
+    adata : AnnData
+        Annotated data matrix.
+
+    batch_key : str, optional
+        Key in `adata.obs` representing batch information. Defaults to None. If specified, different batches will be processed separately and in parallel, otherwise, the input data will be processed as one batch.
+
+    groupby : str, optional
+        Key in `adata.obs` to specify which cell group information to use. Defaults to None. If none, de novo clustering will be performed.
+
+    n_gene : int, optional
+        Number of genes, parameter used in COSG. Defaults to 30.
+
+    mu : float, optional
+        Gene expression specificity parameter, used in COSG. Defaults to 1.0.
+    
+    layer : str, optional
+        Layer in `adata.layers` to use for the analysis. Defaults to None, which uses `adata.X`.
+
+    score_layer : str, optional
+        If specified, the gene scoring will be calculated using this layer of `adata.layers`. Defaults to None.
+
+    use_highly_variable : bool, optional
+        Whether to use only highly variable genes when rerunning the dimensionality reduction. Defaults to True. Only effective when `groupby=None`.
+
+    n_highly_variable_genes : int, optional
+        Number of highly variable genes to use when `use_highly_variable` is True. Defaults to 5000. Only effective when `groupby=None`.
+
+    n_svd_dims : int, optional
+        Number of dimensions to use for SVD. Defaults to 50. Only effective when `groupby=None`.
+
+    resolution : float, optional
+        Resolution parameter for de novo clustering. Defaults to 1.0. Only effective when `groupby=None`.
+
+    scoring_method : str, optional
+        Specifies the gene set scoring method used to compute gene scores.
+
+    key_added : str, optional
+        Key under which the GDR dimensionality reduction results will be stored in `adata.obsm`. If None, results will be saved to `adata.obsm[X_gdr]`.
+
+    max_workers : int, optional
+        Maximum number of workers to use for parallel computation. Defaults to 8.
+
+    calculate_score_multiBatch : bool, optional
+        Whether to calculate gene scores across multiple adata batches (if `batch_key` is specified). Defaults to False.
+
+    verbosity : int, optional
+        Verbosity level of the function. Higher values provide more detailed logs. Defaults to 0.
+
+    Returns:
+    --------
+    None
+        The function modifies `adata` in place by adding GDR dimensionality reduction result to `adata.obsm[key_added]`.
+
+    Examples:
+    ---------
+    >>> import scanpy as sc
+    >>> import piaso
+    >>> 
+    >>> adata = sc.read_h5ad("example.h5ad")
+    >>> runGDRParallel(
+    ...     adata,
+    ...     batch_key="batch",
+    ...     groupby="CellTypes",
+    ...     n_gene=30,
+    ...     max_workers=8,
+    ...     verbosity=0
+    ... )
+    >>> print(adata.obsm["X_gdr"])
+    """
+
 
     sc.settings.verbosity=0
     
@@ -999,51 +1263,55 @@ def runGDRParallel(
         
         ### Create the indices for each batch's corresponding marker gene sets' indices in the merged marker gene dataframe
         batch_n_groups_indices = np.cumsum([0] + batch_n_groups)
-
-        ### Calculate scores
-        score_list_collection=[]
-        ### Store the cell barcodes info
-        cellbarcode_info=list()
         
-        ### Scoring the geneset among different batches
-        # for batch_u in batch_list:
-        for batch_u in tqdm(batch_list, desc="Calculating cell embeddings", unit="batch"):
-            ### Store the cell barcodes for each batch
-            cellbarcode_info.append(adata.obs_names[adata.obs[batch_key]==batch_u].values)
-            
-            # adata_u=adata[adata.obs[batch_key]==batch_u].copy()
-
-            ### Single-CPU version of GDR
-            # score_list=[]
-            # # adata_u.X=adata_u.layers['log1p'] ## do not use log1p, sometimes raw counts is better here
-            # if score_layer is not None:
-            #     adata_u.X=adata_u.layers[score_layer]
-            # for i in marker_gene.columns:
-            #     marker_gene_i=marker_gene[i].values
-            #     sc.tl.score_genes(adata_u,
-            #                   marker_gene_i,
-            #                   score_name='markerGeneFeatureScore_i')
-            #     ### Need to add the .copy()
-            #     score_list.append(adata_u.obs['markerGeneFeatureScore_i'].values.copy())
-            # score_list=np.vstack(score_list).T
-
-            ### Use parallel computing of the gene set scores
-            score_list, gene_set_names=calculateScoreParallel(
-                adata[adata.obs[batch_key]==batch_u],
-                gene_set=marker_gene,
+        
+        if calculate_score_multiBatch:
+            #### Calculate marker gene sets for different batches separately, but in parallel
+            score_list_collection, cellbarcode_info, geneSetNames=calculateScoreParallel_multiBatch(
+                adata,
+                batch_key=batch_key,
+                marker_gene=marker_gene,
+                marker_gene_n_groups_indices=batch_n_groups_indices,
                 score_layer=score_layer,
                 max_workers=max_workers
             )
+            
+        else:
+            ##################Score gene sets in different batches, seperately
+            #############
+            ### Calculate scores
+            score_list_collection=[]
+            ### Store the cell barcodes info
+            cellbarcode_info=list()
 
-            ### Normalization, within each batch
-            score_list=normalize(score_list,norm='l2',axis=0)
-            # score_list=normalize(score_list,norm='l2',axis=1) ## Adding this is important
-            # Block-wise L2-normalization, maybe could be better implemented with higher efficiency
-            # comparing different groups' marker gene scores
-            for start, end in zip(batch_n_groups_indices[:-1], batch_n_groups_indices[1:]):
-                score_list[:, start:end] = normalize(score_list[:, start:end], norm='l2', axis=1) ## Adding this is important
+            ### Scoring the geneset among different batches
+            # for batch_u in batch_list:
+            for batch_u in tqdm(batch_list, desc="Calculating cell embeddings", unit="batch"):
+                ### Store the cell barcodes for each batch
+                cellbarcode_info.append(adata.obs_names[adata.obs[batch_key]==batch_u].values)
 
-            score_list_collection.append(score_list)
+                ### Use parallel computing of the gene set scores
+                score_list, gene_set_names=calculateScoreParallel(
+                    adata[adata.obs[batch_key]==batch_u],
+                    gene_set=marker_gene,
+                    score_layer=score_layer,
+                    max_workers=max_workers
+                )
+
+                ### Normalization, within each batch
+                score_list=normalize(score_list,norm='l2',axis=0)
+                # score_list=normalize(score_list,norm='l2',axis=1) ## Adding this is important
+                # Block-wise L2-normalization, maybe could be better implemented with higher efficiency
+                # comparing different groups' marker gene scores
+                for start, end in zip(batch_n_groups_indices[:-1], batch_n_groups_indices[1:]):
+                    score_list[:, start:end] = normalize(score_list[:, start:end], norm='l2', axis=1) ## Adding this is important
+
+                score_list_collection.append(score_list)
+
+            ################## End ####################
+        
+    
+
         score_list_collection=np.vstack(score_list_collection)
         
         # score_list_collection_collection.append(score_list_collection)
