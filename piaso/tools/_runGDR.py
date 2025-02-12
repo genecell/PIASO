@@ -1,4 +1,5 @@
 from ._runSVD import runSVDLazy
+from ._normalization import score
 
 ### Run GDR
 import scanpy as sc
@@ -369,7 +370,7 @@ def _process_gene_sets(gene_set, var_names):
     return valid_gene_sets
 
 
-def _calculate_gene_set_score_shared(gene_indices, metadata, score_name, is_sparse):
+def _calculate_gene_set_score_shared(gene_indices, metadata, score_name, is_sparse, score_method, random_seed):
     """
     Worker function to calculate gene set score using shared memory.
 
@@ -383,7 +384,13 @@ def _calculate_gene_set_score_shared(gene_indices, metadata, score_name, is_spar
         The score name used when scoring the gene set among cells.
     is_sparse : bool
         Whether the input matrix is sparse.
-
+    score_method : {'scanpy', 'piaso'}, optional
+        The method used for gene set scoring. Must be either 'scanpy' (default) or 'piaso'.
+        - 'scanpy': Uses the Scanpy's built-in gene set scoring method.
+        - 'piaso': Uses the PIASO's gene set scoring method, which is more robust to sequencing depth variations.
+    random_seed : int, optional
+        Random seed for reproducibility. Default is 1927.
+        
     Returns
     -------
     np.ndarray
@@ -425,15 +432,24 @@ def _calculate_gene_set_score_shared(gene_indices, metadata, score_name, is_spar
 
         
         adata_tmp = sc.AnnData(X=X, dtype=X.dtype)
-
-
+        
+        # print(adata_tmp.X.dtype)
+        # print(adata_tmp.X.data[:10])
+        # print(adata_tmp.var.index[gene_indices].tolist())
+        
         sc.settings.verbosity = 0
         # ### Globally supress warning
         # warnings.filterwarnings("ignore", category=FutureWarning)
         # # # Suppress FutureWarning
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", category=FutureWarning)
-            sc.tl.score_genes(adata_tmp, adata_tmp.var.index[gene_indices].tolist(), score_name=score_name)
+            if score_method=='scanpy':
+                sc.tl.score_genes(adata_tmp, adata_tmp.var.index[gene_indices].tolist(), score_name=score_name, random_state=random_seed)
+            elif score_method=='piaso':
+                ## Set layer to None, because the scoring layer is already constructed as the adata.X
+                score(adata_tmp, gene_list=adata_tmp.var.index[gene_indices].tolist(), key_added=score_name, layer=None, random_seed=random_seed)
+            else:
+                raise ValueError(f"Invalid score_method: '{score_method}'. Must be either 'scanpy' or 'piaso'.")
 
         scores=adata_tmp.obs[score_name].values.copy()
  
@@ -469,12 +485,16 @@ from concurrent.futures import ProcessPoolExecutor
 from functools import partial
 import numpy as np
 import scanpy as sc
+from typing import Literal
 
 def calculateScoreParallel(
     adata,
     gene_set,
+    score_method: Literal["scanpy", "piaso"],
+    random_seed:int=1927,
     score_layer=None,
-    max_workers=None):
+    max_workers=None,
+):
     """
     Compute gene set scores in parallel using shared memory for efficiency.
 
@@ -487,11 +507,18 @@ def calculateScoreParallel(
             - A dictionary: Keys are gene set names, values are lists of genes.
             - A list of lists: Each sublist contains genes in a gene set.
             - A pandas.DataFrame: Each column represents a gene set, and column names are gene set names.
+    score_method : {'scanpy', 'piaso'}, optional
+        The method used for gene set scoring. Must be either 'scanpy' (default) or 'piaso'.
+        - 'scanpy': Uses the Scanpy's built-in gene set scoring method.
+        - 'piaso': Uses the PIASO's gene set scoring method, which is more robust to sequencing depth variations.
+    random_seed : int, optional
+        Random seed for reproducibility. Default is 1927.
     score_layer : str or None, optional
         Layer of the AnnData object to use. If None, `adata.X` is used.
     max_workers : int or None, optional
         Number of parallel workers to use. Defaults to the number of CPUs.
-
+        
+        
     Returns
     -------
     tuple
@@ -502,7 +529,10 @@ def calculateScoreParallel(
         - list: The names of the gene sets.
     """
     
-    
+    # Validate score_method
+    if score_method not in {"scanpy", "piaso"}:
+        raise ValueError(f"Invalid score_method: '{score_method}'. Must be either 'scanpy' or 'piaso'.")
+
     
     # Determine the input matrix
     if score_layer is not None:
@@ -533,7 +563,9 @@ def calculateScoreParallel(
         _calculate_gene_set_score_shared, ### also could uses _safe_calculate_gene_set_score_shared
         metadata=shm_metadata,
         score_name="geneSetScore_i", ### this is actually redundant, we don't need this
-        is_sparse=is_sparse
+        is_sparse=is_sparse,
+        score_method=score_method, ### Specify which gene set scoring method to use
+        random_seed=random_seed ### Set the random seed for reproducibility
     )
     
     
@@ -562,7 +594,7 @@ def calculateScoreParallel(
 
 
 ### Calculate gene set score for different batches, separately, but in parallel
-def _calculateScoreParallel_single_batch(batch_key,  shared_data, batch_i, marker_gene, marker_gene_n_groups_indices, max_workers):
+def _calculateScoreParallel_single_batch(batch_key,  shared_data, batch_i, marker_gene, marker_gene_n_groups_indices, max_workers, score_method):
     """
     Process a single batch to calculate scores, different marker gene sets will be calculated in parallel with `calculateScoreParallel` function.
     """
@@ -607,11 +639,11 @@ def _calculateScoreParallel_single_batch(batch_key,  shared_data, batch_i, marke
     adata.var_names=shared_data["var_names"].copy()
     
     
-    
     # Compute gene set scores, in parallel for different gene sets
     score_list, gene_set_names = calculateScoreParallel(
         adata,
         gene_set=marker_gene,
+        score_method=score_method,
         score_layer=None, ## As the score layer already used in setting up the shared memory
         max_workers=max_workers
     )
@@ -632,14 +664,16 @@ def _calculateScoreParallel_single_batch(batch_key,  shared_data, batch_i, marke
     
     return score_list, cell_barcodes, gene_set_names
 
-
+from typing import Literal
 def calculateScoreParallel_multiBatch(
     adata: sc.AnnData,
     batch_key: str,
     marker_gene: pd.DataFrame,
     marker_gene_n_groups_indices: list,
+    score_method: Literal["scanpy", "piaso"],
     score_layer: str = None,
-    max_workers: int = 8
+    max_workers: int = 8,
+    
 ):
     """
     Calculate gene set scores for each adata batch in parallel using shared memory. Different marker gene sets will be calculated in parallel as well.
@@ -654,10 +688,14 @@ def calculateScoreParallel_multiBatch(
         The marker gene DataFrame.
     marker_gene_n_groups_indices : list
         Indices specifying the marker gene set group boundaries, used for score normalization within each marker gene set group.
-    score_layer : str
-        The layer of `adata` to use for scoring.
     max_workers : int
         Maximum number of parallel workers to use.
+    score_layer : str
+        The layer of `adata` to use for scoring.
+    score_method : {'scanpy', 'piaso'}, optional
+        The method used for gene set scoring. Must be either 'scanpy' (default) or 'piaso'.
+        - 'scanpy': Uses the Scanpy's built-in gene set scoring method.
+        - 'piaso': Uses the PIASO's gene set scoring method, which is more robust to sequencing depth variations.
 
     Returns
     -------
@@ -676,12 +714,15 @@ def calculateScoreParallel_multiBatch(
     ...     batch_key='batch',
     ...     marker_gene=marker_gene,
     ...     marker_gene_n_groups_indices=marker_gene_n_groups_indices,
-    ...     score_layer=None,
+    ...     score_layer='piaso',
     ...     max_workers=8
     ... )
     >>> print(score_list)
     >>> print(cellbarcode_info)
     """
+
+    
+    
     # Extract gene expression data
     if score_layer is not None:
         gene_expression_data = adata.layers[score_layer]
@@ -715,7 +756,8 @@ def calculateScoreParallel_multiBatch(
                     batch_i,
                     marker_gene,
                     marker_gene_n_groups_indices,
-                    max_workers
+                    max_workers,
+                    score_method
                 ) for batch_i in batch_list
             ]
 
@@ -1124,6 +1166,15 @@ def runGDRParallel(
 
     sc.settings.verbosity=0
     
+    ### Check the scoring method, improve this part of codes later
+    if scoring_method is not None:
+        # Validate scoring_method
+        if scoring_method not in {"scanpy", "piaso"}:
+            raise ValueError(f"Invalid scoring_method: '{scoring_method}'. Must be either 'scanpy' or 'piaso'.")
+    else:
+        ### Use scanpy's scoring method as the default
+        scoring_method='scanpy'
+    
 #     ### To store the scores
 #     score_list_collection_collection=[]
     
@@ -1212,6 +1263,7 @@ def runGDRParallel(
         score_list, gene_set_names=calculateScoreParallel(
             adata,
             gene_set=marker_gene,
+            score_method=scoring_method,
             score_layer=score_layer,
             max_workers=max_workers
         )
@@ -1273,7 +1325,8 @@ def runGDRParallel(
                 marker_gene=marker_gene,
                 marker_gene_n_groups_indices=batch_n_groups_indices,
                 score_layer=score_layer,
-                max_workers=max_workers
+                max_workers=max_workers,
+                score_method=scoring_method
             )
             
         else:
@@ -1294,6 +1347,7 @@ def runGDRParallel(
                 score_list, gene_set_names=calculateScoreParallel(
                     adata[adata.obs[batch_key]==batch_u],
                     gene_set=marker_gene,
+                    score_method=scoring_method,
                     score_layer=score_layer,
                     max_workers=max_workers
                 )
@@ -1463,6 +1517,8 @@ def predictCellTypeByGDR(
         adata.X=adata.layers[layer]
         
     adata_combine=sc.AnnData.concatenate(adata_ref, adata[:,adata_ref.var_names])
+    ### Needs to be categorical variable
+    adata_combine.obs['gdr_by']=adata_combine.obs['gdr_by'].astype('category')
     
     ### Already pre-determined
     # if layer is not None:
@@ -1488,7 +1544,7 @@ def predictCellTypeByGDR(
     
     ### Add a SVD layer
     from sklearn.decomposition import TruncatedSVD
-    transformer = TruncatedSVD(n_components=adata_combine.obsm['X_gdr'].shape[1], random_state=20)
+    transformer = TruncatedSVD(n_components=adata_combine.obsm['X_gdr'].shape[1], random_state=10)
     adata_combine.obsm['X_gdr_svd'] = transformer.fit_transform(adata_combine.obsm['X_gdr'])
 
     

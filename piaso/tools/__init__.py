@@ -4,3 +4,5 @@ from ._runGDR import runGDR, predictCellTypeByGDR, calculateScoreParallel, calcu
 
 from ._clustering import leiden_local
 
+from ._normalization import infog, score
+
