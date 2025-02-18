@@ -22,8 +22,9 @@ def runGDR(
     mu:float=1.0,
     use_highly_variable:bool=True,
     n_highly_variable_genes:int=5000,
-    layer:str='log1p',
-    score_layer:str='log1p',
+    layer:str=None,
+    score_layer:str=None,
+    infog_layer:str=None,
     n_svd_dims:int=50,
     resolution:float=1.0,
     scoring_method:str=None,
@@ -52,7 +53,10 @@ def runGDR(
                 use_highly_variable=use_highly_variable,
                 verbosity=verbosity,
                 batch_key=None,
-                trim_value=None,
+                scale_data=False,
+                layer=layer,
+                infog_layer=infog_layer,
+                infog_trim=True,
                 key_added='X_svd'
             )
             ### Because the verbosity will be reset in the above function
@@ -153,7 +157,10 @@ def runGDR(
                     use_highly_variable=use_highly_variable,
                     verbosity=verbosity,
                     batch_key=None, ### Need to set as None, because the SVD is calculated in each batch separately
-                    trim_value=None,
+                    scale_data=False,
+                    layer=layer,
+                    infog_layer=infog_layer,
+                    infog_trim=True,
                     key_added='X_svd'
                 )
                 ### Because the verbosity will be reset in the above function, the good way is to remember the previous state of verbosity
@@ -873,7 +880,10 @@ def _runCOSGParallel_single_batch(batch_key, shared_data, batch_i, groupby, n_sv
                 use_highly_variable=use_highly_variable,
                 verbosity=verbosity,
                 batch_key=None,
-                trim_value=None,
+                scale_data=False,
+                layer=None,
+                infog_layer=None,
+                infog_trim=True,
                 key_added='X_svd'
             )
             ### Because in runSVDLazy, it will reset the sc.settings.verbosity, so we need to set the verbosity again here
@@ -1078,6 +1088,7 @@ def runGDRParallel(
     mu:float=1.0,
     layer:str=None,
     score_layer:str=None,
+    infog_layer:str=None,
     use_highly_variable:bool=True,
     n_highly_variable_genes:int=5000,
     n_svd_dims:int=50,
@@ -1113,6 +1124,9 @@ def runGDRParallel(
 
     score_layer : str, optional
         If specified, the gene scoring will be calculated using this layer of `adata.layers`. Defaults to None.
+        
+    infog_layer : str, optional
+        If specified, the INFOG normalization will be calculated using this layer of `adata.layers`. Defaults to None.
 
     use_highly_variable : bool, optional
         Whether to use only highly variable genes when rerunning the dimensionality reduction. Defaults to True. Only effective when `groupby=None`.
@@ -1196,7 +1210,10 @@ def runGDRParallel(
                 use_highly_variable=use_highly_variable,
                 verbosity=verbosity,
                 batch_key=None,
-                trim_value=None,
+                scale_data=False,
+                layer=layer,
+                infog_layer=infog_layer,
+                infog_trim=True,
                 key_added='X_svd'
             )
             ### Because the verbosity will be reset in the above function

@@ -1,3 +1,5 @@
+from ._normalization import infog
+
 ### run SVD
 from typing import Optional
 from sklearn.preprocessing import StandardScaler
@@ -12,24 +14,41 @@ def runSVD(
     scale_data: bool = False,
     key_added: str = 'X_svd',
     layer: Optional[str] = None
-) -> None:
+):
     """
-    Run Truncated Singular Value Decomposition (SVD) on the AnnData object and stores the result in adata.obsm[key_added].
-    
+    Performs Truncated Singular Value Decomposition (SVD) on the specified gene expression matrix (adata.X or a specified layer)
+    within an AnnData object and stores the resulting low-dimensional representation in `adata.obsm`.
+
     Parameters:
-    adata (AnnData): The annotated data matrix.
-    use_highly_variable (bool): Whether to use highly variable genes/features only. Default is True.
-    n_components (int): Desired dimensionality of output data. Must be strictly less than the number of features. Default is 50.
-    random_state (int, optional): Random seed for reproducibility. Default is 10.
-    scale_data (bool): Whether to scale the data using StandardScaler. Default is False.
-    key_added (str): Key in adata.obsm to store the result. Default is 'X_svd'.
-    layer (str, optional): Specify the layer to use. If None, use adata.X. Default is None.
-    
-    Usage:
-    ```python
-    runSVD(adata, use_highly_variable=True, n_components=50, random_state=10, scale_data=False, key_added='X_svd', layer='raw')
-    ```
-    This will run SVD on the specified layer 'raw' of the adata object, and will store the result in adata.obsm['X_svd'].
+    ----------
+    adata : AnnData
+        An AnnData object.
+    use_highly_variable : bool, optional, default=True
+        If True, the decomposition is performed only on highly variable genes/features.
+    n_components : int, optional, default=50
+        The number of principal components to retain.
+    random_state : int, optional, default=10
+        A random seed to ensure reproducibility.
+    scale_data : bool, optional, default=False
+        If True, standardizes the input data before performing SVD.
+    key_added : str, optional, default='X_svd'
+        The key under which the resulting cell embeddings are stored in `adata.obsm`.
+    layer : str, optional, default=None
+        Specifies which layer of `adata` to use for the transformation. If None, `adata.X` is used.
+
+    Returns:
+    -------
+    None
+        The function modifies `adata` in place, storing the cell embeddings in `adata.obsm[key_added]`.
+
+    Example:
+    -------
+    >>> import piaso
+    >>> piaso.tl.runSVD(adata, use_highly_variable=True, n_components=50, random_state=42, 
+    ...        scale_data=False, key_added='X_svd', layer=None)
+    >>> 
+    >>> # Access the transformed data
+    >>> adata.obsm['X_svd']
     """
     
     if layer and layer not in adata.layers:
@@ -76,26 +95,52 @@ def runSVDLazy(
     use_highly_variable: bool=True,
     verbosity: int=0,
     batch_key: str=None,
-    trim_value:float=None,
-    key_added: str=None
+    random_state: Optional[int] = 10, 
+    scale_data: bool = False,
+    infog_trim:bool=True,
+    key_added: str=None,
+    layer: Optional[str] = None,
+    infog_layer: Optional[str] = None
+
 ):
     
     adata = adata.copy() if copy else adata
     sc.settings.verbosity=verbosity
-    sc.pp.highly_variable_genes(adata,
-                            n_top_genes=n_top_genes,
-                            batch_key=batch_key
-                           )
-    expr = adata[:, adata.var['highly_variable']].X if use_highly_variable else adata.X
-    expr=StandardScaler(with_mean=False).fit_transform(expr)
-    if trim_value is not None:
-        expr[expr > trim_value] = trim_value
-    transformer = TruncatedSVD(n_components=n_components, random_state=10)
-
-    if key_added is None:
-        adata.obsm['X_pca']= transformer.fit_transform(expr)
+    
+    if layer=='infog':
+        ### Run INFOG normalization
+        infog(
+            adata,
+            copy=False,
+            layer=infog_layer,
+            n_top_genes=n_top_genes,
+            key_added='infog',
+            random_state=random_state,
+            trim=infog_trim,
+            verbosity=verbosity
+        )
+        ### Set the highly variable genes selected by INFOG
+        adata.var['highly_variable']=adata.var['highly_variable_infog']
+        
+        
+        
     else:
-        adata.obsm[key_added]= transformer.fit_transform(expr)
+        sc.pp.highly_variable_genes(adata,
+                                n_top_genes=n_top_genes,
+                                batch_key=batch_key
+                               )
+        
+        
+    ### Use the runSVD function
+    runSVD(
+        adata,
+        use_highly_variable=use_highly_variable, 
+        n_components=n_components, 
+        random_state=random_state, 
+        scale_data=scale_data,
+        key_added=key_added,
+        layer=layer
+    )
     
     sc.settings.verbosity=3
 

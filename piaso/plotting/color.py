@@ -111,12 +111,38 @@ import matplotlib.colors as mcolors
 def createCustomCmapFromHex(hex_colors):
     """
     Create a custom colormap from a list of hex colors.
+    This function converts a sequence of hex colors into an RGB-based colormap that can be used for visualizations in Matplotlib.
 
     Parameters:
-    hex_colors (list): A list of color codes in hex format.
+    ----------
+    hex_colors : list of str
+        A list of color codes in hexadecimal format (e.g., `['#faefef', '#e8aebc', '#d96998', '#b1257a', '#572266']`).
+
 
     Returns:
-    LinearSegmentedColormap: The custom colormap.
+    -------
+    LinearSegmentedColormap
+        A Matplotlib `LinearSegmentedColormap` object that can be applied to plots using the `cmap` parameter.
+        
+    Example:
+    -------
+    >>> import matplotlib.pyplot as plt
+    >>> import numpy as np
+    >>> import piaso
+    >>> # Define custom hex colors
+    >>> hex_colors = ['#faefef', '#e8aebc', '#d96998', '#b1257a', '#572266']
+    >>> 
+    >>> # Create the colormap
+    >>> c_color4 = piaso.pl.color.createCustomCmapFromHex(hex_colors)
+    >>> 
+    >>> # Generate a gradient to visualize the colormap
+    >>> gradient = np.linspace(0, 1, 256).reshape(1, -1)
+    >>> 
+    >>> # Display the colormap
+    >>> plt.figure(figsize=(6, 1))
+    >>> plt.imshow(gradient, aspect="auto", cmap=c_color4)
+    >>> plt.axis("off")
+    >>> plt.show()
     """
     # Convert hex colors to RGB
     rgb_colors = [mcolors.hex2color(color) for color in hex_colors]
@@ -124,6 +150,6 @@ def createCustomCmapFromHex(hex_colors):
     cmap = LinearSegmentedColormap.from_list("custom_cmap", rgb_colors)
     return cmap
 
+### Create a cmap
 hex_colors = ['#faefef', '#e8aebc', '#d96998', '#b1257a', '#572266']
 c_color4 = createCustomCmapFromHex(hex_colors)
-
