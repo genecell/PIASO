@@ -105,6 +105,10 @@ def runSVDLazy(
 ):
     
     adata = adata.copy() if copy else adata
+
+    # Back up the current verbosity level
+    original_verbosity = sc.settings.verbosity
+    
     sc.settings.verbosity=verbosity
     
     if layer=='infog':
@@ -142,7 +146,7 @@ def runSVDLazy(
         layer=layer
     )
     
-    sc.settings.verbosity=3
+    sc.settings.verbosity=original_verbosity
 
     ### Return the result
     return adata if copy else None

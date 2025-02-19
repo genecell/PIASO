@@ -2,26 +2,33 @@ import scanpy as sc
 import pandas as pd
 import numpy as np
 
-
+from typing import Iterable, Union, Optional
 
 ### Normalization based on information
 def infog(
     adata,
     copy:bool=False,
-    layer='raw',
     n_top_genes:int=1000,
     key_added:str='infog',
     random_state:int =10,
     trim:bool=True,
-    verbosity:int=1
+    verbosity:int=1,
+    layer: Optional[str] = None
 ):
+    if layer and layer not in adata.layers:
+        raise ValueError(f"{layer} not found in adata.layers.")
     
     adata = adata.copy() if copy else adata
     
-    if sparse.issparse(adata.layers[layer]):
-        counts=adata.layers[layer]
+    ### To get the gene expression matrix
+    if layer:
+        counts = adata.layers[layer]
     else:
-        counts=sparse.csr_matrix(adata.layers[layer])
+        counts = adata.X
+    
+    ### Convert to csr sparse matrix:
+    if not sparse.issparse(counts):
+        counts=sparse.csr_matrix(counts)    
     
 
     cell_depth=counts.sum(axis=1).A

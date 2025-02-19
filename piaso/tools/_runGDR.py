@@ -792,7 +792,8 @@ import os
 import sys
 import logging
 
-def _runCOSGParallel_single_batch(batch_key, shared_data, batch_i, groupby, n_svd_dims, n_highly_variable_genes, verbosity, resolution, mu, n_gene, use_highly_variable):
+def _runCOSGParallel_single_batch(
+    batch_key, shared_data, batch_i, groupby, n_svd_dims, n_highly_variable_genes, verbosity, resolution, mu, n_gene, use_highly_variable, layer):
     """
     Process a single batch using shared memory and perform clustering and marker gene identification.
 
@@ -820,6 +821,9 @@ def _runCOSGParallel_single_batch(batch_key, shared_data, batch_i, groupby, n_sv
         Number of genes to use in cosg.
     use_highly_variable : bool
         Whether to use highly variable genes for SVD.
+    layer : str
+        Layer in `adata.layers` to use for the analysis. Defaults to None, which uses `adata.X`.
+    
 
     Returns
     -------
@@ -872,20 +876,37 @@ def _runCOSGParallel_single_batch(batch_key, shared_data, batch_i, groupby, n_sv
         # Extract marker gene signatures
         if groupby is None:
             # Run SVD lazily
-            runSVDLazy(
-                adata,
-                copy=False,
-                n_components=n_svd_dims,
-                n_top_genes=n_highly_variable_genes,
-                use_highly_variable=use_highly_variable,
-                verbosity=verbosity,
-                batch_key=None,
-                scale_data=False,
-                layer=None,
-                infog_layer=None,
-                infog_trim=True,
-                key_added='X_svd'
-            )
+            if layer=='infog':
+                ### in this case, adata.X will be the raw UMI counts, the infog_layer will be transferred as adata.X in this function input
+                runSVDLazy(
+                    adata,
+                    copy=False,
+                    n_components=n_svd_dims,
+                    n_top_genes=n_highly_variable_genes,
+                    use_highly_variable=use_highly_variable,
+                    verbosity=verbosity,
+                    batch_key=None,
+                    scale_data=False,
+                    layer='infog', ### Use INFOG normalization
+                    infog_layer=None, ### By default, adata.X will be used for INFOG normalization
+                    infog_trim=True,
+                    key_added='X_svd'
+                )
+            else:
+                runSVDLazy(
+                    adata,
+                    copy=False,
+                    n_components=n_svd_dims,
+                    n_top_genes=n_highly_variable_genes,
+                    use_highly_variable=use_highly_variable,
+                    verbosity=verbosity,
+                    batch_key=None,
+                    scale_data=False,
+                    layer=None,
+                    infog_layer=None,
+                    infog_trim=True,
+                    key_added='X_svd'
+                )
             ### Because in runSVDLazy, it will reset the sc.settings.verbosity, so we need to set the verbosity again here
             sc.settings.verbosity = 0  # Suppress messages
 
@@ -925,17 +946,19 @@ def _runCOSGParallel_single_batch(batch_key, shared_data, batch_i, groupby, n_sv
 ### To record the progress
 from concurrent.futures import as_completed
 from tqdm import tqdm
+import warnings
 
 from scipy.sparse import issparse
 def runCOSGParallel(
     adata: sc.AnnData,
     batch_key: str,
     groupby: str = None,
+    layer: str = None,
+    infog_layer:str=None,
     n_svd_dims: int = 50,
     n_highly_variable_genes: int = 5000,
     verbosity: int = 0,
     resolution: float = 1.0,
-    layer: str = 'log1p',
     mu: float = 1.0,
     n_gene: int = 30,
     use_highly_variable: bool = True,
@@ -961,8 +984,10 @@ def runCOSGParallel(
         Level of verbosity for logging information.
     resolution : float, optional (default: 1.0)
         Resolution parameter for clustering.
-    layer : str, optional (default: 'log1p')
+    layer : str, optional (default: None)
         Layer of the `adata` object to use for COSG.
+    infog_layer : str, optional (default: None)
+        If specified, the INFOG normalization will be calculated using this layer of `adata.layers`, which is expected to contain the UMI count matrix. Defaults to None.
     mu : float, optional (default: 1.0)
         COSG parameter to control regularization.
     n_gene : int, optional (default: 30)
@@ -1007,10 +1032,22 @@ def runCOSGParallel(
     
     
     # Determine the input matrix
-    if layer is not None:
-        gene_expression_data = adata.layers[layer]
-    else:
+    if layer is None:
         gene_expression_data = adata.X
+    elif layer == 'infog':
+        if infog_layer is None:
+            warnings.warn(
+                "Please set 'infog_layer' to the UMI counts matrix. "
+                "If adata.X already is the UMI counts matrix, you can safely ignore this message."
+            )
+            gene_expression_data = adata.X
+        else:
+            ### Set it to the infog_layer, which should contain the UMI counts matrix, and will be used for the SVDlazy function
+            gene_expression_data = adata.layers[infog_layer]
+    else:
+        gene_expression_data = adata.layers[layer]
+    
+
     
     # Determine matrix type and set up shared memory
     if issparse(gene_expression_data):
@@ -1035,7 +1072,7 @@ def runCOSGParallel(
                 executor.submit(
                     _runCOSGParallel_single_batch, batch_key, shared_data, batch_i, groupby,
                     n_svd_dims, n_highly_variable_genes, verbosity, resolution,
-                    mu, n_gene, use_highly_variable
+                    mu, n_gene, use_highly_variable, layer
                 )
             )
             
@@ -1126,7 +1163,7 @@ def runGDRParallel(
         If specified, the gene scoring will be calculated using this layer of `adata.layers`. Defaults to None.
         
     infog_layer : str, optional
-        If specified, the INFOG normalization will be calculated using this layer of `adata.layers`. Defaults to None.
+        If specified, the INFOG normalization will be calculated using this layer of `adata.layers`, which is expected to contain the UMI count matrix. Defaults to None.
 
     use_highly_variable : bool, optional
         Whether to use only highly variable genes when rerunning the dimensionality reduction. Defaults to True. Only effective when `groupby=None`.
@@ -1318,6 +1355,7 @@ def runGDRParallel(
             use_highly_variable=use_highly_variable,
             n_highly_variable_genes=n_highly_variable_genes,
             layer=layer,
+            infog_layer=infog_layer,
             n_svd_dims=n_svd_dims,
             resolution=resolution,
             verbosity=verbosity,
