@@ -29,8 +29,19 @@ def runGDR(
     resolution:float=1.0,
     scoring_method:str=None,
     key_added:str=None,
-    verbosity: int=0,         
+    verbosity: int=0,
+    random_seed:int=1927
 ):
+    
+    ### Check the scoring method, improve this part of codes later
+    if scoring_method is not None:
+        # Validate scoring_method
+        if scoring_method not in {"scanpy", "piaso"}:
+            raise ValueError(f"Invalid scoring_method: '{scoring_method}'. Must be either 'scanpy' or 'piaso'.")
+    else:
+        ### Use scanpy's scoring method as the default
+        scoring_method='scanpy'
+    
 
     sc.settings.verbosity=0
     score_list_collection_collection=[]
@@ -57,7 +68,8 @@ def runGDR(
                 layer=layer,
                 infog_layer=infog_layer,
                 infog_trim=True,
-                key_added='X_svd'
+                key_added='X_svd',
+                random_state=random_seed
             )
             ### Because the verbosity will be reset in the above function
             sc.settings.verbosity=0
@@ -112,9 +124,15 @@ def runGDR(
             marker_gene_i=marker_gene[i].values
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore", category=FutureWarning)
-                sc.tl.score_genes(adata_tmp,
-                              marker_gene_i,
-                              score_name='markerGeneFeatureScore_i')
+                if scoring_method=='scanpy':
+                    sc.tl.score_genes(adata_tmp, marker_gene_i, score_name='markerGeneFeatureScore_i', random_state=random_seed)
+                elif scoring_method=='piaso':
+                    ## Set layer to None, because the scoring layer is already constructed as the adata.X
+                    score(adata_tmp, gene_list=marker_gene_i.tolist(), key_added='markerGeneFeatureScore_i', layer=None, random_seed=random_seed)
+                else:
+                    raise ValueError(f"Invalid scoring_method: '{scoring_method}'. Must be either 'scanpy' or 'piaso'.")
+                
+               
             ### Need to add the .copy()
             score_list.append(adata_tmp.obs['markerGeneFeatureScore_i'].values.copy())
 
@@ -161,7 +179,8 @@ def runGDR(
                     layer=layer,
                     infog_layer=infog_layer,
                     infog_trim=True,
-                    key_added='X_svd'
+                    key_added='X_svd',
+                    random_state=random_seed
                 )
                 ### Because the verbosity will be reset in the above function, the good way is to remember the previous state of verbosity
                 sc.settings.verbosity=0
@@ -220,11 +239,19 @@ def runGDR(
                 
                 for i in marker_gene.columns:
                     marker_gene_i=marker_gene[i].values
+                    
+                    
                     with warnings.catch_warnings():
                         warnings.simplefilter("ignore", category=FutureWarning)
-                        sc.tl.score_genes(adata_u,
-                                      marker_gene_i,
-                                      score_name='markerGeneFeatureScore_i')
+                        if scoring_method=='scanpy':
+                            sc.tl.score_genes(adata_u, marker_gene_i, score_name='markerGeneFeatureScore_i', random_state=random_seed)
+                        elif scoring_method=='piaso':
+                            ## Set layer to None, because the scoring layer is already constructed as the adata.X
+                            score(adata_u,
+                                  gene_list=marker_gene_i.tolist(), key_added='markerGeneFeatureScore_i', layer=None, random_seed=random_seed)
+                        else:
+                            raise ValueError(f"Invalid scoring_method: '{scoring_method}'. Must be either 'scanpy' or 'piaso'.")
+
                     ### Need to add the .copy()
                     score_list.append(adata_u.obs['markerGeneFeatureScore_i'].values.copy())
 
@@ -601,7 +628,7 @@ def calculateScoreParallel(
 
 
 ### Calculate gene set score for different batches, separately, but in parallel
-def _calculateScoreParallel_single_batch(batch_key,  shared_data, batch_i, marker_gene, marker_gene_n_groups_indices, max_workers, score_method):
+def _calculateScoreParallel_single_batch(batch_key,  shared_data, batch_i, marker_gene, marker_gene_n_groups_indices, max_workers, score_method, random_seed):
     """
     Process a single batch to calculate scores, different marker gene sets will be calculated in parallel with `calculateScoreParallel` function.
     """
@@ -652,7 +679,8 @@ def _calculateScoreParallel_single_batch(batch_key,  shared_data, batch_i, marke
         gene_set=marker_gene,
         score_method=score_method,
         score_layer=None, ## As the score layer already used in setting up the shared memory
-        max_workers=max_workers
+        max_workers=max_workers,
+        random_seed=random_seed
     )
     # print(gene_set_names)
     # print(marker_gene.columns)
@@ -680,6 +708,7 @@ def calculateScoreParallel_multiBatch(
     score_method: Literal["scanpy", "piaso"],
     score_layer: str = None,
     max_workers: int = 8,
+    random_seed: int = 1927
     
 ):
     """
@@ -703,6 +732,8 @@ def calculateScoreParallel_multiBatch(
         The method used for gene set scoring. Must be either 'scanpy' (default) or 'piaso'.
         - 'scanpy': Uses the Scanpy's built-in gene set scoring method.
         - 'piaso': Uses the PIASO's gene set scoring method, which is more robust to sequencing depth variations.
+    random_seed : int, optional
+        Random seed for reproducibility. Default is 1927.
 
     Returns
     -------
@@ -764,7 +795,8 @@ def calculateScoreParallel_multiBatch(
                     marker_gene,
                     marker_gene_n_groups_indices,
                     max_workers,
-                    score_method
+                    score_method,
+                    random_seed
                 ) for batch_i in batch_list
             ]
 
@@ -793,7 +825,7 @@ import sys
 import logging
 
 def _runCOSGParallel_single_batch(
-    batch_key, shared_data, batch_i, groupby, n_svd_dims, n_highly_variable_genes, verbosity, resolution, mu, n_gene, use_highly_variable, layer):
+    batch_key, shared_data, batch_i, groupby, n_svd_dims, n_highly_variable_genes, verbosity, resolution, mu, n_gene, use_highly_variable, layer, random_seed):
     """
     Process a single batch using shared memory and perform clustering and marker gene identification.
 
@@ -823,6 +855,8 @@ def _runCOSGParallel_single_batch(
         Whether to use highly variable genes for SVD.
     layer : str
         Layer in `adata.layers` to use for the analysis. Defaults to None, which uses `adata.X`.
+    random_seed : int
+        Random seed for reproducibility. Default is 1927.
     
 
     Returns
@@ -890,7 +924,8 @@ def _runCOSGParallel_single_batch(
                     layer='infog', ### Use INFOG normalization
                     infog_layer=None, ### By default, adata.X will be used for INFOG normalization
                     infog_trim=True,
-                    key_added='X_svd'
+                    key_added='X_svd',
+                    random_state=random_seed
                 )
             else:
                 runSVDLazy(
@@ -905,7 +940,8 @@ def _runCOSGParallel_single_batch(
                     layer=None,
                     infog_layer=None,
                     infog_trim=True,
-                    key_added='X_svd'
+                    key_added='X_svd',
+                    random_state=random_seed
                 )
             ### Because in runSVDLazy, it will reset the sc.settings.verbosity, so we need to set the verbosity again here
             sc.settings.verbosity = 0  # Suppress messages
@@ -947,8 +983,9 @@ def _runCOSGParallel_single_batch(
 from concurrent.futures import as_completed
 from tqdm import tqdm
 import warnings
-
 from scipy.sparse import issparse
+
+
 def runCOSGParallel(
     adata: sc.AnnData,
     batch_key: str,
@@ -963,7 +1000,8 @@ def runCOSGParallel(
     n_gene: int = 30,
     use_highly_variable: bool = True,
     return_gene_names: bool = False,
-    max_workers: int = 8
+    max_workers: int = 8,
+    random_seed: int=1927
 ):
     """
     Run COSG on batches in parallel using shared memory and multiprocessing.
@@ -998,6 +1036,8 @@ def runCOSGParallel(
         Whether to return gene names instead of indices in the marker gene DataFrame.
     max_workers : int, optional (default: 8)
         Maximum number of parallel workers to use. If None, defaults to the number of available CPU cores.
+    random_seed : int, optional
+        Random seed for reproducibility. Default is 1927.
 
     Returns
     -------
@@ -1072,7 +1112,7 @@ def runCOSGParallel(
                 executor.submit(
                     _runCOSGParallel_single_batch, batch_key, shared_data, batch_i, groupby,
                     n_svd_dims, n_highly_variable_genes, verbosity, resolution,
-                    mu, n_gene, use_highly_variable, layer
+                    mu, n_gene, use_highly_variable, layer, random_seed
                 )
             )
             
@@ -1134,7 +1174,8 @@ def runGDRParallel(
     key_added:str=None,
     max_workers:int=8,
     calculate_score_multiBatch:bool=False,
-    verbosity: int=0,         
+    verbosity: int=0,
+    random_seed:int=1927
 ):
     """
     Run GDR (marker Gene-guided dimensionality reduction) in parallel using multi-cores and shared memeory.
@@ -1191,6 +1232,9 @@ def runGDRParallel(
 
     verbosity : int, optional
         Verbosity level of the function. Higher values provide more detailed logs. Defaults to 0.
+        
+    random_seed : int, optional
+        Random seed for reproducibility. Default is 1927.
 
     Returns:
     --------
@@ -1251,7 +1295,8 @@ def runGDRParallel(
                 layer=layer,
                 infog_layer=infog_layer,
                 infog_trim=True,
-                key_added='X_svd'
+                key_added='X_svd',
+                random_state=random_seed
             )
             ### Because the verbosity will be reset in the above function
             sc.settings.verbosity=0
@@ -1319,7 +1364,8 @@ def runGDRParallel(
             gene_set=marker_gene,
             score_method=scoring_method,
             score_layer=score_layer,
-            max_workers=max_workers
+            max_workers=max_workers,
+            random_seed=random_seed
         )
         
         ### Normalization
@@ -1360,7 +1406,8 @@ def runGDRParallel(
             resolution=resolution,
             verbosity=verbosity,
             return_gene_names=True, ### Return the names, making it easier to be compatible with the calculateScoreParallel function
-            max_workers=max_workers
+            max_workers=max_workers,
+            random_seed=random_seed
 
         )
         
@@ -1381,7 +1428,8 @@ def runGDRParallel(
                 marker_gene_n_groups_indices=batch_n_groups_indices,
                 score_layer=score_layer,
                 max_workers=max_workers,
-                score_method=scoring_method
+                score_method=scoring_method,
+                random_seed=random_seed
             )
             
         else:
@@ -1404,7 +1452,8 @@ def runGDRParallel(
                     gene_set=marker_gene,
                     score_method=scoring_method,
                     score_layer=score_layer,
-                    max_workers=max_workers
+                    max_workers=max_workers,
+                    random_seed=random_seed
                 )
 
                 ### Normalization, within each batch
