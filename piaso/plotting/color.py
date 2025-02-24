@@ -113,18 +113,18 @@ def createCustomCmapFromHex(hex_colors):
     Create a custom colormap from a list of hex colors.
     This function converts a sequence of hex colors into an RGB-based colormap that can be used for visualizations in Matplotlib.
 
-    Parameters:
+    Parameters
     ----------
     hex_colors : list of str
         A list of color codes in hexadecimal format (e.g., `['#faefef', '#e8aebc', '#d96998', '#b1257a', '#572266']`).
 
 
-    Returns:
+    Returns
     -------
     LinearSegmentedColormap
         A Matplotlib `LinearSegmentedColormap` object that can be applied to plots using the `cmap` parameter.
         
-    Example:
+    Example
     -------
     >>> import matplotlib.pyplot as plt
     >>> import numpy as np

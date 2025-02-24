@@ -6,7 +6,7 @@ def getCrossCategories(df, col1, col2, delimiter='@', iterate_by_second_column=T
     respecting existing categorical orders if present. The iteration order of combination can be controlled,
     and a custom delimiter can be used to join the column values.
 
-    Parameters:
+    Parameters
     ----------
     df : pd.DataFrame
         The DataFrame containing the columns to be combined.
@@ -20,7 +20,7 @@ def getCrossCategories(df, col1, col2, delimiter='@', iterate_by_second_column=T
         If set to True, the function iterates by the values of the second column first
         when generating the combined categories. Defaults to True.
 
-    Returns:
+    Returns
     -------
     pd.Categorical
         A Pandas Categorical series of the combined columns with a defined order.
@@ -59,7 +59,7 @@ def table(
     """
     Returns the counts of unique values in the given list.
 
-    Parameters:
+    Parameters
     ----------
     values : list
         A list of values for which the counts are to be calculated.
@@ -73,7 +73,7 @@ def table(
         If True, the result is returned as a pandas DataFrame with columns 'value' and 'count'.
         If False, the result is returned as a dictionary. Default is False.
 
-    Returns:
+    Returns
     -------
     dict or pandas.DataFrame
         A dictionary (or DataFrame, if `as_dataframe` is True) containing the counts of unique values.

@@ -73,7 +73,7 @@ def infog(
 def _select_top_n(scores, n_top):
     reference_indices = np.arange(scores.shape[0], dtype=int)
     partition = np.argpartition(scores, -n_top)[-n_top:]
-    partial_indices = np.argsort(scores[partition])[::-1]
+    partial_indices = np.argsort(scores.iloc[partition])[::-1]
     global_indices = reference_indices[partition][partial_indices]
     return global_indices
 

@@ -212,7 +212,7 @@ def plot_embeddings_split(adata,
         
         
         ### 240706, add the np.int_, to check whether it's int or not, because int could also be continous
-        if isinstance(adata.obs[color][0], np.floating) or isinstance(adata.obs[color][0], np.int_):
+        if isinstance(adata.obs[color].iloc[0], np.floating) or isinstance(adata.obs[color].iloc[0], np.int_):
             ## is continous
             if vmax is None:
                 expr_max=adata.obs[color].max()
@@ -280,8 +280,39 @@ def plot_embeddings_split(adata,
         else:
             ### Categorical variable
             for i in range(len(axs)):
-                if i<len(variables):
+                if i<(len(variables)-1):
+                    if basis=='X_umap':
+                        sc.pl.umap(
+                            adata[adata.obs[splitby]==variables[i]],
+                            color=color,
+                            title=color+' in '+variables[i],
+                            legend_fontsize=12,
+                            legend_fontoutline=2,
+                            ncols=4,
+                            show=False, ax=axs[i],
+                            legend_loc=None, ## Not showing the legends except for the last subplot
+                            **kwargs
+                        )
                     
+                    else:
+                        sc.pl.embedding(
+                            adata[adata.obs[splitby]==variables[i]],
+                            basis=basis,
+                            color=color,
+                            title=color+' in '+variables[i],
+                            legend_fontsize=12,
+                            legend_fontoutline=2,
+                            ncols=4,
+                            show=False, ax=axs[i],
+                            legend_loc=None, ## Not showing the legends except for the last subplot
+                            **kwargs
+                        )
+                        
+                        
+                    ### Fix the coordinates ratio
+                    if fix_coordinate_ratio:
+                        axs[i].set_aspect('equal')
+                elif i==(len(variables)-1):
                     if basis=='X_umap':
                         sc.pl.umap(
                             adata[adata.obs[splitby]==variables[i]],
@@ -292,7 +323,7 @@ def plot_embeddings_split(adata,
                             ncols=4,
                             show=False, ax=axs[i],
                             **kwargs
-                           )
+                        )
                     else:
                         sc.pl.embedding(
                             adata[adata.obs[splitby]==variables[i]],
@@ -305,10 +336,6 @@ def plot_embeddings_split(adata,
                             show=False, ax=axs[i],
                             **kwargs
                         )
-                        
-                    ### Fix the coordinates ratio
-                    if fix_coordinate_ratio:
-                        axs[i].set_aspect('equal')
                     
                 else:
                     axs[i].set_visible(False)  
