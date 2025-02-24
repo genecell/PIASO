@@ -57,7 +57,7 @@
     text-decoration: underline;
 }
 
-.bd-sidebar.hidden {
+.bd-sidebar-primary.hidden {
     display: none;
 }
 

@@ -16,6 +16,10 @@ document.addEventListener("DOMContentLoaded", function () {
         return;
     }
 
+    // Hide sidebar initially
+    sidebar.classList.add("hidden");
+    content.classList.add("full-width");
+
     // Create the toggle button
     const toggleButton = document.createElement("button");
     toggleButton.innerHTML = "☰"; // Hamburger menu icon
@@ -26,20 +30,20 @@ document.addEventListener("DOMContentLoaded", function () {
     navbarEnd.appendChild(toggleButton);
     console.log("Toggle button added to navbar");
 
-    // Function to check screen size and hide/show the button
-    function checkScreenSize() {
-        if (window.innerWidth <= 960) {
-            toggleButton.style.display = "none"; // Hide button in mobile/tablet mode
-        } else {
-            toggleButton.style.display = "block"; // Show button in larger screens
-        }
-    }
+    // // Function to check screen size and hide/show the button
+    // function checkScreenSize() {
+    //     if (window.innerWidth <= 960) {
+    //         toggleButton.style.display = "none"; // Hide button in mobile/tablet mode
+    //     } else {
+    //         toggleButton.style.display = "block"; // Show button in larger screens
+    //     }
+    // }
 
-    // Run the function when the page loads
-    checkScreenSize();
+    // // Run the function when the page loads
+    // checkScreenSize();
 
-    // Also run the function when the window is resized
-    window.addEventListener("resize", checkScreenSize);
+    // // Also run the function when the window is resized
+    // window.addEventListener("resize", checkScreenSize);
 
     // Add click event to toggle sidebar visibility
     toggleButton.addEventListener("click", function () {
