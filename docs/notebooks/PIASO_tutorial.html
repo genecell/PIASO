@@ -1,0 +1,1323 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Introduction &#8212; PIASO 0.1.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../_static/styles/theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+<link href="../_static/styles/pydata-sphinx-theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=362ab14a" />
+    <link rel="stylesheet" type="text/css" href="../_static/nbsphinx-code-cells.css?v=2aa19091" />
+    <link rel="stylesheet" type="text/css" href="../_static/custom.css?v=bdb04ec0" />
+  
+  <!-- So that users can add custom icons -->
+  <script src="../_static/scripts/fontawesome.js?digest=8878045cc6db502f8baf"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf" />
+<link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf" />
+
+    <script src="../_static/documentation_options.js?v=01f34227"></script>
+    <script src="../_static/doctools.js?v=9a2dae69"></script>
+    <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+    <script>window.MathJax = {"tex": {"inlineMath": [["$", "$"], ["\\(", "\\)"]], "processEscapes": true}, "options": {"ignoreHtmlClass": "tex2jax_ignore|mathjax_ignore|document", "processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+    <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'notebooks/PIASO_tutorial';</script>
+    <script src="../_static/sidebar_toggle.js?v=1f596865"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="GDR: marker Gene-guided Dimensionality Reduction" href="GDR_Tutorial.html" />
+    <link rel="prev" title="Tutorials" href="../tutorials.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="" />
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class=" navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../_static/PIASO_logo.png" class="logo__image only-light" alt="PIASO 0.1.0 documentation - Home"/>
+    <img src="../_static/PIASO_logo.png" class="logo__image only-dark pst-js-only" alt="PIASO 0.1.0 documentation - Home"/>
+  
+  
+</a></div>
+    
+  </div>
+  
+  <div class=" navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../installation.html">
+    Installation
+  </a>
+</li>
+
+
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="../tutorials.html">
+    Tutorials
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../modules.html">
+    API
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../references.html">
+    References
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../releaseNotes.html">
+    Release notes
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/genecell/PIASO" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+    </div>
+  
+
+  
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../installation.html">
+    Installation
+  </a>
+</li>
+
+
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="../tutorials.html">
+    Tutorials
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../modules.html">
+    API
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../references.html">
+    References
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../releaseNotes.html">
+    Release notes
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/genecell/PIASO" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+<h3><a href="../index.html">Table of Contents</a></h3>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../tutorials.html">Tutorials</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../modules.html">API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../references.html">References</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../releaseNotes.html">Release notes</a></li>
+</ul>
+</div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
+  </div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../tutorials.html" class="nav-link">Tutorials</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Introduction</span></li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section id="Introduction">
+<h1>Introduction<a class="headerlink" href="#Introduction" title="Link to this heading">#</a></h1>
+<p>PIASO stands for Precise Intregrative Analysis of Single-cell Omics</p>
+<p>Before starting the tutorial, ensure that PIASO is installed on your machine. If you haven’t installed it yet, follow the steps at <a class="reference external" href="../installation.html">Installing PIASO</a> before proceeding.</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[1]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>import numpy as np
+import pandas as pd
+import scanpy as sc
+import os
+from typing import Iterable, Union, Optional
+import matplotlib.pyplot as plt
+import anndata as ad
+import logging
+from matplotlib import rcParams
+import seaborn as sns
+from matplotlib import cm
+from matplotlib import colors, colorbar
+</pre></div>
+</div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[2]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>path = &#39;/data1/vallaris/Software/PIASO&#39;
+import sys
+sys.path.append(path)
+import piaso
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[3]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.set_figure_params(dpi=96,dpi_save=300, color_map=&#39;viridis&#39;,facecolor=&#39;white&#39;)
+# rcParams[&#39;figure.figsize&#39;] = 5, 5
+rcParams[&#39;font.sans-serif&#39;] = &quot;Arial&quot;
+rcParams[&#39;font.family&#39;] = &quot;Arial&quot;
+sc.settings.verbosity = 3
+sc.logging.print_header()
+</pre></div>
+</div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+/data1/vallaris/.conda/envs/vvs/lib/python3.12/site-packages/tqdm/auto.py:21: TqdmWarning: IProgress not found. Please update jupyter and ipywidgets. See https://ipywidgets.readthedocs.io/en/stable/user_install.html
+  from .autonotebook import tqdm as notebook_tqdm
+</pre></div></div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+scanpy==1.10.3 anndata==0.10.9 umap==0.5.6 numpy==1.26.4 scipy==1.13.1 pandas==2.2.2 scikit-learn==1.5.2 statsmodels==0.14.3 igraph==0.11.6 pynndescent==0.5.13
+</pre></div></div>
+</div>
+<section id="Load-the-data">
+<h2>Load the data<a class="headerlink" href="#Load-the-data" title="Link to this heading">#</a></h2>
+<p>Let us load a 20k subsampled version of the Seattle Alzheimer’s Disease Brain Cell Atlas (SEA-AD) project dataset described in detail in <a class="reference external" href="../references.html#cell1">Gabitto et. al. (2024)</a>. We will be using the scRNA-seq data from the dataset in this tutorial.</p>
+<p>Download the subsampled dataset from Google Drive: <a class="reference external" href="https://drive.google.com/file/d/1nH-CRaTQFxJ5pAVpy8_hUQn1nrIcakq2/view?usp=drive_link">https://drive.google.com/file/d/1nH-CRaTQFxJ5pAVpy8_hUQn1nrIcakq2/view?usp=drive_link</a></p>
+<p>The original data is available on <a class="reference external" href="https://portal.brain-map.org/explore/seattle-alzheimers-disease">https://portal.brain-map.org/explore/seattle-alzheimers-disease</a>.</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[5]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>!/home/vas744/Software/gdrive files download --destination /home/vas744/Data/Public/PIASO 1nH-CRaTQFxJ5pAVpy8_hUQn1nrIcakq2
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+/bin/bash: /home/vas744/Software/gdrive: No such file or directory
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[4]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata=sc.read(&#39;/data1/vallaris/Analysis/Python/Packages/PIASO_Testing/SEA-AD_RNA_MTG_subsample_excludeReference_20k_piaso.h5ad&#39;)
+adata
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[4]:
+</pre></div>
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+AnnData object with n_obs × n_vars = 20000 × 36601
+    obs: &#39;sample_id&#39;, &#39;Neurotypical reference&#39;, &#39;Donor ID&#39;, &#39;Organism&#39;, &#39;Brain Region&#39;, &#39;Sex&#39;, &#39;Gender&#39;, &#39;Age at Death&#39;, &#39;Race (choice=White)&#39;, &#39;Race (choice=Black/ African American)&#39;, &#39;Race (choice=Asian)&#39;, &#39;Race (choice=American Indian/ Alaska Native)&#39;, &#39;Race (choice=Native Hawaiian or Pacific Islander)&#39;, &#39;Race (choice=Unknown or unreported)&#39;, &#39;Race (choice=Other)&#39;, &#39;specify other race&#39;, &#39;Hispanic/Latino&#39;, &#39;Highest level of education&#39;, &#39;Years of education&#39;, &#39;PMI&#39;, &#39;Fresh Brain Weight&#39;, &#39;Brain pH&#39;, &#39;Overall AD neuropathological Change&#39;, &#39;Thal&#39;, &#39;Braak&#39;, &#39;CERAD score&#39;, &#39;Overall CAA Score&#39;, &#39;Highest Lewy Body Disease&#39;, &#39;Total Microinfarcts (not observed grossly)&#39;, &#39;Total microinfarcts in screening sections&#39;, &#39;Atherosclerosis&#39;, &#39;Arteriolosclerosis&#39;, &#39;LATE&#39;, &#39;Cognitive Status&#39;, &#39;Last CASI Score&#39;, &#39;Interval from last CASI in months&#39;, &#39;Last MMSE Score&#39;, &#39;Interval from last MMSE in months&#39;, &#39;Last MOCA Score&#39;, &#39;Interval from last MOCA in months&#39;, &#39;APOE Genotype&#39;, &#39;Primary Study Name&#39;, &#39;Secondary Study Name&#39;, &#39;NeuN positive fraction on FANS&#39;, &#39;RIN&#39;, &#39;cell_prep_type&#39;, &#39;facs_population_plan&#39;, &#39;rna_amplification&#39;, &#39;sample_name&#39;, &#39;sample_quantity_count&#39;, &#39;expc_cell_capture&#39;, &#39;method&#39;, &#39;pcr_cycles&#39;, &#39;percent_cdna_longer_than_400bp&#39;, &#39;rna_amplification_pass_fail&#39;, &#39;amplified_quantity_ng&#39;, &#39;load_name&#39;, &#39;library_prep&#39;, &#39;library_input_ng&#39;, &#39;r1_index&#39;, &#39;avg_size_bp&#39;, &#39;quantification_fmol&#39;, &#39;library_prep_pass_fail&#39;, &#39;exp_component_vendor_name&#39;, &#39;batch_vendor_name&#39;, &#39;experiment_component_failed&#39;, &#39;alignment&#39;, &#39;Genome&#39;, &#39;ar_id&#39;, &#39;bc&#39;, &#39;GEX_Estimated_number_of_cells&#39;, &#39;GEX_number_of_reads&#39;, &#39;GEX_sequencing_saturation&#39;, &#39;GEX_Mean_raw_reads_per_cell&#39;, &#39;GEX_Q30_bases_in_barcode&#39;, &#39;GEX_Q30_bases_in_read_2&#39;, &#39;GEX_Q30_bases_in_UMI&#39;, &#39;GEX_Percent_duplicates&#39;, &#39;GEX_Q30_bases_in_sample_index_i1&#39;, &#39;GEX_Q30_bases_in_sample_index_i2&#39;, &#39;GEX_Reads_with_TSO&#39;, &#39;GEX_Sequenced_read_pairs&#39;, &#39;GEX_Valid_UMIs&#39;, &#39;GEX_Valid_barcodes&#39;, &#39;GEX_Reads_mapped_to_genome&#39;, &#39;GEX_Reads_mapped_confidently_to_genome&#39;, &#39;GEX_Reads_mapped_confidently_to_intergenic_regions&#39;, &#39;GEX_Reads_mapped_confidently_to_intronic_regions&#39;, &#39;GEX_Reads_mapped_confidently_to_exonic_regions&#39;, &#39;GEX_Reads_mapped_confidently_to_transcriptome&#39;, &#39;GEX_Reads_mapped_antisense_to_gene&#39;, &#39;GEX_Fraction_of_transcriptomic_reads_in_cells&#39;, &#39;GEX_Total_genes_detected&#39;, &#39;GEX_Median_UMI_counts_per_cell&#39;, &#39;GEX_Median_genes_per_cell&#39;, &#39;Multiome_Feature_linkages_detected&#39;, &#39;Multiome_Linked_genes&#39;, &#39;Multiome_Linked_peaks&#39;, &#39;ATAC_Confidently_mapped_read_pairs&#39;, &#39;ATAC_Fraction_of_genome_in_peaks&#39;, &#39;ATAC_Fraction_of_high_quality_fragments_in_cells&#39;, &#39;ATAC_Fraction_of_high_quality_fragments_overlapping_TSS&#39;, &#39;ATAC_Fraction_of_high_quality_fragments_overlapping_peaks&#39;, &#39;ATAC_Fraction_of_transposition_events_in_peaks_in_cells&#39;, &#39;ATAC_Mean_raw_read_pairs_per_cell&#39;, &#39;ATAC_Median_high_quality_fragments_per_cell&#39;, &#39;ATAC_Non-nuclear_read_pairs&#39;, &#39;ATAC_Number_of_peaks&#39;, &#39;ATAC_Percent_duplicates&#39;, &#39;ATAC_Q30_bases_in_barcode&#39;, &#39;ATAC_Q30_bases_in_read_1&#39;, &#39;ATAC_Q30_bases_in_read_2&#39;, &#39;ATAC_Q30_bases_in_sample_index_i1&#39;, &#39;ATAC_Sequenced_read_pairs&#39;, &#39;ATAC_TSS_enrichment_score&#39;, &#39;ATAC_Unmapped_read_pairs&#39;, &#39;ATAC_Valid_barcodes&#39;, &#39;Number of mapped reads&#39;, &#39;Number of unmapped reads&#39;, &#39;Number of multimapped reads&#39;, &#39;Number of reads&#39;, &#39;Number of UMIs&#39;, &#39;Genes detected&#39;, &#39;Doublet score&#39;, &#39;Fraction mitochondrial UMIs&#39;, &#39;Used in analysis&#39;, &#39;Class confidence&#39;, &#39;Class&#39;, &#39;Subclass confidence&#39;, &#39;Subclass&#39;, &#39;Supertype confidence&#39;, &#39;Supertype (non-expanded)&#39;, &#39;Supertype&#39;, &#39;Continuous Pseudo-progression Score&#39;, &#39;Severely Affected Donor&#39;
+    var: &#39;gene_ids&#39;
+    uns: &#39;APOE4 Status_colors&#39;, &#39;Braak_colors&#39;, &#39;CERAD score_colors&#39;, &#39;Cognitive Status_colors&#39;, &#39;Great Apes Metadata&#39;, &#39;Highest Lewy Body Disease_colors&#39;, &#39;LATE_colors&#39;, &#39;Overall AD neuropathological Change_colors&#39;, &#39;Sex_colors&#39;, &#39;Subclass_colors&#39;, &#39;Supertype_colors&#39;, &#39;Thal_colors&#39;, &#39;UW Clinical Metadata&#39;, &#39;X_normalization&#39;, &#39;batch_condition&#39;, &#39;default_embedding&#39;, &#39;neighbors&#39;, &#39;title&#39;, &#39;umap&#39;
+    obsm: &#39;X_scVI&#39;, &#39;X_umap&#39;
+    layers: &#39;UMIs&#39;
+    obsp: &#39;connectivities&#39;, &#39;distances&#39;
+</pre></div></div>
+</div>
+<p>This data has been pre-processed already. But for the purposes of this tutorial, we will start again with the counts data and go through the normalization and other pre-processing steps.</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[5]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata.X=adata.layers[&#39;UMIs&#39;].copy()
+</pre></div>
+</div>
+</div>
+<p>Now we filter out cells with less than 200 genes. You can also filter out genes that are lowly expressed in cells.</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[6]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pp.filter_cells(adata, min_genes=200)
+</pre></div>
+</div>
+</div>
+<p>Identify and annotate the mitochondrial genes in the data and compute their quality control metrics.</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[7]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata.var[&#39;mt&#39;] = adata.var_names.str.startswith(&#39;MT-&#39;)  # annotate the group of mitochondrial genes as &#39;mt&#39;
+sc.pp.calculate_qc_metrics(adata, qc_vars=[&#39;mt&#39;], percent_top=None, log1p=False, inplace=True)
+</pre></div>
+</div>
+</div>
+<p>Identify and annotate the ribosomal protein genes in the data and compute the percenatge of total genes that are ribosomal protein genes.</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[8]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>ribo_cells = adata.var_names.str.startswith(&#39;RPS&#39;,&#39;RPL&#39;)
+adata.obs[&#39;pct_counts_ribo&#39;] = np.ravel(100*np.sum(adata[:, ribo_cells].X, axis = 1) / np.sum(adata.X, axis = 1))
+</pre></div>
+</div>
+</div>
+<p>Visualize the metrics for all genes, and mitochondrial and ribosomal protein genes in a violin plot.</p>
+<p>The levels of these genes can be used to eliminate low-quality cells. Higher percentage if mt or ribo genes in a cell implies a lysed cell prior to mRNA capture.</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[9]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>piaso.pl.plot_features_violin(adata,
+                              [&#39;n_genes_by_counts&#39;, &#39;total_counts&#39;, &#39;pct_counts_mt&#39;,&#39;pct_counts_ribo&#39;],
+                              groupby=&#39;Subclass&#39;)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_PIASO_tutorial_17_0.png" class="no-scaled-link" src="../_images/notebooks_PIASO_tutorial_17_0.png" style="width: 1161px; height: 769px;" />
+</div>
+</div>
+</section>
+<section id="Normalize-and-log-transform-the-data">
+<h2>Normalize and log-transform the data<a class="headerlink" href="#Normalize-and-log-transform-the-data" title="Link to this heading">#</a></h2>
+<p>Normalize each cell with the total counts over all the genes, and then logarithmize the data.</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[10]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata.layers[&#39;raw&#39;]=adata.X.copy()
+
+sc.pp.normalize_total(adata, target_sum=1e4)
+sc.pp.log1p(adata)
+
+adata.layers[&#39;log1p&#39;]=adata.X
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+normalizing counts per cell
+    finished (0:00:00)
+</pre></div></div>
+</div>
+<p>Now, we perform feature selection to reduce the number of fearures (genes) used as input for further downstream processing. Here, we select the top 3000 highly variable genes.</p>
+<p>RNA-seq data is usually overdispersed, i.e. variance exceeds the mean. Therefore, we normalize such data by adjusting for overdispersion using Pearson residuals derived from the fitted negative binomial model.</p>
+<p><strong>Note</strong>: Since we aren’t filtering any genes here, there might be some genes which don’t express in any cell and therefore lead to columns with all zeros. This is the reason for the RuntimeWarning: invalid value encountered in divide residuals = diff / np.sqrt(mu + mu**2 / theta). But this will not affect our analysis, since we will be using the log1p layer instead of the raw layer.</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[11]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.experimental.pp.highly_variable_genes(adata,
+                                         layer=&#39;raw&#39;,
+                                         n_top_genes=3000)
+
+pr_offset=sc.experimental.pp.normalize_pearson_residuals(adata,
+                                                         layer=&#39;raw&#39;,
+                                                         inplace=False)
+
+adata.X=pr_offset[&#39;X&#39;]
+
+del pr_offset
+</pre></div>
+</div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+extracting highly variable genes
+--&gt; added
+    &#39;highly_variable&#39;, boolean vector (adata.var)
+    &#39;highly_variable_rank&#39;, float vector (adata.var)
+    &#39;highly_variable_nbatches&#39;, int vector (adata.var)
+    &#39;highly_variable_intersection&#39;, boolean vector (adata.var)
+    &#39;means&#39;, float vector (adata.var)
+    &#39;variances&#39;, float vector (adata.var)
+    &#39;residual_variances&#39;, float vector (adata.var)
+computing analytic Pearson residuals on raw
+</pre></div></div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+/data1/vallaris/.conda/envs/vvs/lib/python3.12/site-packages/scanpy/experimental/pp/_normalization.py:70: RuntimeWarning: invalid value encountered in divide
+  residuals = diff / np.sqrt(mu + mu**2 / theta)
+</pre></div></div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+    finished (0:00:14)
+</pre></div></div>
+</div>
+</section>
+<section id="Dimensionality-reduction-and-visualization">
+<h2>Dimensionality reduction and visualization<a class="headerlink" href="#Dimensionality-reduction-and-visualization" title="Link to this heading">#</a></h2>
+<p>Again, since the data has been pre-processed, we have the umap computation given by the authors in the AnnData object, but for the purposes of this tutorial, we will backup that umap, and re-compute again.</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[12]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata.obsm[&#39;X_umap_backup&#39;]=adata.obsm[&#39;X_umap&#39;].copy()
+</pre></div>
+</div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[13]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>piaso.tl.runSVD(adata,
+                   use_highly_variable=True,
+                   n_components=50,
+                   random_state=10,
+                   key_added=&#39;X_svd&#39;)
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[14]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>%%time
+sc.pp.neighbors(adata,
+                use_rep=&#39;X_svd&#39;,
+                n_neighbors=15,
+                random_state=10,
+                knn=True,
+                method=&quot;umap&quot;)
+sc.tl.umap(adata)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+computing neighbors
+    finished: added to `.uns[&#39;neighbors&#39;]`
+    `.obsp[&#39;distances&#39;]`, distances for each pair of neighbors
+    `.obsp[&#39;connectivities&#39;]`, weighted adjacency matrix (0:00:17)
+computing UMAP
+    finished: added
+    &#39;X_umap&#39;, UMAP coordinates (adata.obsm)
+    &#39;umap&#39;, UMAP parameters (adata.uns) (0:00:13)
+CPU times: user 1min 51s, sys: 525 ms, total: 1min 51s
+Wall time: 30.6 s
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[15]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(adata,
+           color=[&#39;Subclass&#39;],
+           palette=piaso.pl.color.d_color4,
+           cmap=piaso.pl.color.c_color4,
+           size=10,
+           frameon=True)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_PIASO_tutorial_27_0.png" class="no-scaled-link" src="../_images/notebooks_PIASO_tutorial_27_0.png" style="width: 648px; height: 354px;" />
+</div>
+</div>
+<p>Backup the umap computation based on the raw data.</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[16]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata.obsm[&#39;X_umap_raw&#39;]=adata.obsm[&#39;X_umap&#39;].copy()
+</pre></div>
+</div>
+</div>
+<p>Visualize the overall as well as mitochondrial and ribosomal protein gene expression.</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[17]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(adata,
+           color=[&#39;n_genes_by_counts&#39;, &#39;total_counts&#39;,&#39;pct_counts_mt&#39;,&#39;pct_counts_ribo&#39;],
+           cmap=&#39;Spectral_r&#39;,
+           palette=piaso.pl.color.d_color4,
+           ncols=4,
+           size=10,
+           frameon=False,)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_PIASO_tutorial_31_0.png" class="no-scaled-link" src="../_images/notebooks_PIASO_tutorial_31_0.png" style="width: 1502px; height: 346px;" />
+</div>
+</div>
+</section>
+<section id="Cluster-the-data">
+<h2>Cluster the data<a class="headerlink" href="#Cluster-the-data" title="Link to this heading">#</a></h2>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[18]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>%%time
+sc.tl.leiden(adata,resolution=0.5,key_added=&#39;Leiden&#39;,flavor=&quot;leidenalg&quot;,n_iterations=-1)
+</pre></div>
+</div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+running Leiden clustering
+</pre></div></div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+&lt;timed eval&gt;:1: FutureWarning: In the future, the default backend for leiden will be igraph instead of leidenalg.
+
+ To achieve the future defaults please pass: flavor=&#34;igraph&#34; and n_iterations=2.  directed must also be False to work with igraph&#39;s implementation.
+</pre></div></div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+    finished: found 24 clusters and added
+    &#39;Leiden&#39;, the cluster labels (adata.obs, categorical) (0:00:09)
+CPU times: user 1.76 s, sys: 77.5 ms, total: 1.84 s
+Wall time: 9.81 s
+</pre></div></div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[19]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>logging.getLogger(&#39;matplotlib.font_manager&#39;).disabled = True
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[20]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(adata,
+           color=[&#39;Leiden&#39;],
+           palette=piaso.pl.color.d_color4,
+           cmap=piaso.pl.color.c_color4,
+           legend_fontsize=12,
+           legend_fontoutline=2,
+           legend_loc=&#39;on data&#39;,
+           size=10,
+           frameon=False)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_PIASO_tutorial_35_0.png" class="no-scaled-link" src="../_images/notebooks_PIASO_tutorial_35_0.png" style="width: 318px; height: 332px;" />
+</div>
+</div>
+</section>
+<section id="Identify-marker-genes-for-every-cluster">
+<h2>Identify marker genes for every cluster<a class="headerlink" href="#Identify-marker-genes-for-every-cluster" title="Link to this heading">#</a></h2>
+<p>In this workflow, you might want to identify marker genes for each cluster. This can be done using cosg <a class="reference external" href="../references.html#cell2">Dai et. al. (2022)</a>, which is a python package you can install in your environment by running:</p>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>pip install cosg
+</pre></div>
+</div>
+<p>For more details about cosg, please refer to:</p>
+<p><a class="github reference external" href="https://github.com/genecell/COSG">genecell/COSG</a></p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[21]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>import cosg
+n_gene=30
+cosg.cosg(adata,
+          key_added=&#39;cosg&#39;,
+          use_raw=False,
+          layer=&#39;log1p&#39;, ## e.g., if you want to use the log1p layer in adata
+          mu=100,
+          expressed_pct=0.1,
+          remove_lowly_expressed=True,
+          n_genes_user=100,
+          groupby=&#39;Leiden&#39;)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+**finished identifying marker genes by COSG**
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[22]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.tl.dendrogram(adata,groupby=&#39;Leiden&#39;,use_rep=&#39;X_svd&#39;)
+df_tmp=pd.DataFrame(adata.uns[&#39;cosg&#39;][&#39;names&#39;][:3,]).T
+df_tmp=df_tmp.reindex(adata.uns[&#39;dendrogram_&#39;+&#39;Leiden&#39;][&#39;categories_ordered&#39;])
+marker_genes_list={idx: list(row.values) for idx, row in df_tmp.iterrows()}
+marker_genes_list = {k: v for k, v in marker_genes_list.items() if not any(isinstance(x, float) for x in v)}
+
+sc.pl.dotplot(adata,
+              marker_genes_list,
+              groupby=&#39;Leiden&#39;,
+              layer=&#39;log1p&#39;,
+              dendrogram=True,
+              swap_axes=True,
+              standard_scale=&#39;var&#39;,
+              cmap=&#39;Spectral_r&#39;,
+              figsize=[10,20])
+</pre></div>
+</div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Storing dendrogram info using `.uns[&#39;dendrogram_Leiden&#39;]`
+</pre></div></div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_PIASO_tutorial_38_1.png" class="no-scaled-link" src="../_images/notebooks_PIASO_tutorial_38_1.png" style="width: 874px; height: 1531px;" />
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[23]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>marker_gene=pd.DataFrame(adata.uns[&#39;cosg&#39;][&#39;names&#39;])
+
+sc.pl.umap(adata,
+           color=[&#39;Leiden&#39;],
+           palette=piaso.pl.color.d_color4,
+           cmap=piaso.pl.color.c_color4,
+           legend_fontsize=12,
+           legend_fontoutline=2,
+           legend_loc=&#39;on data&#39;,
+           size=10,
+           frameon=False)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_PIASO_tutorial_39_0.png" class="no-scaled-link" src="../_images/notebooks_PIASO_tutorial_39_0.png" style="width: 318px; height: 332px;" />
+</div>
+</div>
+</section>
+<section id="Run-GDR-for-dimensionality-reduction">
+<h2>Run GDR for dimensionality reduction<a class="headerlink" href="#Run-GDR-for-dimensionality-reduction" title="Link to this heading">#</a></h2>
+<p>GDR (marker Gene-guided Dimensionality Reduction) is an alternative dimensionality reduction method by projecting cells into a low-dimensional gene expression space that reflects biological identity in each dimension. Here we will demonstrate how PIASO’s runGDR can be used instead of SVD for dimensionality reduction.</p>
+<p>For more details about GDR and it’s applications, please refer to: <a class="reference external" href="https://www.biorxiv.org/content/10.1101/2024.07.20.604399v1">https://www.biorxiv.org/content/10.1101/2024.07.20.604399v1</a></p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[24]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata.obsm[&#39;X_umap_svd&#39;]=adata.obsm[&#39;X_umap&#39;].copy()
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[25]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>piaso.tl.runGDR(adata,
+                batch_key=None,
+                groupby=&#39;Leiden&#39;,
+                n_gene=30,
+                mu=1.0,
+                use_highly_variable=True,
+                n_highly_variable_genes=5000,
+                layer=&#39;log1p&#39;,
+                score_layer=&#39;log1p&#39;,
+                n_svd_dims=50,
+                resolution=1.0,
+                scoring_method=None,
+                key_added=&#39;X_gdr&#39;,
+                verbosity=0)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+**finished identifying marker genes by COSG**
+The cell embeddings calculated by GDR were saved as `X_gdr` in adata.obsm.
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[26]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>%%time
+sc.pp.neighbors(adata,
+                use_rep=&#39;X_gdr&#39;,
+                n_neighbors=15,
+                random_state=10,
+                knn=True,
+                method=&quot;umap&quot;)
+sc.tl.umap(adata)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+computing neighbors
+    finished: added to `.uns[&#39;neighbors&#39;]`
+    `.obsp[&#39;distances&#39;]`, distances for each pair of neighbors
+    `.obsp[&#39;connectivities&#39;]`, weighted adjacency matrix (0:00:02)
+computing UMAP
+    finished: added
+    &#39;X_umap&#39;, UMAP coordinates (adata.obsm)
+    &#39;umap&#39;, UMAP parameters (adata.uns) (0:00:28)
+CPU times: user 3min 24s, sys: 423 ms, total: 3min 25s
+Wall time: 30.6 s
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[27]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(adata,
+           color=[&#39;Subclass&#39;],
+           palette=piaso.pl.color.d_color4,
+           cmap=piaso.pl.color.c_color4,
+           ncols=1,
+           size=10,
+           frameon=True)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_PIASO_tutorial_44_0.png" class="no-scaled-link" src="../_images/notebooks_PIASO_tutorial_44_0.png" style="width: 648px; height: 354px;" />
+</div>
+</div>
+</section>
+<section id="Predict-cell-types-by-GDR">
+<h2>Predict cell types by GDR<a class="headerlink" href="#Predict-cell-types-by-GDR" title="Link to this heading">#</a></h2>
+<p>Since we have the subclasses of the cells in this dataset, we can use a part of this data as reference to “predict” the cell types of the remaining data.</p>
+<p>Let us do a stratified 80:20 split of the data. The 80% data can be the reference dataset which will be used to train the model in predictCellTypeByGDR, and then predict the subclasses for the remaining 20% data.</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[28]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>from sklearn.model_selection import StratifiedShuffleSplit
+stratified_split = StratifiedShuffleSplit(n_splits=1, test_size=0.2, random_state=10)
+X = adata.X.copy()
+y = adata.obs[&quot;Subclass&quot;].values
+
+stratified_split.get_n_splits(X, y)
+for i, (train_index, test_index) in enumerate(stratified_split.split(X, y)):
+    adata_ref = adata[train_index].copy()
+    adata_test = adata[test_index].copy()
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[29]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>piaso.tl.predictCellTypeByGDR(
+    adata_test,
+    adata_ref,
+    layer = &#39;log1p&#39;,
+    layer_reference = &#39;log1p&#39;,
+    reference_groupby  = &#39;Subclass&#39;,
+    query_groupby = &#39;Leiden&#39;,
+    mu = 10.0,
+    n_genes= 15,
+    return_integration = False,
+    use_highly_variable = True,
+    n_highly_variable_genes = 5000,
+    n_svd_dims = 50,
+    resolution= 1.0,
+    scoring_method= None,
+    key_added= None,
+    verbosity= 0,
+)
+</pre></div>
+</div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+/data1/vallaris/Software/PIASO/piaso/tools/_runGDR.py:279: FutureWarning: Use anndata.concat instead of AnnData.concatenate, AnnData.concatenate is deprecated and will be removed in the future. See the tutorial for concat at: https://anndata.readthedocs.io/en/latest/concatenation.html
+  adata_combine=sc.AnnData.concatenate(adata_ref, adata[:,adata_ref.var_names])
+</pre></div></div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Running GDR for the query dataset and the reference dataset:
+**finished identifying marker genes by COSG**
+**finished identifying marker genes by COSG**
+The cell embeddings calculated by GDR were saved as `X_gdr` in adata.obsm.
+</pre></div></div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+2025-01-30 13:43:50,479 - harmonypy - INFO - Computing initial centroids with sklearn.KMeans...
+2025-01-30 13:44:03,595 - harmonypy - INFO - sklearn.KMeans initialization complete.
+2025-01-30 13:44:03,692 - harmonypy - INFO - Iteration 1 of 10
+2025-01-30 13:44:08,513 - harmonypy - INFO - Iteration 2 of 10
+2025-01-30 13:44:13,156 - harmonypy - INFO - Iteration 3 of 10
+2025-01-30 13:44:17,661 - harmonypy - INFO - Iteration 4 of 10
+2025-01-30 13:44:19,060 - harmonypy - INFO - Iteration 5 of 10
+2025-01-30 13:44:20,451 - harmonypy - INFO - Converged after 5 iterations
+</pre></div></div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Predicting cell types:
+All finished. The predicted cell types are saved as `CellTypes_gdr` in adata.obs.
+</pre></div></div>
+</div>
+<p>We can now visualize the subclasses predicted by the predictCellTypeByGDR method. First, let us make sure the colors of predicted cell types and subclass match in the plots.</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[30]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata_test.obs[&#39;CellTypes_gdr&#39;]=adata_test.obs[&#39;CellTypes_gdr&#39;].astype(&#39;category&#39;)
+adata_test.obs[&#39;CellTypes_gdr&#39;]=adata_test.obs[&#39;CellTypes_gdr&#39;].cat.reorder_categories(adata_ref.obs[&#39;Subclass&#39;].cat.categories)
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[31]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.embedding(adata_test,
+                basis=&#39;X_umap&#39;,
+                color=[&#39;CellTypes_gdr&#39;],
+                palette=piaso.pl.color.d_color4,
+                cmap=piaso.pl.color.c_color3,
+                ncols=1,
+                size=10,
+                frameon=False)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_PIASO_tutorial_50_0.png" class="no-scaled-link" src="../_images/notebooks_PIASO_tutorial_50_0.png" style="width: 625px; height: 333px;" />
+</div>
+</div>
+<p>We can compare these predicted subclasses with the actual subclasses by plotting adata_test with the actual Subclass values.</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[32]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.embedding(adata_test,
+                basis=&#39;X_umap&#39;,
+                color=[&#39;Subclass&#39;],
+                palette=piaso.pl.color.d_color4,
+                cmap=piaso.pl.color.c_color3,
+                ncols=1,
+                size=10,
+                frameon=False)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_PIASO_tutorial_52_0.png" class="no-scaled-link" src="../_images/notebooks_PIASO_tutorial_52_0.png" style="width: 625px; height: 333px;" />
+</div>
+</div>
+<p>Since we know the real subclass of the test data, we can test the performance of predictCellTypeByGDR by comparing predicted celltypes and true subclasses.</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[33]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>from sklearn import metrics
+confusion_matrix = metrics.confusion_matrix(y[test_index], adata_test.obs[&#39;CellTypes_gdr&#39;].values)
+</pre></div>
+</div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[34]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>confusion_matrix_df = pd.DataFrame(confusion_matrix, columns=adata_test.obs[&#39;Subclass&#39;].cat.categories, index=adata_test.obs[&#39;Subclass&#39;].cat.categories)
+normalized_cf_matrix_df = (confusion_matrix_df - confusion_matrix_df.mean(axis=0))/confusion_matrix_df.std(axis=0)
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[35]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sns.set_style(&quot;whitegrid&quot;, {&#39;axes.grid&#39; : False})
+sns.set(rc={&#39;figure.figsize&#39;:(10, 6)})
+sns.heatmap(normalized_cf_matrix_df,
+            cmap=&quot;Purples&quot;,
+            xticklabels=True,
+            yticklabels=True)
+plt.show()
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_PIASO_tutorial_56_0.png" class="no-scaled-link" src="../_images/notebooks_PIASO_tutorial_56_0.png" style="width: 818px; height: 576px;" />
+</div>
+</div>
+</section>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="../tutorials.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Tutorials</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="GDR_Tutorial.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">GDR: marker Gene-guided Dimensionality Reduction</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#Load-the-data">Load the data</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#Normalize-and-log-transform-the-data">Normalize and log-transform the data</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#Dimensionality-reduction-and-visualization">Dimensionality reduction and visualization</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#Cluster-the-data">Cluster the data</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#Identify-marker-genes-for-every-cluster">Identify marker genes for every cluster</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#Run-GDR-for-dimensionality-reduction">Run GDR for dimensionality reduction</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#Predict-cell-types-by-GDR">Predict cell types by GDR</a></li>
+</ul>
+  </nav></div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf"></script>
+<script defer src="../_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2025, Min Dai.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 7.3.7.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  <!-- # L10n: Setting the PST URL as an argument as this does not need to be localized -->
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.16.1.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

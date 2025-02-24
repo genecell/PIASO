@@ -1,0 +1,12 @@
+piaso.plotting
+==============
+
+.. automodule:: piaso.plotting
+   :members:
+   :undoc-members:
+   :show-inheritance:
+   :private-members:
+
+.. autofunction:: plot_features_violin
+.. autofunction::  plot_embeddings_split
+.. autofunction::  createCustomCmapFromHex

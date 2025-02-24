@@ -3,9 +3,9 @@ build-backend = "hatchling.build"
 requires = [ "hatchling"]
 
 [project]
-name = "piaso"
+name = "piaso-tools"
 version = "1.0.0"
-description = "Single-Cell Analysis in Python."
+description = "Precise Integrative Analysis of Single-cell Omics."
 requires-python = ">=3.9"
 license = "BSD-3-clause"
 authors = [

@@ -1,15 +1,44 @@
 .. PIASO documentation master file, created by
-   sphinx-quickstart on Fri Oct 13 16:29:48 2023.
+   sphinx-quickstart on Mon Jan 13 12:04:20 2025.
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-Welcome to PIASO's documentation!
-=================================
+PIASO: Precise Integrative Analysis of Single-cell Omics
+=====================================================================
+
+Current available functionalities include:
+
+- perform dimensionality reduction with GDR
+- integration of scRNA-seq datasets with GDR
+- integration of scRNA-seq data and MERFISH/Xenium data with GDR
+- normalization of scRNA-seq data with INFOG
+- selection of highly-variable genes in scRNA-seq data with INFOG
+- a novel gene set scoring method
+- run clustering on selected cluster(s)
+- side-by-side cell embedding plots, e.g., split by Conditions
+- stacked violin plots for multiple features, including genes and cell metrics
+
+Upcoming functionalities:
+
+- preprocessing of scATAC-seq datasets
+- integration of scRNA-seq and scATAC-seq datasets (not relying on gene activities)
+- inference of cell type-specific gene regulatory networks
+and others
+
+
+Citation
+-----------
+
+If PIASO is useful for your research, please consider citing Wu et al., Pyramidal neurons proportionately alter the identity and survival of specific cortical interneuron subtypes, bioRxiv (2024).
 
 .. toctree::
-   :maxdepth: 2
-   :caption: Contents:
+   :maxdepth: 1
 
+   installation
+   tutorials
+   modules
+   references
+   releaseNotes
 
 
 Indices and tables

@@ -1,0 +1,1231 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="./" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Preprocessing and clustering &#8212; PIASO 0.1.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="_static/styles/theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+<link href="_static/styles/pydata-sphinx-theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=362ab14a" />
+    <link rel="stylesheet" type="text/css" href="_static/nbsphinx-code-cells.css?v=2aa19091" />
+    <link rel="stylesheet" type="text/css" href="_static/custom.css?v=bdb04ec0" />
+  
+  <!-- So that users can add custom icons -->
+  <script src="_static/scripts/fontawesome.js?digest=8878045cc6db502f8baf"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf" />
+<link rel="preload" as="script" href="_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf" />
+
+    <script src="_static/documentation_options.js?v=01f34227"></script>
+    <script src="_static/doctools.js?v=9a2dae69"></script>
+    <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+    <script>window.MathJax = {"tex": {"inlineMath": [["$", "$"], ["\\(", "\\)"]], "processEscapes": true}, "options": {"ignoreHtmlClass": "tex2jax_ignore|mathjax_ignore|document", "processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+    <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'basic-scrna-tutorial';</script>
+    <script src="_static/sidebar_toggle.js?v=1f596865"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="" />
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class=" navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="_static/PIASO_logo.png" class="logo__image only-light" alt="PIASO 0.1.0 documentation - Home"/>
+    <img src="_static/PIASO_logo.png" class="logo__image only-dark pst-js-only" alt="PIASO 0.1.0 documentation - Home"/>
+  
+  
+</a></div>
+    
+  </div>
+  
+  <div class=" navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="installation.html">
+    Installation
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="tutorials.html">
+    Tutorials
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="modules.html">
+    API
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="references.html">
+    References
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="releaseNotes.html">
+    Release notes
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/genecell/PIASO" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+    </div>
+  
+
+  
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="installation.html">
+    Installation
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="tutorials.html">
+    Tutorials
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="modules.html">
+    API
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="references.html">
+    References
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="releaseNotes.html">
+    Release notes
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/genecell/PIASO" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+<h3><a href="index.html">Table of Contents</a></h3>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorials.html">Tutorials</a></li>
+<li class="toctree-l1"><a class="reference internal" href="modules.html">API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="references.html">References</a></li>
+<li class="toctree-l1"><a class="reference internal" href="releaseNotes.html">Release notes</a></li>
+</ul>
+</div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
+  </div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Preprocessing and clustering</span></li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <p>:::{canonical-tutorial} tutorials/basics/clustering ::</p>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>..
+</pre></div>
+</div>
+<section id="Preprocessing-and-clustering">
+<h1>Preprocessing and clustering<a class="headerlink" href="#Preprocessing-and-clustering" title="Link to this heading">#</a></h1>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[1]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span># Core scverse libraries
+import scanpy as sc
+import anndata as ad
+
+# Data retrieval
+import pooch
+</pre></div>
+</div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[2]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.settings.set_figure_params(dpi=50, facecolor=&quot;white&quot;)
+</pre></div>
+</div>
+</div>
+<p>The data used in this basic preprocessing and clustering tutorial was collected from bone marrow mononuclear cells of healthy human donors and was part of <a class="reference external" href="https://openproblems.bio/competitions/neurips_2021/">openproblem’s NeurIPS 2021 benchmarking dataset</a> {cite}<code class="docutils literal notranslate"><span class="pre">Luecken2021</span></code>. The samples used in this tutorial were measured using the 10X Multiome Gene Expression and Chromatin Accessability kit.</p>
+<p>We are reading in the count matrix into an <a class="reference external" href="https://anndata.readthedocs.io/en/latest/tutorials/notebooks/getting-started.html">AnnData</a> object, which holds many slots for annotations and different representations of the data.</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[3]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>EXAMPLE_DATA = pooch.create(
+    path=pooch.os_cache(&quot;scverse_tutorials&quot;),
+    base_url=&quot;doi:10.6084/m9.figshare.22716739.v1/&quot;,
+)
+EXAMPLE_DATA.load_registry_from_doi()
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[4]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>samples = {
+    &quot;s1d1&quot;: &quot;s1d1_filtered_feature_bc_matrix.h5&quot;,
+    &quot;s1d3&quot;: &quot;s1d3_filtered_feature_bc_matrix.h5&quot;,
+}
+adatas = {}
+
+for sample_id, filename in samples.items():
+    path = EXAMPLE_DATA.fetch(filename)
+    sample_adata = sc.read_10x_h5(path)
+    sample_adata.var_names_make_unique()
+    adatas[sample_id] = sample_adata
+
+adata = ad.concat(adatas, label=&quot;sample&quot;)
+adata.obs_names_make_unique()
+print(adata.obs[&quot;sample&quot;].value_counts())
+adata
+</pre></div>
+</div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+/home/phil/.local/share/hatch/env/virtual/scanpy-tutorials/vsyQHp6L/notebook/lib/python3.11/site-packages/anndata/_core/anndata.py:1820: UserWarning: Variable names are not unique. To make them unique, call `.var_names_make_unique`.
+  utils.warn_names_duplicates(&#34;var&#34;)
+/home/phil/.local/share/hatch/env/virtual/scanpy-tutorials/vsyQHp6L/notebook/lib/python3.11/site-packages/anndata/_core/anndata.py:1820: UserWarning: Variable names are not unique. To make them unique, call `.var_names_make_unique`.
+  utils.warn_names_duplicates(&#34;var&#34;)
+</pre></div></div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+sample
+s1d1    8785
+s1d3    8340
+Name: count, dtype: int64
+</pre></div></div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+/home/phil/.local/share/hatch/env/virtual/scanpy-tutorials/vsyQHp6L/notebook/lib/python3.11/site-packages/anndata/_core/anndata.py:1820: UserWarning: Variable names are not unique. To make them unique, call `.var_names_make_unique`.
+  utils.warn_names_duplicates(&#34;var&#34;)
+/home/phil/.local/share/hatch/env/virtual/scanpy-tutorials/vsyQHp6L/notebook/lib/python3.11/site-packages/anndata/_core/anndata.py:1820: UserWarning: Variable names are not unique. To make them unique, call `.var_names_make_unique`.
+  utils.warn_names_duplicates(&#34;var&#34;)
+/home/phil/.local/share/hatch/env/virtual/scanpy-tutorials/vsyQHp6L/notebook/lib/python3.11/site-packages/anndata/_core/anndata.py:1818: UserWarning: Observation names are not unique. To make them unique, call `.obs_names_make_unique`.
+  utils.warn_names_duplicates(&#34;obs&#34;)
+</pre></div></div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[4]:
+</pre></div>
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+AnnData object with n_obs × n_vars = 17125 × 36601
+    obs: &#39;sample&#39;
+</pre></div></div>
+</div>
+<p>The data contains ~8,000 cells per sample and 36,601 measured genes. We’ll now investigate these with a basic preprocessing and clustering workflow.</p>
+<section id="Quality-Control">
+<h2>Quality Control<a class="headerlink" href="#Quality-Control" title="Link to this heading">#</a></h2>
+<p>The scanpy function {func}<code class="docutils literal notranslate"><span class="pre">~scanpy.pp.calculate_qc_metrics</span></code> calculates common quality control (QC) metrics, which are largely based on <code class="docutils literal notranslate"><span class="pre">calculateQCMetrics</span></code> from scater {cite}<code class="docutils literal notranslate"><span class="pre">McCarthy2017</span></code>. One can pass specific gene population to {func}<code class="docutils literal notranslate"><span class="pre">~scanpy.pp.calculate_qc_metrics</span></code> in order to calculate proportions of counts for these populations. Mitochondrial, ribosomal and hemoglobin genes are defined by distinct prefixes as listed below.</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[5]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span># mitochondrial genes, &quot;MT-&quot; for human, &quot;Mt-&quot; for mouse
+adata.var[&quot;mt&quot;] = adata.var_names.str.startswith(&quot;MT-&quot;)
+# ribosomal genes
+adata.var[&quot;ribo&quot;] = adata.var_names.str.startswith((&quot;RPS&quot;, &quot;RPL&quot;))
+# hemoglobin genes
+adata.var[&quot;hb&quot;] = adata.var_names.str.contains(&quot;^HB[^(P)]&quot;)
+</pre></div>
+</div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[6]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pp.calculate_qc_metrics(
+    adata, qc_vars=[&quot;mt&quot;, &quot;ribo&quot;, &quot;hb&quot;], inplace=True, log1p=True
+)
+</pre></div>
+</div>
+</div>
+<p>One can now inspect violin plots of some of the computed QC metrics:</p>
+<ul class="simple">
+<li><p>the number of genes expressed in the count matrix</p></li>
+<li><p>the total counts per cell</p></li>
+<li><p>the percentage of counts in mitochondrial genes</p></li>
+</ul>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[7]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.violin(
+    adata,
+    [&quot;n_genes_by_counts&quot;, &quot;total_counts&quot;, &quot;pct_counts_mt&quot;],
+    jitter=0.4,
+    multi_panel=True,
+)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="_images/basic-scrna-tutorial_13_0.png" class="no-scaled-link" src="_images/basic-scrna-tutorial_13_0.png" style="width: 751px; height: 238px;" />
+</div>
+</div>
+<p>Additionally, it is useful to consider QC metrics jointly by inspecting a scatter plot colored by <code class="docutils literal notranslate"><span class="pre">pct_counts_mt</span></code>.</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[8]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.scatter(adata, &quot;total_counts&quot;, &quot;n_genes_by_counts&quot;, color=&quot;pct_counts_mt&quot;)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="_images/basic-scrna-tutorial_15_0.png" class="no-scaled-link" src="_images/basic-scrna-tutorial_15_0.png" style="width: 214px; height: 200px;" />
+</div>
+</div>
+<p>Based on the QC metric plots, one could now remove cells that have too many mitochondrial genes expressed or too many total counts by setting manual or automatic thresholds. However, sometimes what appears to be poor QC metrics can be driven by real biology so we suggest starting with a very permissive filtering strategy and revisiting it at a later point. We therefore now only filter cells with less than 100 genes expressed and genes that are detected in less than 3 cells.</p>
+<p>Additionally, it is important to note that for datasets with multiple batches, quality control should be performed for each sample individually as quality control thresholds can very substantially between batches.</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[9]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pp.filter_cells(adata, min_genes=100)
+sc.pp.filter_genes(adata, min_cells=3)
+</pre></div>
+</div>
+</div>
+<section id="Doublet-detection">
+<h3>Doublet detection<a class="headerlink" href="#Doublet-detection" title="Link to this heading">#</a></h3>
+<p>As a next step, we run a doublet detection algorithm. Identifying doublets is crucial as they can lead to misclassifications or distortions in downstream analysis steps. Scanpy contains the doublet detection method Scrublet {cite}<code class="docutils literal notranslate"><span class="pre">Wolock2019</span></code>. Scrublet predicts cell doublets using a nearest-neighbor classifier of observed transcriptomes and simulated doublets. {func}<code class="docutils literal notranslate"><span class="pre">scanpy.pp.scrublet</span></code> adds <code class="docutils literal notranslate"><span class="pre">doublet_score</span></code> and <code class="docutils literal notranslate"><span class="pre">predicted_doublet</span></code> to <code class="docutils literal notranslate"><span class="pre">.obs</span></code>. One can now either filter directly on
+<code class="docutils literal notranslate"><span class="pre">predicted_doublet</span></code> or use the <code class="docutils literal notranslate"><span class="pre">doublet_score</span></code> later during clustering to filter clusters with high doublet scores.</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[10]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pp.scrublet(adata, batch_key=&quot;sample&quot;)
+</pre></div>
+</div>
+</div>
+<p>We can remove doublets by either filtering out the cells called as doublets, or waiting until we’ve done a clustering pass and filtering out any clusters with high doublet scores.</p>
+<div class="seealso docutils container">
+<p>Alternative methods for doublet detection within the scverse ecosystem are <a class="reference external" href="https://github.com/JonathanShor/DoubletDetection">DoubletDetection</a> and <a class="reference external" href="https://docs.scvi-tools.org/en/stable/user_guide/models/solo.html">SOLO</a>. You can read more about these in the <a class="reference external" href="https://www.sc-best-practices.org/preprocessing_visualization/quality_control.html#doublet-detection">Doublet Detection chapter</a> of Single Cell Best Practices.</p>
+</div>
+</section>
+</section>
+<section id="Normalization">
+<h2>Normalization<a class="headerlink" href="#Normalization" title="Link to this heading">#</a></h2>
+<p>The next preprocessing step is normalization. A common approach is count depth scaling with subsequent log plus one (log1p) transformation. Count depth scaling normalizes the data to a “size factor” such as the median count depth in the dataset, ten thousand (CP10k) or one million (CPM, counts per million). The size factor for count depth scaling can be controlled via <code class="docutils literal notranslate"><span class="pre">target_sum</span></code> in <code class="docutils literal notranslate"><span class="pre">pp.normalize_total</span></code>. We are applying median count depth normalization with log1p transformation (AKA
+log1PF).</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[11]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span># Saving count data
+adata.layers[&quot;counts&quot;] = adata.X.copy()
+</pre></div>
+</div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[12]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span># Normalizing to median total counts
+sc.pp.normalize_total(adata)
+# Logarithmize the data
+sc.pp.log1p(adata)
+</pre></div>
+</div>
+</div>
+</section>
+<section id="Feature-selection">
+<h2>Feature selection<a class="headerlink" href="#Feature-selection" title="Link to this heading">#</a></h2>
+<p>As a next step, we want to reduce the dimensionality of the dataset and only include the most informative genes. This step is commonly known as feature selection. The scanpy function <code class="docutils literal notranslate"><span class="pre">pp.highly_variable_genes</span></code> annotates highly variable genes by reproducing the implementations of Seurat {cite}<code class="docutils literal notranslate"><span class="pre">Satija2015</span></code>, Cell Ranger {cite}<code class="docutils literal notranslate"><span class="pre">Zheng2017</span></code>, and Seurat v3 {cite}<code class="docutils literal notranslate"><span class="pre">Stuart2019</span></code> depending on the chosen <code class="docutils literal notranslate"><span class="pre">flavor</span></code>.</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[13]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pp.highly_variable_genes(adata, n_top_genes=2000, batch_key=&quot;sample&quot;)
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[14]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.highly_variable_genes(adata)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="_images/basic-scrna-tutorial_27_0.png" class="no-scaled-link" src="_images/basic-scrna-tutorial_27_0.png" style="width: 362px; height: 188px;" />
+</div>
+</div>
+</section>
+<section id="Dimensionality-Reduction">
+<h2>Dimensionality Reduction<a class="headerlink" href="#Dimensionality-Reduction" title="Link to this heading">#</a></h2>
+<p>Reduce the dimensionality of the data by running principal component analysis (PCA), which reveals the main axes of variation and denoises the data.</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[15]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.tl.pca(adata)
+</pre></div>
+</div>
+</div>
+<p>Let us inspect the contribution of single PCs to the total variance in the data. This gives us information about how many PCs we should consider in order to compute the neighborhood relations of cells, e.g. used in the clustering function {func}<code class="docutils literal notranslate"><span class="pre">~scanpy.tl.leiden</span></code> or {func}<code class="docutils literal notranslate"><span class="pre">~scanpy.tl.tsne</span></code>. In our experience, there does not seem to be signifigant downside to overestimating the numer of principal components.</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[16]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.pca_variance_ratio(adata, n_pcs=50, log=True)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="_images/basic-scrna-tutorial_31_0.png" class="no-scaled-link" src="_images/basic-scrna-tutorial_31_0.png" style="width: 187px; height: 202px;" />
+</div>
+</div>
+<p>You can also plot the principal components to see if there are any potentially undesired features (e.g. batch, QC metrics) driving signifigant variation in this dataset. In this case, there isn’t anything too alarming, but it’s a good idea to explore this.</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[17]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.pca(
+    adata,
+    color=[&quot;sample&quot;, &quot;sample&quot;, &quot;pct_counts_mt&quot;, &quot;pct_counts_mt&quot;],
+    dimensions=[(0, 1), (2, 3), (0, 1), (2, 3)],
+    ncols=2,
+    size=2,
+)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="_images/basic-scrna-tutorial_33_0.png" class="no-scaled-link" src="_images/basic-scrna-tutorial_33_0.png" style="width: 432px; height: 361px;" />
+</div>
+</div>
+</section>
+<section id="Nearest-neighbor-graph-constuction-and-visualization">
+<h2>Nearest neighbor graph constuction and visualization<a class="headerlink" href="#Nearest-neighbor-graph-constuction-and-visualization" title="Link to this heading">#</a></h2>
+<p>Let us compute the neighborhood graph of cells using the PCA representation of the data matrix.</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[18]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pp.neighbors(adata)
+</pre></div>
+</div>
+</div>
+<p>This graph can then be embedded in two dimensions for visualiztion with UMAP (McInnes et al., 2018):</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[19]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.tl.umap(adata)
+</pre></div>
+</div>
+</div>
+<p>We can now visualize the UMAP according to the <code class="docutils literal notranslate"><span class="pre">sample</span></code>.</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[20]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(
+    adata,
+    color=&quot;sample&quot;,
+    # Setting a smaller point size to get prevent overlap
+    size=2,
+)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="_images/basic-scrna-tutorial_39_0.png" class="no-scaled-link" src="_images/basic-scrna-tutorial_39_0.png" style="width: 219px; height: 185px;" />
+</div>
+</div>
+<p>Even though the data considered in this tutorial includes two different samples, we only observe a minor batch effect and we can continue with clustering and annotation of our data.</p>
+<p>If you inspect batch effects in your UMAP it can be beneficial to integrate across samples and perform batch correction/integration. We recommend checking out <code class="docutils literal notranslate"><span class="pre">`scanorama</span></code> &lt;<a class="github reference external" href="https://github.com/brianhie/scanorama">brianhie/scanorama</a>&gt;`__ and <code class="docutils literal notranslate"><span class="pre">`scvi-tools</span></code> &lt;<a class="reference external" href="https://scvi-tools.org">https://scvi-tools.org</a>&gt;`__ for batch integration.</p>
+</section>
+<section id="Clustering">
+<h2>Clustering<a class="headerlink" href="#Clustering" title="Link to this heading">#</a></h2>
+<p>As with Seurat and many other frameworks, we recommend the Leiden graph-clustering method (community detection based on optimizing modularity) {cite}<code class="docutils literal notranslate"><span class="pre">Traag2019</span></code>. Note that Leiden clustering directly clusters the neighborhood graph of cells, which we already computed in the previous section.</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[21]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span># Using the igraph implementation and a fixed number of iterations can be significantly faster, especially for larger datasets
+sc.tl.leiden(adata, flavor=&quot;igraph&quot;, n_iterations=2)
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[22]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(adata, color=[&quot;leiden&quot;])
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="_images/basic-scrna-tutorial_43_0.png" class="no-scaled-link" src="_images/basic-scrna-tutorial_43_0.png" style="width: 246px; height: 201px;" />
+</div>
+</div>
+</section>
+<section id="Re-assess-quality-control-and-cell-filtering">
+<h2>Re-assess quality control and cell filtering<a class="headerlink" href="#Re-assess-quality-control-and-cell-filtering" title="Link to this heading">#</a></h2>
+<p>As indicated before, we will now re-assess our filtering strategy by visualizing different QC metrics using UMAP.</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[23]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(
+    adata,
+    color=[&quot;leiden&quot;, &quot;predicted_doublet&quot;, &quot;doublet_score&quot;],
+    # increase horizontal space between panels
+    wspace=0.5,
+    size=3,
+)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="_images/basic-scrna-tutorial_45_0.png" class="no-scaled-link" src="_images/basic-scrna-tutorial_45_0.png" style="width: 750px; height: 201px;" />
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[24]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(
+    adata,
+    color=[&quot;leiden&quot;, &quot;log1p_total_counts&quot;, &quot;pct_counts_mt&quot;, &quot;log1p_n_genes_by_counts&quot;],
+    wspace=0.5,
+    ncols=2,
+)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="_images/basic-scrna-tutorial_46_0.png" class="no-scaled-link" src="_images/basic-scrna-tutorial_46_0.png" style="width: 506px; height: 373px;" />
+</div>
+</div>
+</section>
+<section id="Manual-cell-type-annotation">
+<h2>Manual cell-type annotation<a class="headerlink" href="#Manual-cell-type-annotation" title="Link to this heading">#</a></h2>
+<div class="note docutils container">
+<p>This section of the tutorial is expanded upon using prior knowledge resources like automated assignment and gene enrichment in the scverse tutorial <a class="reference external" href="https://scverse-tutorials.readthedocs.io/en/latest/notebooks/basic-scrna-tutorial.html#cell-type-annotation">here</a></p>
+</div>
+<p>Cell type annotation is laborous and repetitive task, one which typically requires multiple rounds of subclustering and re-annotation. It’s difficult to show the entirety of the process in this tutorial, but we aim to show how the tools scanpy provides assist in this process.</p>
+<p>We have now reached a point where we have obtained a set of cells with decent quality, and we can proceed to their annotation to known cell types. Typically, this is done using genes that are exclusively expressed by a given cell type, or in other words these genes are the marker genes of the cell types, and are thus used to distinguish the heterogeneous groups of cells in our data. Previous efforts have collected and curated various marker genes into available resources, such as
+<a class="reference external" href="http://bio-bigdata.hrbmu.edu.cn/CellMarker/">CellMarker</a>, <a class="reference external" href="http://bio.liclab.net/TF-Marker/">TF-Marker</a>, and <a class="reference external" href="https://panglaodb.se/">PanglaoDB</a>. The <a class="reference external" href="https://cellxgene.cziscience.com/gene-expression">cellxgene gene expression tool</a> can also be quite useful to see which cell types a gene has been expressed in across many existing datasets.</p>
+<p>Commonly and classically, cell type annotation uses those marker genes subsequent to the grouping of the cells into clusters. So, let’s generate a set of clustering solutions which we can then use to annotate our cell types. Here, we will use the Leiden clustering algorithm which will extract cell communities from our nearest neighbours graph.</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[25]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>for res in [0.02, 0.5, 2.0]:
+    sc.tl.leiden(
+        adata, key_added=f&quot;leiden_res_{res:4.2f}&quot;, resolution=res, flavor=&quot;igraph&quot;
+    )
+</pre></div>
+</div>
+</div>
+<p>Notably, the number of clusters that we define is largely arbitrary, and so is the <code class="docutils literal notranslate"><span class="pre">resolution</span></code> parameter that we use to control for it. As such, the number of clusters is ultimately bound to the stable and biologically-meaningful groups that we can ultimately distringuish, typically done by experts in the corresponding field or by using expert-curated prior knowledge in the form of markers.</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[26]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(
+    adata,
+    color=[&quot;leiden_res_0.02&quot;, &quot;leiden_res_0.50&quot;, &quot;leiden_res_2.00&quot;],
+    legend_loc=&quot;on data&quot;,
+)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="_images/basic-scrna-tutorial_54_0.png" class="no-scaled-link" src="_images/basic-scrna-tutorial_54_0.png" style="width: 584px; height: 187px;" />
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[27]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(
+    adata,
+    color=[&quot;leiden_res_0.02&quot;, &quot;leiden_res_0.50&quot;, &quot;leiden_res_2.00&quot;],
+    legend_loc=&quot;on data&quot;,
+)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="_images/basic-scrna-tutorial_55_0.png" class="no-scaled-link" src="_images/basic-scrna-tutorial_55_0.png" style="width: 584px; height: 187px;" />
+</div>
+</div>
+<p>Though UMAPs should not be over-interpreted, here we can already see that in the highest resolution our data is over-clustered, while the lowest resolution is likely grouping cells which belong to distinct cell identities.</p>
+<section id="Marker-gene-set">
+<h3>Marker gene set<a class="headerlink" href="#Marker-gene-set" title="Link to this heading">#</a></h3>
+<p>Let’s define a set of marker genes for the main cell types that we expect to see in this dataset. These were adapted from <a class="reference external" href="https://www.sc-best-practices.org/cellular_structure/annotation.html">Single Cell Best Practices annotation chapter</a>, for a more detailed overview and best practices in cell type annotation, we refer the user to it.</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[28]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>marker_genes = {
+    &quot;CD14+ Mono&quot;: [&quot;FCN1&quot;, &quot;CD14&quot;],
+    &quot;CD16+ Mono&quot;: [&quot;TCF7L2&quot;, &quot;FCGR3A&quot;, &quot;LYN&quot;],
+    # Note: DMXL2 should be negative
+    &quot;cDC2&quot;: [&quot;CST3&quot;, &quot;COTL1&quot;, &quot;LYZ&quot;, &quot;DMXL2&quot;, &quot;CLEC10A&quot;, &quot;FCER1A&quot;],
+    &quot;Erythroblast&quot;: [&quot;MKI67&quot;, &quot;HBA1&quot;, &quot;HBB&quot;],
+    # Note HBM and GYPA are negative markers
+    &quot;Proerythroblast&quot;: [&quot;CDK6&quot;, &quot;SYNGR1&quot;, &quot;HBM&quot;, &quot;GYPA&quot;],
+    &quot;NK&quot;: [&quot;GNLY&quot;, &quot;NKG7&quot;, &quot;CD247&quot;, &quot;FCER1G&quot;, &quot;TYROBP&quot;, &quot;KLRG1&quot;, &quot;FCGR3A&quot;],
+    &quot;ILC&quot;: [&quot;ID2&quot;, &quot;PLCG2&quot;, &quot;GNLY&quot;, &quot;SYNE1&quot;],
+    &quot;Naive CD20+ B&quot;: [&quot;MS4A1&quot;, &quot;IL4R&quot;, &quot;IGHD&quot;, &quot;FCRL1&quot;, &quot;IGHM&quot;],
+    # Note IGHD and IGHM are negative markers
+    &quot;B cells&quot;: [
+        &quot;MS4A1&quot;,
+        &quot;ITGB1&quot;,
+        &quot;COL4A4&quot;,
+        &quot;PRDM1&quot;,
+        &quot;IRF4&quot;,
+        &quot;PAX5&quot;,
+        &quot;BCL11A&quot;,
+        &quot;BLK&quot;,
+        &quot;IGHD&quot;,
+        &quot;IGHM&quot;,
+    ],
+    &quot;Plasma cells&quot;: [&quot;MZB1&quot;, &quot;HSP90B1&quot;, &quot;FNDC3B&quot;, &quot;PRDM1&quot;, &quot;IGKC&quot;, &quot;JCHAIN&quot;],
+    # Note PAX5 is a negative marker
+    &quot;Plasmablast&quot;: [&quot;XBP1&quot;, &quot;PRDM1&quot;, &quot;PAX5&quot;],
+    &quot;CD4+ T&quot;: [&quot;CD4&quot;, &quot;IL7R&quot;, &quot;TRBC2&quot;],
+    &quot;CD8+ T&quot;: [&quot;CD8A&quot;, &quot;CD8B&quot;, &quot;GZMK&quot;, &quot;GZMA&quot;, &quot;CCL5&quot;, &quot;GZMB&quot;, &quot;GZMH&quot;, &quot;GZMA&quot;],
+    &quot;T naive&quot;: [&quot;LEF1&quot;, &quot;CCR7&quot;, &quot;TCF7&quot;],
+    &quot;pDC&quot;: [&quot;GZMB&quot;, &quot;IL3RA&quot;, &quot;COBLL1&quot;, &quot;TCF4&quot;],
+}
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[29]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.dotplot(adata, marker_genes, groupby=&quot;leiden_res_0.02&quot;, standard_scale=&quot;var&quot;)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="_images/basic-scrna-tutorial_60_0.png" class="no-scaled-link" src="_images/basic-scrna-tutorial_60_0.png" style="width: 1109px; height: 201px;" />
+</div>
+</div>
+<p>There are fairly clear patterns of expression for our markers show here, which we can use to label our coarsest clustering with broad lineages.</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[30]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata.obs[&quot;cell_type_lvl1&quot;] = adata.obs[&quot;leiden_res_0.02&quot;].map(
+    {
+        &quot;0&quot;: &quot;Lymphocytes&quot;,
+        &quot;1&quot;: &quot;Monocytes&quot;,
+        &quot;2&quot;: &quot;Erythroid&quot;,
+        &quot;3&quot;: &quot;B Cells&quot;,
+    }
+)
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[31]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.dotplot(adata, marker_genes, groupby=&quot;leiden_res_0.50&quot;, standard_scale=&quot;var&quot;)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="_images/basic-scrna-tutorial_63_0.png" class="no-scaled-link" src="_images/basic-scrna-tutorial_63_0.png" style="width: 1114px; height: 334px;" />
+</div>
+</div>
+<p>This seems like a resolution that suitable to distinguish most of the different cell types in our data. As such, let’s try to annotate those by manually using the dotplot above, together with the UMAP of our clusters. Ideally, one would also look specifically into each cluster, and attempt to subcluster those if required.</p>
+</section>
+<section id="Differentially-expressed-Genes-as-Markers">
+<h3>Differentially-expressed Genes as Markers<a class="headerlink" href="#Differentially-expressed-Genes-as-Markers" title="Link to this heading">#</a></h3>
+<p>Furthermore, one can also calculate marker genes per cluster and then look up whether we can link those marker genes to any known biology, such as cell types and/or states. This is typically done using simple statistical tests, such as Wilcoxon and t-test, for each cluster vs the rest.</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[32]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span># Obtain cluster-specific differentially expressed genes
+sc.tl.rank_genes_groups(adata, groupby=&quot;leiden_res_0.50&quot;, method=&quot;wilcoxon&quot;)
+</pre></div>
+</div>
+</div>
+<p>We can then visualize the top 5 differentially-expressed genes on a dotplot.</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[33]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.rank_genes_groups_dotplot(
+    adata, groupby=&quot;leiden_res_0.50&quot;, standard_scale=&quot;var&quot;, n_genes=5
+)
+</pre></div>
+</div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+WARNING: dendrogram data not found (using key=dendrogram_leiden_res_0.50). Running `sc.tl.dendrogram` with default parameters. For fine tuning it is recommended to run `sc.tl.dendrogram` independently.
+</pre></div></div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="_images/basic-scrna-tutorial_69_1.png" class="no-scaled-link" src="_images/basic-scrna-tutorial_69_1.png" style="width: 1203px; height: 301px;" />
+</div>
+</div>
+<p>We can then use these genes to figure out what cell types we’re looking at. For example, Cluster 7 is expressing <a class="reference external" href="https://www.genecards.org/cgi-bin/carddisp.pl?gene=NKG7&amp;keywords=nkg7">NKG7</a> and <a class="reference external" href="https://www.genecards.org/cgi-bin/carddisp.pl?gene=GNLY&amp;keywords=GNLY">GNLY</a>, suggesting these are <a class="reference external" href="https://en.wikipedia.org/wiki/Natural_killer_cell">NK cells</a>.</p>
+<p>To create your own plots, or use a more automated approach, the differentially expressed genes can be extracted in a convenient format with {func}<code class="docutils literal notranslate"><span class="pre">scanpy.get.rank_genes_groups_df</span></code></p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[34]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.get.rank_genes_groups_df(adata, group=&quot;7&quot;).head(5)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[34]:
+</pre></div>
+</div>
+<div class="output_area rendered_html docutils container">
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>names</th>
+      <th>scores</th>
+      <th>logfoldchanges</th>
+      <th>pvals</th>
+      <th>pvals_adj</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>NKG7</td>
+      <td>35.376785</td>
+      <td>6.544684</td>
+      <td>3.885326e-274</td>
+      <td>9.102153e-270</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>KLRD1</td>
+      <td>33.815022</td>
+      <td>5.840619</td>
+      <td>1.186288e-250</td>
+      <td>1.389558e-246</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>GNLY</td>
+      <td>33.775005</td>
+      <td>7.383827</td>
+      <td>4.592379e-250</td>
+      <td>3.586189e-246</td>
+    </tr>
+    <tr>
+      <th>3</th>
+      <td>CST7</td>
+      <td>33.003643</td>
+      <td>5.238780</td>
+      <td>7.201598e-239</td>
+      <td>4.217796e-235</td>
+    </tr>
+    <tr>
+      <th>4</th>
+      <td>PRF1</td>
+      <td>32.752277</td>
+      <td>5.397196</td>
+      <td>2.817787e-235</td>
+      <td>1.320246e-231</td>
+    </tr>
+  </tbody>
+</table>
+</div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[35]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>dc_cluster_genes = sc.get.rank_genes_groups_df(adata, group=&quot;7&quot;).head(5)[&quot;names&quot;]
+sc.pl.umap(
+    adata,
+    color=[*dc_cluster_genes, &quot;leiden_res_0.50&quot;],
+    legend_loc=&quot;on data&quot;,
+    frameon=False,
+    ncols=3,
+)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="_images/basic-scrna-tutorial_73_0.png" class="no-scaled-link" src="_images/basic-scrna-tutorial_73_0.png" style="width: 589px; height: 355px;" />
+</div>
+</div>
+<p>You may have noticed that the p-values found here are extremely low. This is due to the statistical test being performed considering each cell as an independent sample. For a more conservative approach you may want to consider “pseudo-bulking” your data by sample (<em>e.g.</em> <code class="docutils literal notranslate"><span class="pre">sc.get.aggregate(adata,</span> <span class="pre">by=[&quot;sample&quot;,</span> <span class="pre">&quot;cell_type&quot;],</span> <span class="pre">func=&quot;sum&quot;,</span> <span class="pre">layer=&quot;counts&quot;)</span></code>) and using a more powerful differential expression tool, like <code class="docutils literal notranslate"><span class="pre">`pydeseq2</span></code> &lt;<a class="reference external" href="https://pydeseq2.readthedocs.io/">https://pydeseq2.readthedocs.io/</a>&gt;`__.</p>
+<script type="application/vnd.jupyter.widget-state+json">
+{"state": {}, "version_major": 2, "version_minor": 0}
+</script></section>
+</section>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#Quality-Control">Quality Control</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#Doublet-detection">Doublet detection</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#Normalization">Normalization</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#Feature-selection">Feature selection</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#Dimensionality-Reduction">Dimensionality Reduction</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#Nearest-neighbor-graph-constuction-and-visualization">Nearest neighbor graph constuction and visualization</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#Clustering">Clustering</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#Re-assess-quality-control-and-cell-filtering">Re-assess quality control and cell filtering</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#Manual-cell-type-annotation">Manual cell-type annotation</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#Marker-gene-set">Marker gene set</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#Differentially-expressed-Genes-as-Markers">Differentially-expressed Genes as Markers</a></li>
+</ul>
+</li>
+</ul>
+  </nav></div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf"></script>
+<script defer src="_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2025, Min Dai.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 7.3.7.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  <!-- # L10n: Setting the PST URL as an argument as this does not need to be localized -->
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.16.1.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

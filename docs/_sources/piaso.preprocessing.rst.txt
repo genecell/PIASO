@@ -1,0 +1,11 @@
+piaso.preprocessing package
+===========================
+
+.. automodule:: piaso.preprocessing
+   :members:
+   :undoc-members:
+   :show-inheritance:
+   :private-members:
+
+.. autofunction::  getCrossCategories
+.. autofunction::  table

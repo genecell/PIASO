@@ -1,7 +1,15 @@
-piaso module
-============
+piaso package
+=============
 
 .. automodule:: piaso
    :members:
    :undoc-members:
    :show-inheritance:
+   :private-members:
+
+.. toctree::
+   :maxdepth: 4
+
+   piaso.plotting
+   piaso.preprocessing
+   piaso.tools

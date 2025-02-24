@@ -1,0 +1,20 @@
+piaso.tools package
+===================
+
+.. automodule:: piaso.tools
+   :members:
+   :undoc-members:
+   :show-inheritance:
+   :private-members:
+
+.. autofunction::  leiden_local
+.. autofunction::  infog
+.. autofunction::  score
+.. autofunction::  calculateScoreParallel
+.. autofunction::  calculateScoreParallel_multiBatch
+.. autofunction::  predictCellTypeByGDR
+.. autofunction::  runCOSGParallel
+.. autofunction::  runGDR
+.. autofunction::  runGDRParallel
+.. autofunction::  runSVD
+.. autofunction::  runSVDLazy
