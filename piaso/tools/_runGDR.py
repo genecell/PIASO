@@ -1180,7 +1180,7 @@ def runGDRParallel(
     """
     Run GDR (marker Gene-guided dimensionality reduction) in parallel using multi-cores and shared memeory.
 
-    Parameters:
+    Parameters
     -----------
     adata : AnnData
         Annotated data matrix.
@@ -1236,18 +1236,18 @@ def runGDRParallel(
     random_seed : int, optional
         Random seed for reproducibility. Default is 1927.
 
-    Returns:
-    --------
+    Returns
+    -------
     None
         The function modifies `adata` in place by adding GDR dimensionality reduction result to `adata.obsm[key_added]`.
 
-    Examples:
-    ---------
+    Examples
+    --------
     >>> import scanpy as sc
     >>> import piaso
     >>> 
     >>> adata = sc.read_h5ad("example.h5ad")
-    >>> runGDRParallel(
+    >>> piaso.tl.runGDRParallel(
     ...     adata,
     ...     batch_key="batch",
     ...     groupby="CellTypes",
@@ -1517,7 +1517,7 @@ def predictCellTypeByGDR(
     Predicts cell types in a query dataset (`adata`) using the GDR dimensionality reduction method based on a reference dataset (`adata_ref`).
     To use GDR for dimensionality reduction, please refer to `piaso.tl.runGDR` or `piaso.tl.runGDRParallel`.
 
-    Parameters:
+    Parameters
     ----------
     adata : AnnData
         The query single-cell AnnData object for which cell types are to be predicted.
@@ -1567,14 +1567,14 @@ def predictCellTypeByGDR(
     verbosity : int, optional (default: 0)
         The level of logging output. Higher values produce more detailed logs for debugging and monitoring progress.
 
-    Returns:
+    Returns
     -------
     None or AnnData
         If `return_integration` is `True`, returns an AnnData object of merged reference and query datasets with integrated
         cell embeddings and predicted cell types. Otherwise, updates `adata` in place with the predicted cell types.
 
-    Example:
-    --------
+    Example
+    -------
     >>> import scanpy as sc
     >>> # Load query dataset
     >>> adata = sc.read_h5ad("query_data.h5ad")

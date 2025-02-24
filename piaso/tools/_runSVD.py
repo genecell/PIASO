@@ -19,7 +19,7 @@ def runSVD(
     Performs Truncated Singular Value Decomposition (SVD) on the specified gene expression matrix (adata.X or a specified layer)
     within an AnnData object and stores the resulting low-dimensional representation in `adata.obsm`.
 
-    Parameters:
+    Parameters
     ----------
     adata : AnnData
         An AnnData object.
@@ -36,12 +36,12 @@ def runSVD(
     layer : str, optional, default=None
         Specifies which layer of `adata` to use for the transformation. If None, `adata.X` is used.
 
-    Returns:
+    Returns
     -------
     None
         The function modifies `adata` in place, storing the cell embeddings in `adata.obsm[key_added]`.
 
-    Example:
+    Example
     -------
     >>> import piaso
     >>> piaso.tl.runSVD(adata, use_highly_variable=True, n_components=50, random_state=42, 

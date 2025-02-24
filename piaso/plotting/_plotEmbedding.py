@@ -22,13 +22,61 @@ except ImportError:
         class Literal(metaclass=LiteralMeta):
             pass
 
+        
+# Adapted from https://github.com/theislab/scanpy/issues/137
+def _build_subplots(n,
+                    ncol=None,
+                    dpi=80,
+                    col_size:int=5,
+                    row_size:int=5,):
+    """
+    Build a grid of subplots.
+
+    Parameters
+    ----------
+    n : int
+        The total number of subplots.
+    ncol : int or None, optional (default: None)
+        If specified, defines the number of columns per row. If None, the number of columns is computed 
+        as the ceiling of n divided by the integer square root of n.
+    dpi : int, optional (default: 80)
+        Dots per inch (DPI) setting for the figure.
+    col_size : int, optional (default=5)
+        Width (in inches) of each subplot column.
+    row_size : int, optional (default=5)
+        Height (in inches) of each subplot row.
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+        The created matplotlib figure.
+    axs : ndarray of matplotlib.axes.Axes
+        The array of Axes objects for the subplots.
+    nrow : int
+        The number of rows in the subplot grid.
+    ncol : int
+        The number of columns in the subplot grid.
+    """
+    if ncol is None:
+        nrow = int(np.sqrt(n))
+        ncol = int(np.ceil(n / nrow))
+    else:
+        nrow = int(np.ceil(n / ncol))
+    
+    # Assumes col_size and row_size are defined in the outer scope.
+    fig, axs = plt.subplots(nrow, ncol, dpi=dpi, figsize=(ncol * col_size, nrow * row_size))
+    return fig, axs, nrow, ncol
+        
+        
 ### Plot embeddings side by side
 import matplotlib.pyplot as plt
 def plot_embeddings_split(adata,
                           color,
                           splitby,
-                          col_size=5,
-                          row_size=5,
+                          ncol:int=None,
+                          dpi:int=80,
+                          col_size:int=5,
+                          row_size:int=5,
                           save=None,
                           vmax=None,
                           vmin=None,
@@ -38,13 +86,81 @@ def plot_embeddings_split(adata,
                           fix_coordinate_ratio:bool=True, ### Fix the coordinate ratio
                           show_axis_ticks:bool=False, ### Whether to show the axis ticks and tick labels
                           margin_ratio:float=0.05, ### Set the margin ratio for both x-axis and y-axis, relative to the x-axis intervals and y-axis intervals, respectively
-                          
                           x_min=None,
                           x_max=None,
                           y_min=None,
                           y_max=None,
                           
                           **kwargs):
+    """
+    Plot cell embeddings side by side based on a categorical variable.
+
+    The plots are split by a specified categorical variable, with each unique category producing a separate subplot.
+    Data points in each subplot are colored according to the `color` variable.
+
+    Parameters
+    ----------
+    adata : AnnData
+        An AnnData object.
+    color : str
+        Used to specify a gene name to plot, or a key in `adata.obs` used to assign colors to the cells in the embedding plot.
+    splitby : str
+        Key in `adata.obs` used to split the dataset into multiple panels. Each unique value under this key
+        will result in a separate subplot.
+    ncol : int or None, optional (default: None)
+        If specified, defines the number of columns per row. If None, the number of columns is computed 
+        as the ceiling of n divided by the integer square root of n.
+    dpi : int, optional (default: 80)
+        Dots per inch (DPI) setting for the figure.
+    col_size : int, optional (default=5)
+        Width (in inches) of each subplot column.
+    row_size : int, optional (default=5)
+        Height (in inches) of each subplot row.
+    save : str or None, optional (default=None)
+        File path to save the resulting figure. If None, the figure will not be saved.
+    vmax : float or None, optional (default=None)
+        Maximum value for the color scale. If not provided, the upper limit is determined automatically.
+    vmin : float or None, optional (default=None)
+        Minimum value for the color scale. If not provided, the lower limit is determined automatically.
+    show_figure : bool, optional (default=True)
+        Whether to display the figure after plotting.
+    layer : str or None, optional (default=None)
+        If specified, the name of the layer in `adata.layers` from which to obtain the gene expression values.
+    basis : str, optional (default='X_umap')
+        Key in `adata.obsm` that contains the embedding coordinates (e.g., `X_umap` or `X_pca`).
+    fix_coordinate_ratio : bool, optional (default=True)
+        If True, the aspect ratio of each subplot is fixed so that the x- and y-axes are scaled equally.
+    show_axis_ticks : bool, optional (default=False)
+        Whether to display axis ticks and tick labels on the plots.
+    margin_ratio : float, optional (default=0.05)
+        Margin ratio for both the x-axis and y-axis limits, relative to the range of the data. This provides
+        additional spacing around the plotted points.
+    x_min : float or None, optional (default=None)
+        Minimum limit for the x-axis. If None, the limit is computed automatically based on the data.
+    x_max : float or None, optional (default=None)
+        Maximum limit for the x-axis. If None, the limit is computed automatically based on the data.
+    y_min : float or None, optional (default=None)
+        Minimum limit for the y-axis. If None, the limit is computed automatically based on the data.
+    y_max : float or None, optional (default=None)
+        Maximum limit for the y-axis. If None, the limit is computed automatically based on the data.
+    **kwargs : dict
+        Additional keyword arguments passed to the `scanpy.pl.embedding` function.
+
+    Returns
+    -------
+    None.
+
+    Examples
+    --------
+    >>> import scanpy as sc
+    >>> import piaso
+    >>> adata = sc.datasets.pbmc3k()  # Load an example dataset
+    >>> # Plot embeddings colored by a gene expression value and split by clusters
+    >>> piaso.pl.plot_embeddings_split(adata, color='CDK9', splitby='louvain', col_size=6, row_size=6)
+    >>> # Save the figure to a file
+    >>> piaso.pl.plot_embeddings_split(adata, color='CDK9', splitby='louvain', save='./CST3_embeddingsSplit.pdf')
+    """
+
     
     from mpl_toolkits.axes_grid1 import make_axes_locatable
     #Adapted from https://stackoverflow.com/questions/29516157/set-equal-aspect-in-plot-with-colorbar
@@ -56,22 +172,11 @@ def plot_embeddings_split(adata,
         return fig.colorbar(mappable, cax=cax)
 
     
-    
-    # https://github.com/theislab/scanpy/issues/137
-    def _build_subplots(n):
-        '''
-        Build subplots grid
-        n: number of subplots
-        '''
-        nrow = int(np.sqrt(n))
-        ncol = int(np.ceil(n / nrow))
-        fig, axs = plt.subplots(nrow, ncol, dpi=80, figsize=(ncol*col_size, nrow*row_size))
-
-        return fig, axs, nrow, ncol
 
     ### Create the unique variables
     variables=adata.obs[splitby].cat.categories
-    fig, axs, nrow, ncol = _build_subplots(len(variables))
+    ### Build the layout
+    fig, axs, nrow, ncol = _build_subplots(len(variables), ncol=ncol, dpi=dpi, col_size=col_size, row_size=row_size)
     
     
     # plt.subplots_adjust(bottom=0.1, right=0.8, top=0.9, wspace=0.2)
