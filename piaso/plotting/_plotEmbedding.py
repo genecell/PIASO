@@ -162,9 +162,10 @@ def plot_embeddings_split(adata,
                           show_axis_ticks:bool=False, ### Whether to show the axis ticks and tick labels
                           margin_ratio:float=0.05, ### Set the margin ratio for both x-axis and y-axis, relative to the x-axis intervals and y-axis intervals, respectively
                           
-                          legend_fontsize:int=9,
+                          legend_fontsize:int=10,
                           legend_fontoutline:int=2,
                           legend_loc:str='right margin',
+                          legend_marker_size: float=1.6,
                           x_min=None,
                           x_max=None,
                           y_min=None,
@@ -220,6 +221,8 @@ def plot_embeddings_split(adata,
         Line width of the legend font outline in pt. 
     legend_loc: str, optional (default='right margin')
         Location of legend, defaults to 'right margin'.
+    legend_marker_size: float, optional (default=1.5)
+        Scaling factor for legend markers (dot size).
     x_min : float or None, optional (default=None)
         Minimum limit for the x-axis. If None, the limit is computed automatically based on the data.
     x_max : float or None, optional (default=None)
@@ -476,18 +479,15 @@ def plot_embeddings_split(adata,
                 for i in range(len(axs)):
                     axs[i].legend().set_visible(False)
             
-                        
-#                 #### Collect unique legend handles and labels
-#                 legend_items = {}         # Uses a dictionary to keep only the first occurrence
-#                 for i in range(len(axs)):
-#                     handles, labels = axs[i].get_legend_handles_labels()
-#                     for h, l in zip(handles, labels):
-#                         legend_items[l] = h  # Keeps only unique labels
 
             ### End of the for loop: for i in range(len(axs)):
             ### Create a right margin
             if legend_loc=='right margin':
-                _create_global_legend(fig, axs, legend_loc="center left", bbox_to_anchor=(1.02, 0.5), frameon=False, marker_size=1.8, fontsize=12, max_rows_per_col=18)
+                _create_global_legend(fig, axs, legend_loc="center left", bbox_to_anchor=(1.02, 0.5),
+                                      frameon=False,
+                                      marker_size=legend_marker_size,
+                                      fontsize=legend_fontsize,
+                                      max_rows_per_col=18)
                 # ### Create a global legend in the right margin
                 # fig.legend(legend_items.values(), legend_items.keys(), loc="center left", bbox_to_anchor=(1.02, 0.5))
 
