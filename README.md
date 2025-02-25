@@ -5,13 +5,13 @@
 
 # PIASO
 
-### Precise Integrative Analysis of Single-cell Omics
+#### Precise Integrative Analysis of Single-cell Omics
 
 ### Documentation
 
 [PIASO documentation](https://genecell.github.io/PIASO/) 
 
-### Current available functionalities
+#### Current available functionalities
 
 1. perform dimensionality reduction with GDR
 2. integration of scRNA-seq datasets with GDR
@@ -23,12 +23,20 @@
 8. side-by-side cell embedding plots, e.g., split by Conditions
 9. stacked violin plots for multiple features, including genes and cell metrics
 
-### Coming functionalities
+#### Coming functionalities
 
 1. preprocessing of scATAC-seq datasets
 2. integration of scRNA-seq and scATAC-seq datasets (not relying on gene activities)
 3. inference of cell type-specific gene regulatory networks
 4. and others
+
+### Installation
+
+You could simply install PIASO via `pip` in your conda environment:
+```bash
+pip install piaso-tools
+```
+For the developmental version, you could clone PIASO GitHub repos and install it.
 
 ### Citation
 
