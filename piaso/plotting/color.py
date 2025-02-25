@@ -308,7 +308,7 @@ c_color7=createCustomCmapFromHex([ '#EFEEEC',  '#FFA06F', '#F58231', '#F84914', 
 c_color7
 
 ### Purples
-c_color8=piaso.pl.createCustomCmapFromHex(['#EFEEEC',  '#B8AED0',  '#735C94', '#45345E',])
+c_color8=createCustomCmapFromHex(['#EFEEEC',  '#B8AED0',  '#735C94', '#45345E',])
 c_color8
 
 
