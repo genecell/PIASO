@@ -67,7 +67,82 @@ def _build_subplots(n,
     fig, axs = plt.subplots(nrow, ncol, dpi=dpi, figsize=(ncol * col_size, nrow * row_size))
     return fig, axs, nrow, ncol
         
-        
+import matplotlib.pyplot as plt
+import numpy as np
+
+def _create_global_legend(
+    fig,
+    axes,
+    legend_loc="center left", 
+    bbox_to_anchor=(1.02, 0.5), 
+    frameon:bool=False,  
+    marker_size:float=1.0,  
+    max_rows_per_col:int=12, 
+    **legend_kwargs):
+    """
+    Collects unique legend entries from all subplots and creates a single global legend.
+
+    Parameters
+    ----------
+    fig : matplotlib.figure.Figure
+        The Matplotlib figure object.
+    axes : array-like
+        A list or array of Matplotlib Axes objects (e.g., from `plt.subplots`).
+    legend_loc : str, optional (default="center left")
+        The location of the global legend.
+    bbox_to_anchor : tuple, optional (default=(1.02, 0.5))
+        The positioning of the legend outside the main figure.
+    frameon : bool, optional (default=False)
+        Whether to display the legend box.
+    marker_size : float, optional (default=1.0)
+        Scaling factor for legend markers (dot size).
+    max_rows_per_col : int, optional (default=12)
+        Maximum number of rows before creating a new column in the legend.
+    **legend_kwargs : dict, optional
+        Additional keyword arguments passed to `fig.legend()` for styling.
+
+    Returns
+    -------
+    None
+        Displays the figure with a global legend.
+    """
+    legend_items = {}  # Dictionary to store unique legend items
+
+    # Collect legend handles and labels from all subplots
+    for ax in axes.flat:
+        handles, labels = ax.get_legend_handles_labels()
+        for handle, label in zip(handles, labels):
+            legend_items[label] = handle  # Ensures unique labels
+            
+    # Modify marker size in the legend
+    legend_handles = list(legend_items.values())
+    for handle in legend_handles:
+        if hasattr(handle, "set_markersize"):  # Check if it's a Line2D object with markers
+            handle.set_markersize(handle.get_markersize() * marker_size)
+            
+            
+    # Determine number of columns dynamically
+    num_items = len(legend_items)
+    ncol = max(1, -(-num_items // max_rows_per_col))  # Equivalent to math.ceil(num_items / max_rows_per_col)
+
+
+    # Create the global legend outside the figure if there are labels
+    if legend_items:
+        fig.legend(
+            handles=legend_handles,
+            labels=legend_items.keys(),
+            loc=legend_loc,
+            bbox_to_anchor=bbox_to_anchor,
+            frameon=frameon,  # Remove or keep the legend box
+            markerscale=marker_size,  # Adjust marker scale
+            handlelength=2,  # Adjust spacing between legend symbols and text
+            ncol=ncol,  # Automatically set number of columns
+            **legend_kwargs  # Pass additional customization options
+        )
+
+    plt.tight_layout()  # Adjust layout
+
+    
 ### Plot embeddings side by side
 import matplotlib.pyplot as plt
 def plot_embeddings_split(adata,
@@ -86,6 +161,10 @@ def plot_embeddings_split(adata,
                           fix_coordinate_ratio:bool=True, ### Fix the coordinate ratio
                           show_axis_ticks:bool=False, ### Whether to show the axis ticks and tick labels
                           margin_ratio:float=0.05, ### Set the margin ratio for both x-axis and y-axis, relative to the x-axis intervals and y-axis intervals, respectively
+                          
+                          legend_fontsize:int=9,
+                          legend_fontoutline:int=2,
+                          legend_loc:str='right margin',
                           x_min=None,
                           x_max=None,
                           y_min=None,
@@ -135,6 +214,12 @@ def plot_embeddings_split(adata,
     margin_ratio : float, optional (default=0.05)
         Margin ratio for both the x-axis and y-axis limits, relative to the range of the data. This provides
         additional spacing around the plotted points.
+    legend_fontsize: int, optional (default=9)
+        Font size in pt.
+    legend_fontoutline: int, optional (default=2)
+        Line width of the legend font outline in pt. 
+    legend_loc: str, optional (default='right margin')
+        Location of legend, defaults to 'right margin'.
     x_min : float or None, optional (default=None)
         Minimum limit for the x-axis. If None, the limit is computed automatically based on the data.
     x_max : float or None, optional (default=None)
@@ -233,8 +318,8 @@ def plot_embeddings_split(adata,
                            vmax=expr_max,
                            vmin=expr_min,
                            title=color+' in '+variables[i],
-                           legend_fontsize=12,
-                           legend_fontoutline=2,
+                           legend_fontsize=legend_fontsize,
+                           legend_fontoutline=legend_fontoutline,
                            ncols=4,
                            return_fig=False,
                            colorbar_loc=None,
@@ -248,12 +333,12 @@ def plot_embeddings_split(adata,
                             vmax=expr_max,
                             vmin=expr_min,
                             title=color+' in '+variables[i],
-                            legend_fontsize=12,
-                            legend_fontoutline=2,
+                            legend_fontsize=legend_fontsize,
+                            legend_fontoutline=legend_fontoutline,
                             ncols=4,
                             return_fig=False,
                             colorbar_loc=None,
-                            show=False,ax=axs[i],  **kwargs
+                            show=False, ax=axs[i],  **kwargs
                         )
                         
                         
@@ -279,68 +364,132 @@ def plot_embeddings_split(adata,
                     axs[i].set_visible(False)  
         else:
             ### Categorical variable
+            
             for i in range(len(axs)):
-                if i<(len(variables)-1):
-                    if basis=='X_umap':
-                        sc.pl.umap(
-                            adata[adata.obs[splitby]==variables[i]],
-                            color=color,
-                            title=color+' in '+variables[i],
-                            legend_fontsize=12,
-                            legend_fontoutline=2,
-                            ncols=4,
-                            show=False, ax=axs[i],
-                            legend_loc=None, ## Not showing the legends except for the last subplot
-                            **kwargs
-                        )
+                ### Showing the legend on data:
+                if legend_loc=='on data':
                     
-                    else:
-                        sc.pl.embedding(
-                            adata[adata.obs[splitby]==variables[i]],
-                            basis=basis,
-                            color=color,
-                            title=color+' in '+variables[i],
-                            legend_fontsize=12,
-                            legend_fontoutline=2,
-                            ncols=4,
-                            show=False, ax=axs[i],
-                            legend_loc=None, ## Not showing the legends except for the last subplot
-                            **kwargs
-                        )
-                        
-                        
-                    ### Fix the coordinates ratio
-                    if fix_coordinate_ratio:
-                        axs[i].set_aspect('equal')
-                elif i==(len(variables)-1):
-                    if basis=='X_umap':
-                        sc.pl.umap(
-                            adata[adata.obs[splitby]==variables[i]],
-                            color=color,
-                            title=color+' in '+variables[i],
-                            legend_fontsize=12,
-                            legend_fontoutline=2,
-                            ncols=4,
-                            show=False, ax=axs[i],
-                            **kwargs
-                        )
-                    else:
-                        sc.pl.embedding(
-                            adata[adata.obs[splitby]==variables[i]],
-                            basis=basis,
-                            color=color,
-                            title=color+' in '+variables[i],
-                            legend_fontsize=12,
-                            legend_fontoutline=2,
-                            ncols=4,
-                            show=False, ax=axs[i],
-                            **kwargs
-                        )
-                    
-                else:
-                    axs[i].set_visible(False)  
+                    if i<len(variables):
+                        if basis=='X_umap':
+                            sc.pl.umap(
+                                adata[adata.obs[splitby]==variables[i]],
+                                color=color,
+                                title=color+' in '+variables[i],
+                                legend_fontsize=legend_fontsize,
+                                legend_fontoutline=legend_fontoutline,
+                                ncols=4,
+                                show=False, ax=axs[i],
+                                legend_loc=legend_loc, 
+                                **kwargs
+                            )
 
-        
+                        else:
+                            sc.pl.embedding(
+                                adata[adata.obs[splitby]==variables[i]],
+                                basis=basis,
+                                color=color,
+                                title=color+' in '+variables[i],
+                                legend_fontsize=legend_fontsize,
+                                legend_fontoutline=legend_fontoutline,
+                                ncols=4,
+                                show=False, ax=axs[i],
+                                legend_loc=legend_loc, 
+                                **kwargs
+                            )
+                            
+                        ### Fix the coordinates ratio
+                        if fix_coordinate_ratio:
+                            axs[i].set_aspect('equal')
+                    else:
+                        axs[i].set_visible(False) 
+                    
+                ### if the legend_loc is not on data:    
+                else:
+                    if i<(len(variables)-1):
+                        if basis=='X_umap':
+                            sc.pl.umap(
+                                adata[adata.obs[splitby]==variables[i]],
+                                color=color,
+                                title=color+' in '+variables[i],
+                                legend_fontsize=legend_fontsize,
+                                legend_fontoutline=legend_fontoutline,
+                                ncols=4,
+                                show=False, ax=axs[i],
+                                legend_loc=legend_loc, ## Not showing the legends except for the last subplot
+                                **kwargs
+                            )
+
+                        else:
+                            sc.pl.embedding(
+                                adata[adata.obs[splitby]==variables[i]],
+                                basis=basis,
+                                color=color,
+                                title=color+' in '+variables[i],
+                                legend_fontsize=12,
+                                legend_fontoutline=2,
+                                ncols=4,
+                                show=False, ax=axs[i],
+                                legend_loc=legend_loc, ## Not showing the legends except for the last subplot
+                                **kwargs
+                            )
+
+
+                        ### Fix the coordinates ratio
+                        if fix_coordinate_ratio:
+                            axs[i].set_aspect('equal')
+                    ### Treat the last subplot differently
+                    elif i==(len(variables)-1):
+                        if basis=='X_umap':
+                            sc.pl.umap(
+                                adata[adata.obs[splitby]==variables[i]],
+                                color=color,
+                                title=color+' in '+variables[i],
+                                legend_fontsize=legend_fontsize,
+                                legend_fontoutline=legend_fontoutline,
+                                ncols=4,
+                                show=False, ax=axs[i],
+                                legend_loc=legend_loc,
+                                **kwargs
+                            )
+                        else:
+                            sc.pl.embedding(
+                                adata[adata.obs[splitby]==variables[i]],
+                                basis=basis,
+                                color=color,
+                                title=color+' in '+variables[i],
+                                legend_fontsize=legend_fontsize,
+                                legend_fontoutline=legend_fontoutline,
+                                ncols=4,
+                                show=False, ax=axs[i],
+                                legend_loc=legend_loc,
+                                **kwargs
+                            )
+
+                    else:
+                        axs[i].set_visible(False)
+                        
+                    ### Hide individual subplot legends while keeping legend info
+                    # axs[i].legend(handlelength=0, frameon=False)  # Ensures we can collect handles but doesn't show legends
+            
+            if legend_loc=='right margin':
+                #### Do not show legends inside subplots
+                for i in range(len(axs)):
+                    axs[i].legend().set_visible(False)
+            
+                        
+#                 #### Collect unique legend handles and labels
+#                 legend_items = {}         # Uses a dictionary to keep only the first occurrence
+#                 for i in range(len(axs)):
+#                     handles, labels = axs[i].get_legend_handles_labels()
+#                     for h, l in zip(handles, labels):
+#                         legend_items[l] = h  # Keeps only unique labels
+
+            ### End of the for loop: for i in range(len(axs)):
+            ### Create a right margin
+            if legend_loc=='right margin':
+                _create_global_legend(fig, axs, legend_loc="center left", bbox_to_anchor=(1.02, 0.5), frameon=False, marker_size=1.8, fontsize=12, max_rows_per_col=18)
+                # ### Create a global legend in the right margin
+                # fig.legend(legend_items.values(), legend_items.keys(), loc="center left", bbox_to_anchor=(1.02, 0.5))
 
     ### for gene
     else:
@@ -447,8 +596,8 @@ def plot_embeddings_split(adata,
             ax.grid(False)
             ax.set_xticks(np.arange(xy_min[0]-xy_margin[0], xy_max[0]+xy_margin[0], (xy_max[0]-xy_min[0])/4))
             ax.set_yticks(np.arange(xy_min[1]-xy_margin[1], xy_max[1]+xy_margin[1], (xy_max[1]-xy_min[1])/4))
-
-
+    
+   
         
     ### Save the figure
     if save is not None:
