@@ -7,14 +7,14 @@ piaso.tools package
    :show-inheritance:
    :private-members:
 
-.. autofunction::  leiden_local
-.. autofunction::  infog
-.. autofunction::  score
-.. autofunction::  calculateScoreParallel
-.. autofunction::  calculateScoreParallel_multiBatch
-.. autofunction::  predictCellTypeByGDR
-.. autofunction::  runCOSGParallel
-.. autofunction::  runGDR
-.. autofunction::  runGDRParallel
-.. autofunction::  runSVD
-.. autofunction::  runSVDLazy
+.. autofunction:: leiden_local
+.. autofunction:: infog
+.. autofunction:: score
+.. autofunction:: calculateScoreParallel
+.. autofunction:: calculateScoreParallel_multiBatch
+.. autofunction:: predictCellTypeByGDR
+.. autofunction:: runCOSGParallel
+.. autofunction:: runGDR
+.. autofunction:: runGDRParallel
+.. autofunction:: runSVD
+.. autofunction:: runSVDLazy

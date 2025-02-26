@@ -7,5 +7,5 @@ piaso.preprocessing package
    :show-inheritance:
    :private-members:
 
-.. autofunction::  getCrossCategories
-.. autofunction::  table
+.. autofunction:: getCrossCategories
+.. autofunction:: table

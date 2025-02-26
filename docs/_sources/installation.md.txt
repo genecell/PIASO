@@ -1,39 +1,34 @@
 ## Installation
 
-Follow these steps to install the latest version of **PIASO** on your local machine.
+### Stable version
 
-**1. Clone the PIASO Repository**
+**1. Activate conda environment**
 
-Navigate to your desired installation directory and clone the repository:  
-
-```
-cd <directory_path>
-git clone https://github.com/genecell/PIASO.git
-cd PIASO
-```
-
-**2. Activate Your Environment**
-
-Ensure you’re working in the correct environment:
+If you already have an environment, activate it:
 
 ```
-conda activate my-env
+conda activate <myenv>
 ```
 
-**3. Install PIASO**
+(Replace ` <myenv> ` with your actual environment name.)
 
-Run the following command to install PIASO:
-
-```
-python setup.py install --prefix <directory_path>/PIASO
-```
-
-**4. Install Additional Dependencies (if needed)**
-
-Some tutorials require **cosg**, so install it if you haven’t already: 
+If you don't have an environment yet, create one first:
 
 ```
-pip install cosg
+conda create --name <myenv>
+conda activate <myenv>
 ```
 
-Now, PIASO is installed and ready to use!
+**2. Install PIASO**
+
+```
+pip install piaso-tools
+```
+
+### Development version
+
+Install PIASO from GitHub directly
+ 
+```
+pip install git+https://github.com/genecell/PIASO.git
+```

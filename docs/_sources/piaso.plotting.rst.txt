@@ -1,5 +1,5 @@
-piaso.plotting
-==============
+piaso.plotting package
+======================
 
 .. automodule:: piaso.plotting
    :members:
@@ -8,5 +8,5 @@ piaso.plotting
    :private-members:
 
 .. autofunction:: plot_features_violin
-.. autofunction::  plot_embeddings_split
-.. autofunction::  createCustomCmapFromHex
+.. autofunction:: plot_embeddings_split
+.. autofunction:: createCustomCmapFromHex

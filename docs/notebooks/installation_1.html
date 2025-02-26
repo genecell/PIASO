@@ -226,6 +226,10 @@
   
 
   
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
 </div>
 
     </header>
@@ -393,16 +397,24 @@
                   
   <section id="Installation">
 <h1>Installation<a class="headerlink" href="#Installation" title="Link to this heading">#</a></h1>
-<p>Follow these steps to install the latest version of PIASO to your local machine:</p>
-<p>Navigate to the directory where you want to install PIASO</p>
-<p><code class="docutils literal notranslate"><span class="pre">cd</span> <span class="pre">&lt;directory_path&gt;</span></code></p>
-<p>Clone the PIASO Github repository to your local machine</p>
-<p><code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">clone</span> <span class="pre">https://github.com/genecell/PIASO.git</span></code></p>
-<p>Navigate to the PIASO directory</p>
-<p><code class="docutils literal notranslate"><span class="pre">cd</span> <span class="pre">PIASO</span></code></p>
-<p>Install PIASO using setup.py</p>
-<p><code class="docutils literal notranslate"><span class="pre">python</span> <span class="pre">setup.py</span> <span class="pre">install</span> <span class="pre">--prefix</span> <span class="pre">&lt;directory_path&gt;/PIASO</span></code></p>
-<p>Now PIASO is installed and ready to use!</p>
+<section id="Stable-version">
+<h2>Stable version<a class="headerlink" href="#Stable-version" title="Link to this heading">#</a></h2>
+<p>If you already have an environment, activate it:</p>
+<p><code class="docutils literal notranslate"><span class="pre">conda</span> <span class="pre">activate</span> <span class="pre">&lt;myenv&gt;</span></code></p>
+<p>(Replace <code class="docutils literal notranslate"><span class="pre">&lt;myenv&gt;</span></code> with your actual environment name.)</p>
+<p>If you don’t have an environment yet, create one first:</p>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>conda create --name &lt;myenv&gt;
+conda activate &lt;myenv&gt;
+</pre></div>
+</div>
+<p>Install PIASO</p>
+<p><code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">piaso-tools</span></code></p>
+</section>
+<section id="Development-version">
+<h2>Development version<a class="headerlink" href="#Development-version" title="Link to this heading">#</a></h2>
+<p>Install PIASO from GitHub directly</p>
+<p><code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">git+https://github.com/genecell/PIASO.git</span></code></p>
+</section>
 </section>
 
 
@@ -421,6 +433,25 @@
             </div>
             
             
+              
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#Stable-version">Stable version</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#Development-version">Development version</a></li>
+</ul>
+  </nav></div>
+
+</div></div>
               
             
           </div>

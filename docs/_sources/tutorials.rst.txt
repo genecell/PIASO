@@ -9,3 +9,4 @@ Tutorials
    notebooks/GDRPredictCellTypeTutorial.ipynb
    notebooks/LeidenLocalTutorial.ipynb
    notebooks/01_showThePlotFunction.ipynb
+   notebooks/colorPalettes.ipynb
