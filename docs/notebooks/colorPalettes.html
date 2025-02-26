@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>Color pallettes in PIASO &#8212; PIASO 0.1.0 documentation</title>
+    <title>Built-in color palettes in PIASO &#8212; PIASO 0.1.0 documentation</title>
   
   
   
@@ -382,7 +382,7 @@
     
     <li class="breadcrumb-item"><a href="../tutorials.html" class="nav-link">Tutorials</a></li>
     
-    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Color pallettes in PIASO</span></li>
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Built-in color palettes in PIASO</span></li>
   </ul>
 </nav>
 </div>
@@ -399,9 +399,10 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section id="Color-pallettes-in-PIASO">
-<h1>Color pallettes in PIASO<a class="headerlink" href="#Color-pallettes-in-PIASO" title="Link to this heading">#</a></h1>
-<p>PIASO offers a diverse selection of color palette options. This notebook aims to display the available choices in both discrete and continuous color maps.</p>
+  <section id="Built-in-color-palettes-in-PIASO">
+<h1>Built-in color palettes in PIASO<a class="headerlink" href="#Built-in-color-palettes-in-PIASO" title="Link to this heading">#</a></h1>
+<p>PIASO provides a diverse selection of discrete color palettes and continous color plattes.</p>
+<p>To use the built-in colors in PIASO, you can set the <code class="docutils literal notranslate"><span class="pre">palette=piaso.pl.color.d_color1</span></code> for the discrete colors, and <code class="docutils literal notranslate"><span class="pre">cmap=piaso.pl.color.c_color1</span></code> for the continuous colors in sc.pl.umap, piaso.pl.plot_embeddings_split or other functions. This notebook aims to display the available choices in both discrete and continuous color maps.</p>
 <div class="nbinput nblast docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[1]:
 </pre></div>
@@ -492,9 +493,9 @@ AnnData object with n_obs × n_vars = 20000 × 36601
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>palettes = [c for c in vars(color) if c.startswith(&#39;d_&#39;)]
 n = len(palettes)
-ncol = None
+ncol = 4
 nrow = None
-row_size, col_size = 4, 4
+row_size, col_size = 2.3, 2.3
 if ncol is None:
         nrow = int(np.sqrt(n))
         ncol = int(np.ceil(n / nrow))
@@ -514,16 +515,18 @@ for i in range(len(axs)):
                             color=[&#39;Subclass&#39;],
                             palette=palette_value,
                             cmap=&#39;Spectral_r&#39;,
-                            size=10,
+                            size=3,
                             frameon=False,
                             ax=axs[i][j],
                             title=&#39;piaso.plotting.color.&#39;+str(palettes[c]),
                             legend_loc=None,
                             show=False)
+            axs[i][j].title.set_size(9)
         else:
             axs[i][j].set_visible(False)
         c += 1
 plt.suptitle(&quot;Selection of 15 discrete color palettes&quot;)
+plt.tight_layout()
 plt.show()
 </pre></div>
 </div>
@@ -541,7 +544,7 @@ WARNING: Length of palette colors is smaller than the number of categories (pale
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/notebooks_colorPalettes_10_1.png" class="no-scaled-link" src="../_images/notebooks_colorPalettes_10_1.png" style="width: 1516px; height: 975px;" />
+<img alt="../_images/notebooks_colorPalettes_10_1.png" class="no-scaled-link" src="../_images/notebooks_colorPalettes_10_1.png" style="width: 862px; height: 864px;" />
 </div>
 </div>
 </section>
@@ -555,7 +558,7 @@ WARNING: Length of palette colors is smaller than the number of categories (pale
 n = len(palettes)
 ncol = None
 nrow = None
-row_size, col_size = 3.5, 3.5
+row_size, col_size = 2.3, 2.3
 if ncol is None:
         nrow = int(np.sqrt(n))
         ncol = int(np.ceil(n / nrow))
@@ -573,16 +576,18 @@ for i in range(len(axs)):
             sc.pl.umap(adata,
                        color=[&#39;GAD1&#39;],
                        cmap=palette_value,
-                       size=30,
+                       size=15,
                        frameon=False,
                        ax=axs[i][j],
                        title=&#39;piaso.plotting.color.&#39;+str(palettes[c]),
                        legend_loc=None,
                        show=False)
+            axs[i][j].title.set_size(9)
         else:
             axs[i][j].set_visible(False)
         c += 1
 plt.suptitle(&quot;Selection of 8 continuous color palettes&quot;)
+plt.tight_layout()
 plt.show()
 </pre></div>
 </div>
@@ -591,7 +596,7 @@ plt.show()
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/notebooks_colorPalettes_12_0.png" class="no-scaled-link" src="../_images/notebooks_colorPalettes_12_0.png" style="width: 1088px; height: 587px;" />
+<img alt="../_images/notebooks_colorPalettes_12_0.png" class="no-scaled-link" src="../_images/notebooks_colorPalettes_12_0.png" style="width: 859px; height: 431px;" />
 </div>
 </div>
 </section>
