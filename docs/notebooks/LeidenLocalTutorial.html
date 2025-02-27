@@ -449,14 +449,30 @@ import piaso
 </div>
 <section id="Load-the-data">
 <h2>Load the data<a class="headerlink" href="#Load-the-data" title="Link to this heading">#</a></h2>
-<p>We will use the 20k subsampled version of the Seattle Alzheimer’s Disease Brain Cell Atlas (SEA-AD) project dataset described in detail in <a class="reference external" href="../references.html#cell1">Gabitto et. al. (2024)</a>. We will be using the scRNA-seq data from the dataset in this tutorial. Please refer to the “Introduction to PIASO” tutorial to learn more about how it was preprocessed and normalized.</p>
+<p>We will use the 20k subsampled version of the Seattle Alzheimer’s Disease Brain Cell Atlas (SEA-AD) project dataset described in detail in <a class="reference external" href="../references.html#cell1">Gabitto et. al. (2024)</a>. We will be using the scRNA-seq data from the dataset in this tutorial. Please refer to the <a class="reference external" href="./PIASO_tutorial.html">Introduction</a> tutorial to learn more about how it was preprocessed and normalized.</p>
 <p>Download the subsampled, pre-processed dataset from Google Drive: <a class="reference external" href="https://drive.google.com/file/d/1pDBIgPvEO-sBuIMEhrvVhnf7tfU7H6Xy/view?usp=drive_link">https://drive.google.com/file/d/1pDBIgPvEO-sBuIMEhrvVhnf7tfU7H6Xy/view?usp=drive_link</a></p>
 <p>The original data is available on <a class="reference external" href="https://portal.brain-map.org/explore/seattle-alzheimers-disease">https://portal.brain-map.org/explore/seattle-alzheimers-disease</a></p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[3]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>data_dir = &quot;/n/scratch/users/v/vas744/Data/Public/PIASO&quot;
+</pre></div>
+</div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>!/home/vas744/Software/gdrive files download --destination {data_dir} 1pDBIgPvEO-sBuIMEhrvVhnf7tfU7H6Xy
+</pre></div>
+</div>
+</div>
 <div class="nbinput docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[4]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata=sc.read(&#39;/n/scratch/users/v/vas744/Data/Public/PIASO/SEA-AD_RNA_MTG_subsample_excludeReference_20k_piaso_preprocessed.h5ad&#39;)
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata=sc.read(data_dir+ &#39;/SEA-AD_RNA_MTG_subsample_excludeReference_20k_piaso_preprocessed.h5ad&#39;)
 adata
 </pre></div>
 </div>
@@ -486,7 +502,6 @@ AnnData object with n_obs × n_vars = 20000 × 36601
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(adata,
            color=[&#39;Subclass&#39;],
            palette=piaso.pl.color.d_color4,
-           cmap=pos_cmap,
            ncols=1,
            size=10,
            frameon=True)
@@ -497,7 +512,7 @@ AnnData object with n_obs × n_vars = 20000 × 36601
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/notebooks_LeidenLocalTutorial_6_0.png" class="no-scaled-link" src="../_images/notebooks_LeidenLocalTutorial_6_0.png" style="width: 603px; height: 357px;" />
+<img alt="../_images/notebooks_LeidenLocalTutorial_8_0.png" class="no-scaled-link" src="../_images/notebooks_LeidenLocalTutorial_8_0.png" style="width: 603px; height: 357px;" />
 </div>
 </div>
 </section>
@@ -519,9 +534,9 @@ sc.tl.leiden(adata,resolution=0.5,key_added=&#39;Leiden&#39;,flavor=&quot;igraph
 <div class="highlight"><pre>
 running Leiden clustering
     finished: found 24 clusters and added
-    &#39;Leiden&#39;, the cluster labels (adata.obs, categorical) (0:00:00)
-CPU times: user 767 ms, sys: 92.4 ms, total: 859 ms
-Wall time: 853 ms
+    &#39;Leiden&#39;, the cluster labels (adata.obs, categorical) (0:00:01)
+CPU times: user 735 ms, sys: 66 ms, total: 801 ms
+Wall time: 1.76 s
 </pre></div></div>
 </div>
 <div class="nbinput nblast docutils container">
@@ -539,7 +554,6 @@ Wall time: 853 ms
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(adata,
            color=[&#39;Leiden&#39;],
            palette=piaso.pl.color.d_color4,
-           cmap=pos_cmap,
            legend_fontsize=12,
            legend_fontoutline=2,
            legend_loc=&#39;on data&#39;,
@@ -553,7 +567,7 @@ Wall time: 853 ms
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/notebooks_LeidenLocalTutorial_10_0.png" class="no-scaled-link" src="../_images/notebooks_LeidenLocalTutorial_10_0.png" style="width: 328px; height: 338px;" />
+<img alt="../_images/notebooks_LeidenLocalTutorial_12_0.png" class="no-scaled-link" src="../_images/notebooks_LeidenLocalTutorial_12_0.png" style="width: 328px; height: 338px;" />
 </div>
 </div>
 </section>
@@ -585,7 +599,7 @@ filtered out 6493 genes that are detected in less than 1 cells
 computing neighbors
     finished: added to `.uns[&#39;neighbors&#39;]`
     `.obsp[&#39;distances&#39;]`, distances for each pair of neighbors
-    `.obsp[&#39;connectivities&#39;]`, weighted adjacency matrix (0:00:04)
+    `.obsp[&#39;connectivities&#39;]`, weighted adjacency matrix (0:00:09)
 running Leiden clustering
 </pre></div></div>
 </div>
@@ -617,7 +631,6 @@ running Leiden clustering
            color=[&#39;Leiden&#39;],
            groups=[&#39;8&#39;],
            palette=piaso.pl.color.d_color4,
-           cmap=pos_cmap,
            legend_fontsize=12,
            legend_fontoutline=2,
            legend_loc=&#39;on data&#39;,
@@ -631,7 +644,7 @@ running Leiden clustering
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/notebooks_LeidenLocalTutorial_13_0.png" class="no-scaled-link" src="../_images/notebooks_LeidenLocalTutorial_13_0.png" style="width: 328px; height: 338px;" />
+<img alt="../_images/notebooks_LeidenLocalTutorial_15_0.png" class="no-scaled-link" src="../_images/notebooks_LeidenLocalTutorial_15_0.png" style="width: 328px; height: 338px;" />
 </div>
 </div>
 <div class="nbinput docutils container">
@@ -642,7 +655,6 @@ running Leiden clustering
            color=[&#39;Leiden_local_one&#39;],
            groups=[&#39;8-0&#39;,&#39;8-1&#39;,&#39;8-2&#39;,&#39;8-3&#39;],
            palette=piaso.pl.color.d_color4,
-           cmap=pos_cmap,
            legend_fontsize=12,
            legend_fontoutline=2,
            ncols=1,
@@ -655,7 +667,7 @@ running Leiden clustering
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/notebooks_LeidenLocalTutorial_14_0.png" class="no-scaled-link" src="../_images/notebooks_LeidenLocalTutorial_14_0.png" style="width: 376px; height: 338px;" />
+<img alt="../_images/notebooks_LeidenLocalTutorial_16_0.png" class="no-scaled-link" src="../_images/notebooks_LeidenLocalTutorial_16_0.png" style="width: 376px; height: 338px;" />
 </div>
 </div>
 <section id="Identify-markger-genes-in-subclusters">
@@ -719,7 +731,7 @@ Storing dendrogram info using `.uns[&#39;dendrogram_Leiden_local_one&#39;]`
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/notebooks_LeidenLocalTutorial_17_1.png" class="no-scaled-link" src="../_images/notebooks_LeidenLocalTutorial_17_1.png" style="width: 2065px; height: 738px;" />
+<img alt="../_images/notebooks_LeidenLocalTutorial_19_1.png" class="no-scaled-link" src="../_images/notebooks_LeidenLocalTutorial_19_1.png" style="width: 2065px; height: 738px;" />
 </div>
 </div>
 <p>The dotplot reveals that the subclusters identified by leiden_local within leiden cluster 8 exhibit distinct marker genes, suggesting they may differ in nature. Our function successfully detects these differences and can differentiate between the subclusters.</p>
@@ -793,7 +805,6 @@ running Leiden clustering
            color=[&#39;Leiden_local_many_each&#39;],
            groups=[&#39;1-0&#39;,&#39;1-1&#39;,&#39;8-0&#39;,&#39;8-1&#39;,&#39;8-2&#39;,&#39;8-3&#39;,&#39;9-0&#39;,&#39;9-1&#39;,&#39;17-0&#39;,&#39;17-1&#39;,&#39;17-2&#39;],
            palette=piaso.pl.color.d_color4,
-           cmap=pos_cmap,
            legend_fontsize=12,
            legend_fontoutline=2,
            ncols=1,
@@ -806,7 +817,7 @@ running Leiden clustering
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/notebooks_LeidenLocalTutorial_22_0.png" class="no-scaled-link" src="../_images/notebooks_LeidenLocalTutorial_22_0.png" style="width: 384px; height: 338px;" />
+<img alt="../_images/notebooks_LeidenLocalTutorial_24_0.png" class="no-scaled-link" src="../_images/notebooks_LeidenLocalTutorial_24_0.png" style="width: 384px; height: 338px;" />
 </div>
 </div>
 </section>
@@ -841,7 +852,7 @@ computing neighbors
     `.obsp[&#39;connectivities&#39;]`, weighted adjacency matrix (0:00:00)
 running Leiden clustering
     finished: found 9 clusters and added
-    &#39;leiden_local&#39;, the cluster labels (adata.obs, categorical) (0:00:01)
+    &#39;leiden_local&#39;, the cluster labels (adata.obs, categorical) (0:00:02)
 </pre></div></div>
 </div>
 <div class="nbinput docutils container">
@@ -852,7 +863,6 @@ running Leiden clustering
            color=[&#39;Leiden_local_many_all&#39;],
            groups=[&#39;M-0&#39;,&#39;M-1&#39;,&#39;M-2&#39;,&#39;M-3&#39;,&#39;M-4&#39;,&#39;M-5&#39;,&#39;M-6&#39;,&#39;M-7&#39;,&#39;M-8&#39;],
            palette=piaso.pl.color.d_color4,
-           cmap=pos_cmap,
            legend_fontsize=12,
            legend_fontoutline=2,
            ncols=1,
@@ -865,7 +875,7 @@ running Leiden clustering
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/notebooks_LeidenLocalTutorial_25_0.png" class="no-scaled-link" src="../_images/notebooks_LeidenLocalTutorial_25_0.png" style="width: 380px; height: 338px;" />
+<img alt="../_images/notebooks_LeidenLocalTutorial_27_0.png" class="no-scaled-link" src="../_images/notebooks_LeidenLocalTutorial_27_0.png" style="width: 380px; height: 338px;" />
 </div>
 </div>
 <p>We can compare the subclusters identified by leiden_local with the annotated subclasses from the data, and observe that the identified clusters closely align with the actual subclasses.</p>
@@ -876,7 +886,6 @@ running Leiden clustering
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(adata,
            color=[&#39;Subclass&#39;],
            palette=piaso.pl.color.d_color4,
-           cmap=pos_cmap,
            ncols=1,
            size=10,
            frameon=True)
@@ -887,7 +896,7 @@ running Leiden clustering
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/notebooks_LeidenLocalTutorial_27_0.png" class="no-scaled-link" src="../_images/notebooks_LeidenLocalTutorial_27_0.png" style="width: 603px; height: 357px;" />
+<img alt="../_images/notebooks_LeidenLocalTutorial_29_0.png" class="no-scaled-link" src="../_images/notebooks_LeidenLocalTutorial_29_0.png" style="width: 603px; height: 357px;" />
 </div>
 </div>
 </section>

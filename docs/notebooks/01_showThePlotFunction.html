@@ -449,8 +449,17 @@ prefix=&#39;GitHub_testing&#39;
 </div>
 <section id="Load-the-data">
 <h2>Load the data<a class="headerlink" href="#Load-the-data" title="Link to this heading">#</a></h2>
-<p>The 20k subsampled snRNA-seq data from Allen SEA-AD project is available in google drive: <a class="reference external" href="https://drive.google.com/file/d/1nH-CRaTQFxJ5pAVpy8_hUQn1nrIcakq2/view?usp=drive_link">https://drive.google.com/file/d/1nH-CRaTQFxJ5pAVpy8_hUQn1nrIcakq2/view?usp=drive_link</a>.</p>
-<p>The original data is available in <a class="reference external" href="https://portal.brain-map.org/explore/seattle-alzheimers-disease">https://portal.brain-map.org/explore/seattle-alzheimers-disease</a>.</p>
+<p>Let us load a 20k subsampled version of the Seattle Alzheimer’s Disease Brain Cell Atlas (SEA-AD) project dataset described in detail in <a class="reference external" href="../references.html#cell1">Gabitto et. al. (2024)</a>. We will be using the scRNA-seq data from the dataset in this tutorial.</p>
+<p>Download the subsampled dataset from Google Drive: <a class="reference external" href="https://drive.google.com/file/d/1EdRA0ECvPlEnNaOzKqj19GrEtucB7hmE/view?usp=drive_link">https://drive.google.com/file/d/1EdRA0ECvPlEnNaOzKqj19GrEtucB7hmE/view?usp=drive_link</a></p>
+<p>The original data is available on <a class="reference external" href="https://portal.brain-map.org/explore/seattle-alzheimers-disease">https://portal.brain-map.org/explore/seattle-alzheimers-disease</a>.</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>!/home/vas744/Software/gdrive files download --destination /home/vas744/Data/Public/PIASO 1EdRA0ECvPlEnNaOzKqj19GrEtucB7hmE
+</pre></div>
+</div>
+</div>
 <div class="nbinput nblast docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[5]:
 </pre></div>
@@ -506,7 +515,7 @@ AnnData object with n_obs × n_vars = 20000 × 36601
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/notebooks_01_showThePlotFunction_11_0.png" class="no-scaled-link" src="../_images/notebooks_01_showThePlotFunction_11_0.png" style="width: 522px; height: 284px;" />
+<img alt="../_images/notebooks_01_showThePlotFunction_12_0.png" class="no-scaled-link" src="../_images/notebooks_01_showThePlotFunction_12_0.png" style="width: 522px; height: 284px;" />
 </div>
 </div>
 <div class="nbinput docutils container">
@@ -531,7 +540,7 @@ AnnData object with n_obs × n_vars = 20000 × 36601
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/notebooks_01_showThePlotFunction_12_0.png" class="no-scaled-link" src="../_images/notebooks_01_showThePlotFunction_12_0.png" style="width: 265px; height: 277px;" />
+<img alt="../_images/notebooks_01_showThePlotFunction_13_0.png" class="no-scaled-link" src="../_images/notebooks_01_showThePlotFunction_13_0.png" style="width: 265px; height: 277px;" />
 </div>
 </div>
 </section>
@@ -557,7 +566,7 @@ AnnData object with n_obs × n_vars = 20000 × 36601
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/notebooks_01_showThePlotFunction_14_0.png" class="no-scaled-link" src="../_images/notebooks_01_showThePlotFunction_14_0.png" style="width: 645px; height: 567px;" />
+<img alt="../_images/notebooks_01_showThePlotFunction_15_0.png" class="no-scaled-link" src="../_images/notebooks_01_showThePlotFunction_15_0.png" style="width: 645px; height: 567px;" />
 </div>
 </div>
 <div class="nbinput docutils container">
@@ -579,7 +588,7 @@ AnnData object with n_obs × n_vars = 20000 × 36601
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/notebooks_01_showThePlotFunction_15_0.png" class="no-scaled-link" src="../_images/notebooks_01_showThePlotFunction_15_0.png" style="width: 645px; height: 567px;" />
+<img alt="../_images/notebooks_01_showThePlotFunction_16_0.png" class="no-scaled-link" src="../_images/notebooks_01_showThePlotFunction_16_0.png" style="width: 645px; height: 567px;" />
 </div>
 </div>
 </section>
@@ -632,7 +641,7 @@ AnnData object with n_obs × n_vars = 20000 × 36601
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/notebooks_01_showThePlotFunction_20_0.png" class="no-scaled-link" src="../_images/notebooks_01_showThePlotFunction_20_0.png" style="width: 348px; height: 277px;" />
+<img alt="../_images/notebooks_01_showThePlotFunction_21_0.png" class="no-scaled-link" src="../_images/notebooks_01_showThePlotFunction_21_0.png" style="width: 348px; height: 277px;" />
 </div>
 </div>
 <section id="Visualizing-the-expression-of-a-specific-gene-across-two-different-experimental-conditions">
@@ -656,7 +665,7 @@ AnnData object with n_obs × n_vars = 20000 × 36601
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/notebooks_01_showThePlotFunction_22_0.png" class="no-scaled-link" src="../_images/notebooks_01_showThePlotFunction_22_0.png" style="width: 669px; height: 310px;" />
+<img alt="../_images/notebooks_01_showThePlotFunction_23_0.png" class="no-scaled-link" src="../_images/notebooks_01_showThePlotFunction_23_0.png" style="width: 669px; height: 310px;" />
 </div>
 </div>
 <div class="nbinput docutils container">
@@ -678,7 +687,7 @@ AnnData object with n_obs × n_vars = 20000 × 36601
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/notebooks_01_showThePlotFunction_23_0.png" class="no-scaled-link" src="../_images/notebooks_01_showThePlotFunction_23_0.png" style="width: 678px; height: 310px;" />
+<img alt="../_images/notebooks_01_showThePlotFunction_24_0.png" class="no-scaled-link" src="../_images/notebooks_01_showThePlotFunction_24_0.png" style="width: 678px; height: 310px;" />
 </div>
 </div>
 </section>
@@ -703,7 +712,7 @@ AnnData object with n_obs × n_vars = 20000 × 36601
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/notebooks_01_showThePlotFunction_25_0.png" class="no-scaled-link" src="../_images/notebooks_01_showThePlotFunction_25_0.png" style="width: 699px; height: 301px;" />
+<img alt="../_images/notebooks_01_showThePlotFunction_26_0.png" class="no-scaled-link" src="../_images/notebooks_01_showThePlotFunction_26_0.png" style="width: 699px; height: 301px;" />
 </div>
 </div>
 </section>
@@ -726,7 +735,7 @@ AnnData object with n_obs × n_vars = 20000 × 36601
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/notebooks_01_showThePlotFunction_27_0.png" class="no-scaled-link" src="../_images/notebooks_01_showThePlotFunction_27_0.png" style="width: 1033px; height: 381px;" />
+<img alt="../_images/notebooks_01_showThePlotFunction_28_0.png" class="no-scaled-link" src="../_images/notebooks_01_showThePlotFunction_28_0.png" style="width: 1033px; height: 381px;" />
 </div>
 </div>
 <p>We can visualize these cell subclasses alongside the subclass legend. To enhance clarity, the ncol parameter can be used to adjust the number of subplots per row.</p>
@@ -748,7 +757,7 @@ AnnData object with n_obs × n_vars = 20000 × 36601
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/notebooks_01_showThePlotFunction_29_0.png" class="no-scaled-link" src="../_images/notebooks_01_showThePlotFunction_29_0.png" style="width: 639px; height: 781px;" />
+<img alt="../_images/notebooks_01_showThePlotFunction_30_0.png" class="no-scaled-link" src="../_images/notebooks_01_showThePlotFunction_30_0.png" style="width: 639px; height: 781px;" />
 </div>
 </div>
 <div class="nbinput docutils container">
@@ -772,7 +781,7 @@ AnnData object with n_obs × n_vars = 20000 × 36601
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/notebooks_01_showThePlotFunction_30_0.png" class="no-scaled-link" src="../_images/notebooks_01_showThePlotFunction_30_0.png" style="width: 640px; height: 319px;" />
+<img alt="../_images/notebooks_01_showThePlotFunction_31_0.png" class="no-scaled-link" src="../_images/notebooks_01_showThePlotFunction_31_0.png" style="width: 640px; height: 319px;" />
 </div>
 </div>
 </section>
@@ -797,7 +806,7 @@ AnnData object with n_obs × n_vars = 20000 × 36601
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/notebooks_01_showThePlotFunction_32_0.png" class="no-scaled-link" src="../_images/notebooks_01_showThePlotFunction_32_0.png" style="width: 593px; height: 854px;" />
+<img alt="../_images/notebooks_01_showThePlotFunction_33_0.png" class="no-scaled-link" src="../_images/notebooks_01_showThePlotFunction_33_0.png" style="width: 593px; height: 854px;" />
 </div>
 </div>
 <p>Adding the horizontal grid line</p>
@@ -817,7 +826,7 @@ AnnData object with n_obs × n_vars = 20000 × 36601
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/notebooks_01_showThePlotFunction_34_0.png" class="no-scaled-link" src="../_images/notebooks_01_showThePlotFunction_34_0.png" style="width: 593px; height: 854px;" />
+<img alt="../_images/notebooks_01_showThePlotFunction_35_0.png" class="no-scaled-link" src="../_images/notebooks_01_showThePlotFunction_35_0.png" style="width: 593px; height: 854px;" />
 </div>
 </div>
 <p>The height and widhts of these plots can be adjusted according to the number of features and groups you have for better visualization.</p>
@@ -838,7 +847,7 @@ AnnData object with n_obs × n_vars = 20000 × 36601
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/notebooks_01_showThePlotFunction_36_0.png" class="no-scaled-link" src="../_images/notebooks_01_showThePlotFunction_36_0.png" style="width: 1342px; height: 1067px;" />
+<img alt="../_images/notebooks_01_showThePlotFunction_37_0.png" class="no-scaled-link" src="../_images/notebooks_01_showThePlotFunction_37_0.png" style="width: 1342px; height: 1067px;" />
 </div>
 </div>
 </section>
@@ -861,7 +870,7 @@ AnnData object with n_obs × n_vars = 20000 × 36601
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/notebooks_01_showThePlotFunction_39_0.png" class="no-scaled-link" src="../_images/notebooks_01_showThePlotFunction_39_0.png" style="width: 335px; height: 216px;" />
+<img alt="../_images/notebooks_01_showThePlotFunction_40_0.png" class="no-scaled-link" src="../_images/notebooks_01_showThePlotFunction_40_0.png" style="width: 335px; height: 216px;" />
 </div>
 </div>
 <p>We can visualize the distributions of the cells across various features together.</p>
@@ -882,7 +891,7 @@ AnnData object with n_obs × n_vars = 20000 × 36601
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/notebooks_01_showThePlotFunction_41_0.png" class="no-scaled-link" src="../_images/notebooks_01_showThePlotFunction_41_0.png" style="width: 344px; height: 514px;" />
+<img alt="../_images/notebooks_01_showThePlotFunction_42_0.png" class="no-scaled-link" src="../_images/notebooks_01_showThePlotFunction_42_0.png" style="width: 344px; height: 514px;" />
 </div>
 </div>
 </section>
@@ -909,7 +918,7 @@ AnnData object with n_obs × n_vars = 20000 × 36601
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/notebooks_01_showThePlotFunction_43_0.png" class="no-scaled-link" src="../_images/notebooks_01_showThePlotFunction_43_0.png" style="width: 669px; height: 310px;" />
+<img alt="../_images/notebooks_01_showThePlotFunction_44_0.png" class="no-scaled-link" src="../_images/notebooks_01_showThePlotFunction_44_0.png" style="width: 669px; height: 310px;" />
 </div>
 </div>
 <div class="nboutput nblast docutils container">
@@ -938,7 +947,7 @@ Figure saved to:  ./PIASO_UMAP_split_by_condition.pdf
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/notebooks_01_showThePlotFunction_44_0.png" class="no-scaled-link" src="../_images/notebooks_01_showThePlotFunction_44_0.png" style="width: 593px; height: 854px;" />
+<img alt="../_images/notebooks_01_showThePlotFunction_45_0.png" class="no-scaled-link" src="../_images/notebooks_01_showThePlotFunction_45_0.png" style="width: 593px; height: 854px;" />
 </div>
 </div>
 <div class="nboutput nblast docutils container">
@@ -998,7 +1007,7 @@ Figure saved to: ./violin_plot_piaso.pdf
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/notebooks_01_showThePlotFunction_50_0.png" class="no-scaled-link" src="../_images/notebooks_01_showThePlotFunction_50_0.png" style="width: 1293px; height: 330px;" />
+<img alt="../_images/notebooks_01_showThePlotFunction_51_0.png" class="no-scaled-link" src="../_images/notebooks_01_showThePlotFunction_51_0.png" style="width: 1293px; height: 330px;" />
 </div>
 </div>
 <p>We can also switch the order in which we combine the categorical variables.</p>
@@ -1028,7 +1037,7 @@ Figure saved to: ./violin_plot_piaso.pdf
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/notebooks_01_showThePlotFunction_53_0.png" class="no-scaled-link" src="../_images/notebooks_01_showThePlotFunction_53_0.png" style="width: 1293px; height: 330px;" />
+<img alt="../_images/notebooks_01_showThePlotFunction_54_0.png" class="no-scaled-link" src="../_images/notebooks_01_showThePlotFunction_54_0.png" style="width: 1293px; height: 330px;" />
 </div>
 </div>
 </section>

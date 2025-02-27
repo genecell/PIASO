@@ -453,11 +453,11 @@ import piaso
 <h2>Load the data<a class="headerlink" href="#Load-the-data" title="Link to this heading">#</a></h2>
 <section id="Load-the-reference-dataset">
 <h3>Load the reference dataset<a class="headerlink" href="#Load-the-reference-dataset" title="Link to this heading">#</a></h3>
-<p>We will use the 20k subsampled version of the Seattle Alzheimer’s Disease Brain Cell Atlas (SEA-AD) project dataset described in detail in <a class="reference external" href="../references.html#cell1">Gabitto et. al. (2024)</a>, as the reference dataset. We will be using the scRNA-seq data from the dataset in this tutorial. Please refer to the “Introduction to PIASO” tutorial to learn more about how it was preprocessed and normalized.</p>
+<p>We will use the 20k subsampled version of the Seattle Alzheimer’s Disease Brain Cell Atlas (SEA-AD) project dataset described in detail in <a class="reference external" href="../references.html#cell1">Gabitto et. al. (2024)</a>, as the reference dataset. We will be using the scRNA-seq data from the dataset in this tutorial. Please refer to the <a class="reference external" href="./PIASO_tutorial.html">Introduction</a> tutorial to learn more about how it was preprocessed and normalized.</p>
 <p>Download the subsampled, pre-processed dataset from Google Drive: <a class="reference external" href="https://drive.google.com/file/d/1pDBIgPvEO-sBuIMEhrvVhnf7tfU7H6Xy/view?usp=drive_link">https://drive.google.com/file/d/1pDBIgPvEO-sBuIMEhrvVhnf7tfU7H6Xy/view?usp=drive_link</a></p>
 <p>The original data is available on <a class="reference external" href="https://portal.brain-map.org/explore/seattle-alzheimers-disease">https://portal.brain-map.org/explore/seattle-alzheimers-disease</a></p>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[4]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[3]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>data_dir = &quot;/n/scratch/users/v/vas744/Data/Public/PIASO&quot;
@@ -481,27 +481,27 @@ Downloading SEA-AD_RNA_MTG_subsample_excludeReference_20k_piaso_preprocessed.h5a
 </pre></div></div>
 </div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[5]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[4]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>ref_adata=sc.read(data_dir + &#39;/SEA-AD_RNA_MTG_subsample_excludeReference_20k_piaso.h5ad&#39;)
-ref_adata.layers[&#39;log1p&#39;]=ref_adata.X
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>ref_adata=sc.read(data_dir + &#39;/SEA-AD_RNA_MTG_subsample_excludeReference_20k_piaso_preprocessed.h5ad&#39;)
+
 ref_adata
 </pre></div>
 </div>
 </div>
 <div class="nboutput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[5]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[4]:
 </pre></div>
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
 AnnData object with n_obs × n_vars = 20000 × 36601
-    obs: &#39;sample_id&#39;, &#39;Neurotypical reference&#39;, &#39;Donor ID&#39;, &#39;Organism&#39;, &#39;Brain Region&#39;, &#39;Sex&#39;, &#39;Gender&#39;, &#39;Age at Death&#39;, &#39;Race (choice=White)&#39;, &#39;Race (choice=Black/ African American)&#39;, &#39;Race (choice=Asian)&#39;, &#39;Race (choice=American Indian/ Alaska Native)&#39;, &#39;Race (choice=Native Hawaiian or Pacific Islander)&#39;, &#39;Race (choice=Unknown or unreported)&#39;, &#39;Race (choice=Other)&#39;, &#39;specify other race&#39;, &#39;Hispanic/Latino&#39;, &#39;Highest level of education&#39;, &#39;Years of education&#39;, &#39;PMI&#39;, &#39;Fresh Brain Weight&#39;, &#39;Brain pH&#39;, &#39;Overall AD neuropathological Change&#39;, &#39;Thal&#39;, &#39;Braak&#39;, &#39;CERAD score&#39;, &#39;Overall CAA Score&#39;, &#39;Highest Lewy Body Disease&#39;, &#39;Total Microinfarcts (not observed grossly)&#39;, &#39;Total microinfarcts in screening sections&#39;, &#39;Atherosclerosis&#39;, &#39;Arteriolosclerosis&#39;, &#39;LATE&#39;, &#39;Cognitive Status&#39;, &#39;Last CASI Score&#39;, &#39;Interval from last CASI in months&#39;, &#39;Last MMSE Score&#39;, &#39;Interval from last MMSE in months&#39;, &#39;Last MOCA Score&#39;, &#39;Interval from last MOCA in months&#39;, &#39;APOE Genotype&#39;, &#39;Primary Study Name&#39;, &#39;Secondary Study Name&#39;, &#39;NeuN positive fraction on FANS&#39;, &#39;RIN&#39;, &#39;cell_prep_type&#39;, &#39;facs_population_plan&#39;, &#39;rna_amplification&#39;, &#39;sample_name&#39;, &#39;sample_quantity_count&#39;, &#39;expc_cell_capture&#39;, &#39;method&#39;, &#39;pcr_cycles&#39;, &#39;percent_cdna_longer_than_400bp&#39;, &#39;rna_amplification_pass_fail&#39;, &#39;amplified_quantity_ng&#39;, &#39;load_name&#39;, &#39;library_prep&#39;, &#39;library_input_ng&#39;, &#39;r1_index&#39;, &#39;avg_size_bp&#39;, &#39;quantification_fmol&#39;, &#39;library_prep_pass_fail&#39;, &#39;exp_component_vendor_name&#39;, &#39;batch_vendor_name&#39;, &#39;experiment_component_failed&#39;, &#39;alignment&#39;, &#39;Genome&#39;, &#39;ar_id&#39;, &#39;bc&#39;, &#39;GEX_Estimated_number_of_cells&#39;, &#39;GEX_number_of_reads&#39;, &#39;GEX_sequencing_saturation&#39;, &#39;GEX_Mean_raw_reads_per_cell&#39;, &#39;GEX_Q30_bases_in_barcode&#39;, &#39;GEX_Q30_bases_in_read_2&#39;, &#39;GEX_Q30_bases_in_UMI&#39;, &#39;GEX_Percent_duplicates&#39;, &#39;GEX_Q30_bases_in_sample_index_i1&#39;, &#39;GEX_Q30_bases_in_sample_index_i2&#39;, &#39;GEX_Reads_with_TSO&#39;, &#39;GEX_Sequenced_read_pairs&#39;, &#39;GEX_Valid_UMIs&#39;, &#39;GEX_Valid_barcodes&#39;, &#39;GEX_Reads_mapped_to_genome&#39;, &#39;GEX_Reads_mapped_confidently_to_genome&#39;, &#39;GEX_Reads_mapped_confidently_to_intergenic_regions&#39;, &#39;GEX_Reads_mapped_confidently_to_intronic_regions&#39;, &#39;GEX_Reads_mapped_confidently_to_exonic_regions&#39;, &#39;GEX_Reads_mapped_confidently_to_transcriptome&#39;, &#39;GEX_Reads_mapped_antisense_to_gene&#39;, &#39;GEX_Fraction_of_transcriptomic_reads_in_cells&#39;, &#39;GEX_Total_genes_detected&#39;, &#39;GEX_Median_UMI_counts_per_cell&#39;, &#39;GEX_Median_genes_per_cell&#39;, &#39;Multiome_Feature_linkages_detected&#39;, &#39;Multiome_Linked_genes&#39;, &#39;Multiome_Linked_peaks&#39;, &#39;ATAC_Confidently_mapped_read_pairs&#39;, &#39;ATAC_Fraction_of_genome_in_peaks&#39;, &#39;ATAC_Fraction_of_high_quality_fragments_in_cells&#39;, &#39;ATAC_Fraction_of_high_quality_fragments_overlapping_TSS&#39;, &#39;ATAC_Fraction_of_high_quality_fragments_overlapping_peaks&#39;, &#39;ATAC_Fraction_of_transposition_events_in_peaks_in_cells&#39;, &#39;ATAC_Mean_raw_read_pairs_per_cell&#39;, &#39;ATAC_Median_high_quality_fragments_per_cell&#39;, &#39;ATAC_Non-nuclear_read_pairs&#39;, &#39;ATAC_Number_of_peaks&#39;, &#39;ATAC_Percent_duplicates&#39;, &#39;ATAC_Q30_bases_in_barcode&#39;, &#39;ATAC_Q30_bases_in_read_1&#39;, &#39;ATAC_Q30_bases_in_read_2&#39;, &#39;ATAC_Q30_bases_in_sample_index_i1&#39;, &#39;ATAC_Sequenced_read_pairs&#39;, &#39;ATAC_TSS_enrichment_score&#39;, &#39;ATAC_Unmapped_read_pairs&#39;, &#39;ATAC_Valid_barcodes&#39;, &#39;Number of mapped reads&#39;, &#39;Number of unmapped reads&#39;, &#39;Number of multimapped reads&#39;, &#39;Number of reads&#39;, &#39;Number of UMIs&#39;, &#39;Genes detected&#39;, &#39;Doublet score&#39;, &#39;Fraction mitochondrial UMIs&#39;, &#39;Used in analysis&#39;, &#39;Class confidence&#39;, &#39;Class&#39;, &#39;Subclass confidence&#39;, &#39;Subclass&#39;, &#39;Supertype confidence&#39;, &#39;Supertype (non-expanded)&#39;, &#39;Supertype&#39;, &#39;Continuous Pseudo-progression Score&#39;, &#39;Severely Affected Donor&#39;
-    var: &#39;gene_ids&#39;
-    uns: &#39;APOE4 Status_colors&#39;, &#39;Braak_colors&#39;, &#39;CERAD score_colors&#39;, &#39;Cognitive Status_colors&#39;, &#39;Great Apes Metadata&#39;, &#39;Highest Lewy Body Disease_colors&#39;, &#39;LATE_colors&#39;, &#39;Overall AD neuropathological Change_colors&#39;, &#39;Sex_colors&#39;, &#39;Subclass_colors&#39;, &#39;Supertype_colors&#39;, &#39;Thal_colors&#39;, &#39;UW Clinical Metadata&#39;, &#39;X_normalization&#39;, &#39;batch_condition&#39;, &#39;default_embedding&#39;, &#39;neighbors&#39;, &#39;title&#39;, &#39;umap&#39;
-    obsm: &#39;X_scVI&#39;, &#39;X_umap&#39;
-    layers: &#39;UMIs&#39;, &#39;log1p&#39;
+    obs: &#39;sample_id&#39;, &#39;Neurotypical reference&#39;, &#39;Donor ID&#39;, &#39;Organism&#39;, &#39;Brain Region&#39;, &#39;Sex&#39;, &#39;Gender&#39;, &#39;Age at Death&#39;, &#39;Race (choice=White)&#39;, &#39;Race (choice=Black/ African American)&#39;, &#39;Race (choice=Asian)&#39;, &#39;Race (choice=American Indian/ Alaska Native)&#39;, &#39;Race (choice=Native Hawaiian or Pacific Islander)&#39;, &#39;Race (choice=Unknown or unreported)&#39;, &#39;Race (choice=Other)&#39;, &#39;specify other race&#39;, &#39;Hispanic/Latino&#39;, &#39;Highest level of education&#39;, &#39;Years of education&#39;, &#39;PMI&#39;, &#39;Fresh Brain Weight&#39;, &#39;Brain pH&#39;, &#39;Overall AD neuropathological Change&#39;, &#39;Thal&#39;, &#39;Braak&#39;, &#39;CERAD score&#39;, &#39;Overall CAA Score&#39;, &#39;Highest Lewy Body Disease&#39;, &#39;Total Microinfarcts (not observed grossly)&#39;, &#39;Total microinfarcts in screening sections&#39;, &#39;Atherosclerosis&#39;, &#39;Arteriolosclerosis&#39;, &#39;LATE&#39;, &#39;Cognitive Status&#39;, &#39;Last CASI Score&#39;, &#39;Interval from last CASI in months&#39;, &#39;Last MMSE Score&#39;, &#39;Interval from last MMSE in months&#39;, &#39;Last MOCA Score&#39;, &#39;Interval from last MOCA in months&#39;, &#39;APOE Genotype&#39;, &#39;Primary Study Name&#39;, &#39;Secondary Study Name&#39;, &#39;NeuN positive fraction on FANS&#39;, &#39;RIN&#39;, &#39;cell_prep_type&#39;, &#39;facs_population_plan&#39;, &#39;rna_amplification&#39;, &#39;sample_name&#39;, &#39;sample_quantity_count&#39;, &#39;expc_cell_capture&#39;, &#39;method&#39;, &#39;pcr_cycles&#39;, &#39;percent_cdna_longer_than_400bp&#39;, &#39;rna_amplification_pass_fail&#39;, &#39;amplified_quantity_ng&#39;, &#39;load_name&#39;, &#39;library_prep&#39;, &#39;library_input_ng&#39;, &#39;r1_index&#39;, &#39;avg_size_bp&#39;, &#39;quantification_fmol&#39;, &#39;library_prep_pass_fail&#39;, &#39;exp_component_vendor_name&#39;, &#39;batch_vendor_name&#39;, &#39;experiment_component_failed&#39;, &#39;alignment&#39;, &#39;Genome&#39;, &#39;ar_id&#39;, &#39;bc&#39;, &#39;GEX_Estimated_number_of_cells&#39;, &#39;GEX_number_of_reads&#39;, &#39;GEX_sequencing_saturation&#39;, &#39;GEX_Mean_raw_reads_per_cell&#39;, &#39;GEX_Q30_bases_in_barcode&#39;, &#39;GEX_Q30_bases_in_read_2&#39;, &#39;GEX_Q30_bases_in_UMI&#39;, &#39;GEX_Percent_duplicates&#39;, &#39;GEX_Q30_bases_in_sample_index_i1&#39;, &#39;GEX_Q30_bases_in_sample_index_i2&#39;, &#39;GEX_Reads_with_TSO&#39;, &#39;GEX_Sequenced_read_pairs&#39;, &#39;GEX_Valid_UMIs&#39;, &#39;GEX_Valid_barcodes&#39;, &#39;GEX_Reads_mapped_to_genome&#39;, &#39;GEX_Reads_mapped_confidently_to_genome&#39;, &#39;GEX_Reads_mapped_confidently_to_intergenic_regions&#39;, &#39;GEX_Reads_mapped_confidently_to_intronic_regions&#39;, &#39;GEX_Reads_mapped_confidently_to_exonic_regions&#39;, &#39;GEX_Reads_mapped_confidently_to_transcriptome&#39;, &#39;GEX_Reads_mapped_antisense_to_gene&#39;, &#39;GEX_Fraction_of_transcriptomic_reads_in_cells&#39;, &#39;GEX_Total_genes_detected&#39;, &#39;GEX_Median_UMI_counts_per_cell&#39;, &#39;GEX_Median_genes_per_cell&#39;, &#39;Multiome_Feature_linkages_detected&#39;, &#39;Multiome_Linked_genes&#39;, &#39;Multiome_Linked_peaks&#39;, &#39;ATAC_Confidently_mapped_read_pairs&#39;, &#39;ATAC_Fraction_of_genome_in_peaks&#39;, &#39;ATAC_Fraction_of_high_quality_fragments_in_cells&#39;, &#39;ATAC_Fraction_of_high_quality_fragments_overlapping_TSS&#39;, &#39;ATAC_Fraction_of_high_quality_fragments_overlapping_peaks&#39;, &#39;ATAC_Fraction_of_transposition_events_in_peaks_in_cells&#39;, &#39;ATAC_Mean_raw_read_pairs_per_cell&#39;, &#39;ATAC_Median_high_quality_fragments_per_cell&#39;, &#39;ATAC_Non-nuclear_read_pairs&#39;, &#39;ATAC_Number_of_peaks&#39;, &#39;ATAC_Percent_duplicates&#39;, &#39;ATAC_Q30_bases_in_barcode&#39;, &#39;ATAC_Q30_bases_in_read_1&#39;, &#39;ATAC_Q30_bases_in_read_2&#39;, &#39;ATAC_Q30_bases_in_sample_index_i1&#39;, &#39;ATAC_Sequenced_read_pairs&#39;, &#39;ATAC_TSS_enrichment_score&#39;, &#39;ATAC_Unmapped_read_pairs&#39;, &#39;ATAC_Valid_barcodes&#39;, &#39;Number of mapped reads&#39;, &#39;Number of unmapped reads&#39;, &#39;Number of multimapped reads&#39;, &#39;Number of reads&#39;, &#39;Number of UMIs&#39;, &#39;Genes detected&#39;, &#39;Doublet score&#39;, &#39;Fraction mitochondrial UMIs&#39;, &#39;Used in analysis&#39;, &#39;Class confidence&#39;, &#39;Class&#39;, &#39;Subclass confidence&#39;, &#39;Subclass&#39;, &#39;Supertype confidence&#39;, &#39;Supertype (non-expanded)&#39;, &#39;Supertype&#39;, &#39;Continuous Pseudo-progression Score&#39;, &#39;Severely Affected Donor&#39;, &#39;n_genes&#39;, &#39;n_genes_by_counts&#39;, &#39;total_counts&#39;, &#39;total_counts_mt&#39;, &#39;pct_counts_mt&#39;, &#39;pct_counts_ribo&#39;
+    var: &#39;gene_ids&#39;, &#39;mt&#39;, &#39;n_cells_by_counts&#39;, &#39;mean_counts&#39;, &#39;pct_dropout_by_counts&#39;, &#39;total_counts&#39;, &#39;means&#39;, &#39;variances&#39;, &#39;residual_variances&#39;, &#39;highly_variable_rank&#39;, &#39;highly_variable&#39;
+    uns: &#39;APOE4 Status_colors&#39;, &#39;Braak_colors&#39;, &#39;CERAD score_colors&#39;, &#39;Cognitive Status_colors&#39;, &#39;Great Apes Metadata&#39;, &#39;Highest Lewy Body Disease_colors&#39;, &#39;LATE_colors&#39;, &#39;Overall AD neuropathological Change_colors&#39;, &#39;Sex_colors&#39;, &#39;Subclass_colors&#39;, &#39;Supertype_colors&#39;, &#39;Thal_colors&#39;, &#39;UW Clinical Metadata&#39;, &#39;X_normalization&#39;, &#39;batch_condition&#39;, &#39;default_embedding&#39;, &#39;hvg&#39;, &#39;log1p&#39;, &#39;neighbors&#39;, &#39;title&#39;, &#39;umap&#39;
+    obsm: &#39;X_scVI&#39;, &#39;X_svd&#39;, &#39;X_umap&#39;, &#39;X_umap_backup&#39;
+    layers: &#39;UMIs&#39;, &#39;log1p&#39;, &#39;raw&#39;
     obsp: &#39;connectivities&#39;, &#39;distances&#39;
 </pre></div></div>
 </div>
@@ -509,7 +509,7 @@ AnnData object with n_obs × n_vars = 20000 × 36601
 <section id="Load-the-query-dataset">
 <h3>Load the query dataset<a class="headerlink" href="#Load-the-query-dataset" title="Link to this heading">#</a></h3>
 <p>We will use a pre-processed Great Apes RNASeq data, particularly the human data subset as the query dataset for predicting cell types in this tutorial.</p>
-<p>Download the dataset from: <a class="reference external" href="https://drive.google.com/file/d/1B2YbVWCuVIh0987ZdNieZKdZ138X6zTY/view">https://drive.google.com/file/d/1B2YbVWCuVIh0987ZdNieZKdZ138X6zTY/view</a></p>
+<p>Download the dataset from: <a class="reference external" href="https://drive.google.com/file/d/1nF0iRTGFFQcEcM6hYcPptiYkxs65k2p4/view?usp=drive_link">https://drive.google.com/file/d/1nF0iRTGFFQcEcM6hYcPptiYkxs65k2p4/view?usp=drive_link</a></p>
 <div class="nbinput nblast docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
 </pre></div>
@@ -519,7 +519,7 @@ AnnData object with n_obs × n_vars = 20000 × 36601
 </div>
 </div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[6]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[5]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>aibs_query_adata = sc.read(data_dir + &quot;/GreatApesMTG_RNA_integrated_raw_onlyOrthogonal_gdr_humanSubset_aibs.h5ad&quot;)
@@ -528,7 +528,7 @@ aibs_query_adata
 </div>
 </div>
 <div class="nboutput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[6]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[5]:
 </pre></div>
 </div>
 <div class="output_area docutils container">
@@ -548,7 +548,7 @@ AnnData object with n_obs × n_vars = 76560 × 14346
 <h2>Visualize with UMAPs<a class="headerlink" href="#Visualize-with-UMAPs" title="Link to this heading">#</a></h2>
 <p>Reorder the query dataset categories to match the reference dataset categories</p>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[7]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[8]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>aibs_query_adata.obs[&#39;subclass&#39;]=aibs_query_adata.obs[&#39;subclass&#39;].astype(&#39;category&#39;)
@@ -557,13 +557,12 @@ aibs_query_adata.obs[&#39;subclass&#39;]=aibs_query_adata.obs[&#39;subclass&#39;
 </div>
 </div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[8]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[9]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(ref_adata,
            color=[&#39;Subclass&#39;],
            palette=piaso.pl.color.d_color4,
-           cmap=pos_cmap,
            ncols=1,
            size=10,
            frameon=True)
@@ -578,13 +577,12 @@ aibs_query_adata.obs[&#39;subclass&#39;]=aibs_query_adata.obs[&#39;subclass&#39;
 </div>
 </div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[9]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[10]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(aibs_query_adata,
            color=[&#39;subclass&#39;],
            palette=piaso.pl.color.d_color4,
-           cmap=pos_cmap,
            ncols=1,
            size=10,
            frameon=True)
@@ -602,7 +600,7 @@ aibs_query_adata.obs[&#39;subclass&#39;]=aibs_query_adata.obs[&#39;subclass&#39;
 <section id="Cluster-the-query-data">
 <h2>Cluster the query data<a class="headerlink" href="#Cluster-the-query-data" title="Link to this heading">#</a></h2>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[10]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[11]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>%%time
@@ -617,13 +615,13 @@ sc.tl.leiden(aibs_query_adata,resolution=0.2,key_added=&#39;Leiden&#39;,flavor=&
 <div class="highlight"><pre>
 running Leiden clustering
     finished: found 26 clusters and added
-    &#39;Leiden&#39;, the cluster labels (adata.obs, categorical) (0:00:05)
-CPU times: user 4.91 s, sys: 353 ms, total: 5.27 s
-Wall time: 5.25 s
+    &#39;Leiden&#39;, the cluster labels (adata.obs, categorical) (0:00:09)
+CPU times: user 4.49 s, sys: 254 ms, total: 4.74 s
+Wall time: 9.14 s
 </pre></div></div>
 </div>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[11]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[12]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>logging.getLogger(&#39;matplotlib.font_manager&#39;).disabled = True
@@ -631,13 +629,12 @@ Wall time: 5.25 s
 </div>
 </div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[12]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[13]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(aibs_query_adata,
            color=[&#39;Leiden&#39;],
            palette=piaso.pl.color.d_color4,
-           cmap=pos_cmap,
            legend_fontsize=12,
            legend_fontoutline=2,
            legend_loc=&#39;on data&#39;,
@@ -658,7 +655,7 @@ Wall time: 5.25 s
 <section id="Predict-cell-types-by-GDR">
 <h2>Predict cell types by GDR<a class="headerlink" href="#Predict-cell-types-by-GDR" title="Link to this heading">#</a></h2>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[13]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[14]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>piaso.tl.predictCellTypeByGDR(
@@ -687,7 +684,7 @@ Wall time: 5.25 s
 </div>
 <div class="output_area stderr docutils container">
 <div class="highlight"><pre>
-/home/vas744/Analysis/Python/Packages/PIASO/piaso/tools/_runGDR.py:839: FutureWarning: Use anndata.concat instead of AnnData.concatenate, AnnData.concatenate is deprecated and will be removed in the future. See the tutorial for concat at: https://anndata.readthedocs.io/en/latest/concatenation.html
+/home/vas744/Analysis/Python/Packages/PIASO/piaso/tools/_runGDR.py:1623: FutureWarning: Use anndata.concat instead of AnnData.concatenate, AnnData.concatenate is deprecated and will be removed in the future. See the tutorial for concat at: https://anndata.readthedocs.io/en/latest/concatenation.html
   adata_combine=sc.AnnData.concatenate(adata_ref, adata[:,adata_ref.var_names])
 </pre></div></div>
 </div>
@@ -707,12 +704,14 @@ The cell embeddings calculated by GDR were saved as `X_gdr` in adata.obsm.
 </div>
 <div class="output_area stderr docutils container">
 <div class="highlight"><pre>
-2025-01-24 11:22:55,387 - harmonypy - INFO - Computing initial centroids with sklearn.KMeans...
-2025-01-24 11:23:05,018 - harmonypy - INFO - sklearn.KMeans initialization complete.
-2025-01-24 11:23:06,610 - harmonypy - INFO - Iteration 1 of 10
-2025-01-24 11:24:19,120 - harmonypy - INFO - Iteration 2 of 10
-2025-01-24 11:25:32,805 - harmonypy - INFO - Iteration 3 of 10
-2025-01-24 11:26:13,564 - harmonypy - INFO - Converged after 3 iterations
+2025-02-27 12:13:18,827 - harmonypy - INFO - Computing initial centroids with sklearn.KMeans...
+2025-02-27 12:13:52,026 - harmonypy - INFO - sklearn.KMeans initialization complete.
+2025-02-27 12:13:55,015 - harmonypy - INFO - Iteration 1 of 10
+2025-02-27 12:18:14,030 - harmonypy - INFO - Iteration 2 of 10
+2025-02-27 12:22:31,074 - harmonypy - INFO - Iteration 3 of 10
+2025-02-27 12:24:40,560 - harmonypy - INFO - Iteration 4 of 10
+2025-02-27 12:26:29,620 - harmonypy - INFO - Iteration 5 of 10
+2025-02-27 12:28:09,995 - harmonypy - INFO - Converged after 5 iterations
 </pre></div></div>
 </div>
 <div class="nboutput nblast docutils container">
@@ -726,7 +725,7 @@ All finished. The predicted cell types are saved as `CellTypes_gdr` in adata.obs
 </div>
 <p>Reorder the query dataset categories to match the reference dataset categories</p>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[14]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[15]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>aibs_query_adata.obs[&#39;CellTypes_gdr&#39;]=aibs_query_adata.obs[&#39;CellTypes_gdr&#39;].astype(&#39;category&#39;)
@@ -736,7 +735,7 @@ aibs_query_adata.obs[&#39;CellTypes_gdr&#39;]=aibs_query_adata.obs[&#39;CellType
 </div>
 <p>We can now visualize the predicted cell types from GDR using a UMAP and compare them with the UMAP of the true cell types.</p>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[15]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[16]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.embedding(aibs_query_adata,
@@ -759,7 +758,7 @@ aibs_query_adata.obs[&#39;CellTypes_gdr&#39;]=aibs_query_adata.obs[&#39;CellType
 </div>
 <p>Since we know the real subclass of the test data, we can test the performance of predictCellTypeByGDR by comparing predicted celltypes and true subclasses.</p>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[16]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[17]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>confusion_matrix = metrics.confusion_matrix(aibs_query_adata.obs[&#39;subclass&#39;].values, aibs_query_adata.obs[&#39;CellTypes_gdr&#39;].values)
@@ -768,7 +767,7 @@ confusion_matrix_df = pd.DataFrame(confusion_matrix, columns=aibs_query_adata.ob
 </div>
 </div>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[17]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[18]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>normalized_cf_matrix_df = confusion_matrix_df/confusion_matrix_df.sum(axis=0)
@@ -776,7 +775,7 @@ confusion_matrix_df = pd.DataFrame(confusion_matrix, columns=aibs_query_adata.ob
 </div>
 </div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[18]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[19]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sns.set_style(&quot;whitegrid&quot;, {&#39;axes.grid&#39; : False})

@@ -76,12 +76,24 @@
   },
   {
    "cell_type": "markdown",
-   "id": "c0a1fb8a-b90f-474f-98d1-741d2d2582b7",
+   "id": "330b8939-c151-4c3b-812c-604e51a1b91f",
    "metadata": {},
    "source": [
-    "The 20k subsampled snRNA-seq data from Allen SEA-AD project is available in google drive: https://drive.google.com/file/d/1nH-CRaTQFxJ5pAVpy8_hUQn1nrIcakq2/view?usp=drive_link.\n",
+    "Let us load a 20k subsampled version of the Seattle Alzheimer’s Disease Brain Cell Atlas (SEA-AD) project dataset described in detail in [Gabitto et. al. (2024)](../references.html#cell1). We will be using the scRNA-seq data from the dataset in this tutorial. \n",
     "\n",
-    "The original data is available in https://portal.brain-map.org/explore/seattle-alzheimers-disease."
+    "Download the subsampled dataset from Google Drive: https://drive.google.com/file/d/1EdRA0ECvPlEnNaOzKqj19GrEtucB7hmE/view?usp=drive_link\n",
+    "\n",
+    "The original data is available on https://portal.brain-map.org/explore/seattle-alzheimers-disease."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "0778efeb-d27c-46a0-9fa1-e380413c0efd",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "!/home/vas744/Software/gdrive files download --destination /home/vas744/Data/Public/PIASO 1EdRA0ECvPlEnNaOzKqj19GrEtucB7hmE"
    ]
   },
   {
@@ -270,9 +282,9 @@
  ],
  "metadata": {
   "kernelspec": {
-   "display_name": "Python [conda env:miniconda3-vvs]",
+   "display_name": "Python 3 (ipykernel)",
    "language": "python",
-   "name": "conda-env-miniconda3-vvs-py"
+   "name": "python3"
   },
   "language_info": {
    "codemirror_mode": {
@@ -284,7 +296,7 @@
    "name": "python",
    "nbconvert_exporter": "python",
    "pygments_lexer": "ipython3",
-   "version": "3.9.20"
+   "version": "3.12.6"
   }
  },
  "nbformat": 4,

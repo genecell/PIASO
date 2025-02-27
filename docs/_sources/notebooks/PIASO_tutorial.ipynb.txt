@@ -91,27 +91,19 @@
     "\n",
     "Let us load a 20k subsampled version of the Seattle Alzheimer’s Disease Brain Cell Atlas (SEA-AD) project dataset described in detail in [Gabitto et. al. (2024)](../references.html#cell1). We will be using the scRNA-seq data from the dataset in this tutorial. \n",
     "\n",
-    "Download the subsampled dataset from Google Drive: https://drive.google.com/file/d/1nH-CRaTQFxJ5pAVpy8_hUQn1nrIcakq2/view?usp=drive_link\n",
+    "Download the subsampled dataset from Google Drive: https://drive.google.com/file/d/1EdRA0ECvPlEnNaOzKqj19GrEtucB7hmE/view?usp=drive_link\n",
     "\n",
     "The original data is available on https://portal.brain-map.org/explore/seattle-alzheimers-disease."
    ]
   },
   {
    "cell_type": "code",
-   "execution_count": 5,
+   "execution_count": null,
    "id": "0a4226ee-99c7-4c19-a27b-216f08ec6c37",
    "metadata": {},
-   "outputs": [
-    {
-     "name": "stdout",
-     "output_type": "stream",
-     "text": [
-      "/bin/bash: /home/vas744/Software/gdrive: No such file or directory\n"
-     ]
-    }
-   ],
+   "outputs": [],
    "source": [
-    "!/home/vas744/Software/gdrive files download --destination /home/vas744/Data/Public/PIASO 1nH-CRaTQFxJ5pAVpy8_hUQn1nrIcakq2"
+    "!/home/vas744/Software/gdrive files download --destination /home/vas744/Data/Public/PIASO 1EdRA0ECvPlEnNaOzKqj19GrEtucB7hmE"
    ]
   },
   {
