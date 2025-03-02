@@ -13,7 +13,8 @@ def runSVD(
     random_state: Optional[int] = 10, 
     scale_data: bool = False,
     key_added: str = 'X_svd',
-    layer: Optional[str] = None
+    layer: Optional[str] = None,
+    verbosity: int = 0
 ):
     """
     Performs Truncated Singular Value Decomposition (SVD) on the specified gene expression matrix (adata.X or a specified layer)
@@ -35,6 +36,8 @@ def runSVD(
         The key under which the resulting cell embeddings are stored in `adata.obsm`.
     layer : str, optional, default=None
         Specifies which layer of `adata` to use for the transformation. If None, `adata.X` is used.
+    verbosity : int, optional, default=0
+        Controls the verbosity of logging messages.
 
     Returns
     -------
@@ -73,8 +76,9 @@ def runSVD(
     
     transformer = TruncatedSVD(n_components=n_components, random_state=random_state)
     adata.obsm[key_added] = transformer.fit_transform(expr)
-
-
+    
+    if verbosity>0:
+        print(f'The cell embeddings were saved as `{key_added}` in adata.obsm.')
     
 ##### Run SVD in a lazy mode
 from anndata import AnnData
@@ -86,23 +90,77 @@ from typing import Iterable, Union, Optional
 from sklearn.decomposition import TruncatedSVD
 from sklearn.preprocessing import StandardScaler
 
-### Run pca in lazy mode
+### Run SVD in lazy mode
 def runSVDLazy(
     adata,
-    copy:bool=False,
-    n_components:int=50,
-    n_top_genes: int=3000,
-    use_highly_variable: bool=True,
-    verbosity: int=0,
-    batch_key: str=None,
-    random_state: Optional[int] = 10, 
+    copy: bool = False,
+    n_components: int = 50,
+    use_highly_variable: bool = True,
+    n_top_genes: int = 3000,
+    verbosity: int = 0,
+    batch_key: Optional[str] = None,
+    random_state: Optional[int] = 1927, 
     scale_data: bool = False,
-    infog_trim:bool=True,
-    key_added: str=None,
+    infog_trim: bool = True,
+    key_added: str = 'X_svd',
     layer: Optional[str] = None,
     infog_layer: Optional[str] = None
 
 ):
+    """
+    Performs Truncated Singular Value Decomposition (SVD) in a "lazy" mode, based on the `piaso.tl.runSVD` function.
+    
+    Compared to `piaso.tl.runSVD`, this function includes the step of highly variable gene section. If `layer` is set to `infog`,
+    both the highly variable genes and normalized gene expression values were taken from the INFOG normalization outputs.
+
+    This function performs on the specified gene expression matrix (adata.X or a specified layer) within an AnnData object
+    and stores the resulting low-dimensional representation in `adata.obsm`.
+
+    Parameters
+    ----------
+    adata : AnnData
+        An AnnData object.
+    copy : bool, optional, default=False
+        If True, returns a copy of `adata` with the computed embeddings instead of modifying in place.
+    n_components : int, optional, default=50
+        The number of singular value decomposition (SVD) components to retain.
+    use_highly_variable : bool, optional, default=True
+        If True, uses only highly variable genes for the decomposition.
+    n_top_genes : int, optional, default=3000
+        The number of top highly variable genes to retain before performing SVD.
+    verbosity : int, optional, default=0
+        Controls the verbosity of logging messages.
+    batch_key : str, optional, default=None
+        Specifies the key in `adata.obs` containing batch labels for `batch_key` used in the `sc.pp.highly_variable_genes` function.
+    random_state : int, optional, default=1927
+        A random seed to ensure reproducibility.
+    scale_data : bool, optional, default=False
+        If True, standardizes the input data before performing SVD.
+    infog_trim : bool, optional, default=True
+        Used for the `trim` parameter in `piaso.tl.infog` function, effective only when `layer` set to `infog`.
+    key_added : str, optional, default='X_svd'
+        The key under which the resulting cell embeddings are stored in `adata.obsm`.
+    layer : str, optional, default=None
+        Specifies which layer of `adata` to use for the transformation. If None, `adata.X` is used.
+    infog_layer : str, optional, default=None
+        Used for the `layer` parameter in `piaso.tl.infog` function, effective only when `layer` set to `infog`.
+
+    Returns
+    -------
+    If `copy` is True, returns a modified AnnData object. Otherwise, modifies `adata` in place.
+
+    Example
+    -------
+    >>> import piaso
+    >>> adata = piaso.tl.runSVDLazy(
+    ...     adata, n_components=50, n_top_genes=3000,
+    ...     use_highly_variable=True, key_added="X_svd", 
+    ...     layer=None
+    ... )
+    >>> 
+    >>> # Access the cell embedding
+    >>> adata.obsm['X_svd']
+    """
     
     adata = adata.copy() if copy else adata
 
@@ -123,10 +181,9 @@ def runSVDLazy(
             trim=infog_trim,
             verbosity=verbosity
         )
-        ### Set the highly variable genes selected by INFOG
-        adata.var['highly_variable']=adata.var['highly_variable_infog']
-        
-        
+        ### No need to reset now, as now by default, the key is `highly_variable`
+        # ### Set the highly variable genes selected by INFOG
+        # adata.var['highly_variable']=adata.var['highly_variable_infog']
         
     else:
         sc.pp.highly_variable_genes(adata,
@@ -143,7 +200,8 @@ def runSVDLazy(
         random_state=random_state, 
         scale_data=scale_data,
         key_added=key_added,
-        layer=layer
+        layer=layer,
+        verbosity=verbosity
     )
     
     sc.settings.verbosity=original_verbosity

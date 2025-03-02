@@ -7,14 +7,58 @@ from typing import Iterable, Union, Optional
 ### Normalization based on information
 def infog(
     adata,
-    copy:bool=False,
-    n_top_genes:int=1000,
-    key_added:str='infog',
-    random_state:int =10,
-    trim:bool=True,
-    verbosity:int=1,
+    copy: bool = False,
+    n_top_genes: int = 3000,
+    key_added: str = 'infog',
+    key_added_highly_variable_gene: str = 'highly_variable',
+    trim: bool = True,
+    verbosity: int = 1,
     layer: Optional[str] = None
 ):
+    """
+    Performs INFOG normalization of single-cell RNA sequencing data based on "biological information".
+
+    This function outputs the selected highly variable genes and normalized gene expression values based on the raw UMI counts.
+
+    Parameters
+    ----------
+    adata : AnnData
+        An AnnData object.
+    copy : bool, optional, default=False
+        If True, returns a new AnnData object with the normalized data instead of modifying `adata` in place.
+    n_top_genes : int, optional, default=3000
+        The number of top highly variable genes to select.
+    key_added : str, optional, default='infog'
+        The key under which the normalized gene expression matrix is stored in `adata.layers`.
+    key_added_highly_variable_gene : str, optional, default='highly_variable'
+        The key under which the selection of highly variable genes is stored in `adata.var`.
+    trim : bool, optional, default=True
+        If True, trim the normalized gene expression values.
+    verbosity : int, optional, default=1
+        Controls the level of logging and output messages.
+    layer : str, optional, default=None
+        Specifies which layer of `adata` to use for INFOG normalization. If None, `adata.X` is used. Note: the raw UMIs counts should be used.
+
+    Returns
+    -------
+    If `copy` is True, returns a modified AnnData object with the normalized expression matrix. 
+    Otherwise, modifies `adata` in place.
+    The normalized gene expression values will be saved in `adata.layers` with key as `infog` by default or `key_added` if specified.
+
+    Example
+    -------
+    >>> import piaso
+    >>> adata = piaso.tl.infog(
+    ...     adata, n_top_genes=3000, key_added="infog",
+    ...     trim=True, layer="raw"
+    ... )
+    >>> 
+    >>> # Access the normalized data
+    >>> adata.layers['infog']
+    >>> # Access the highly variable genes
+    >>> adata.var['highly_variable']
+    """
+    
     if layer and layer not in adata.layers:
         raise ValueError(f"{layer} not found in adata.layers.")
     
@@ -59,10 +103,13 @@ def infog(
     pos_gene=_select_top_n(adata.var[key_added+'_var'],n_top_genes)
     tmp=np.repeat(False,adata.n_vars)
     tmp[pos_gene]=True
-    adata.var['highly_variable_'+key_added]=tmp
+    ### Change 'highly_variable_'+key_added to 'highly_variable', let's use it by default
+    adata.var[key_added_highly_variable_gene]=tmp
+    
     if verbosity>0:
+        
         print(f'The normalized data is saved as `{key_added}` in `adata.layers`.')
-        print(f'The highly variable genes are saved as `highly_variable_{key_added}` in `adata.obs`.')
+        print(f'The highly variable genes are saved as `{key_added_highly_variable_gene}` in `adata.obs`.')
         print(f'Finished INFOG normalization.')
          
     ### Return the result
@@ -176,11 +223,38 @@ def score(
     # Set the random seed for reproducibility
     np.random.seed(random_seed) 
     
-    
+    # Ensure gene_weights is correctly initialized
     if gene_weights is None:
-        gene_weights=np.repeat(1.0, len(gene_list))
+        gene_weights = np.ones(len(gene_list), dtype=float) 
+    elif len(gene_weights) != len(gene_list):
+        raise ValueError(f"Length mismatch: the input gene_weights ({len(gene_weights)}) and gene_list ({len(gene_list)}) must be the same.")
+
+    ### Only keep the ones in adata.var_names
+    valid_genes = set(adata.var_names)  # Convert to set for fast lookup
     
-    ### Calculate the mean and variance
+    # Initialize lists for valid and invalid genes
+    filtered_genes = []
+    filtered_weights = []
+    filtered_out_genes = []
+    # Single pass loop to separate valid and invalid genes
+    for gene, weight in zip(gene_list, gene_weights):
+        if gene in valid_genes:
+            filtered_genes.append(gene)
+            filtered_weights.append(weight)
+        else:
+            filtered_out_genes.append(gene)
+            
+    ### Reset the lists
+    gene_list=filtered_genes
+    gene_weights=filtered_weights
+    
+    
+    ### Check the number of filtered out genes
+    n_filtered_genes=len(filtered_out_genes)
+    if verbosity>0 and n_filtered_genes>0:
+        print(f"Note: {n_filtered_genes} genes were not found in adata.var_names and are excluded from scoring: {', '.join(filtered_out_genes[:10])} {'...' if n_filtered_genes > 10 else ''}")
+
+
 
     ### Calculate the variance
     # Determine the input matrix

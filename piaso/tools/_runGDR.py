@@ -275,10 +275,10 @@ def runGDR(
     ### Set the low-dimensional representations for the integrated dataset
     if key_added is not None:
         adata.obsm[key_added]=marker_gene_scores.values
-        print('The cell embeddings calculated by GDR were saved as `'+key_added+'` in adata.obsm.')
+        print(f'The cell embeddings calculated by GDR were saved as `{key_added}` in adata.obsm.')
     else:
         adata.obsm['X_gdr']=marker_gene_scores.values
-        print('The cell embeddings calculated by GDR were saved as `X_gdr` in adata.obsm.')
+        print(f'The cell embeddings calculated by GDR were saved as `X_gdr` in adata.obsm.')
 
         
 ########################################        
