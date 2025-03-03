@@ -108,11 +108,20 @@ def _create_global_legend(
     """
     legend_items = {}  # Dictionary to store unique legend items
 
-    # Collect legend handles and labels from all subplots
+    # # Collect legend handles and labels from all subplots
+    # for ax in axes.flat:
+    #     handles, labels = ax.get_legend_handles_labels()
+    #     for handle, label in zip(handles, labels):
+    #         legend_items[label] = handle  # Ensures unique labels
+            
+    # Collect legend handles and labels only from visible subplots with artists
     for ax in axes.flat:
-        handles, labels = ax.get_legend_handles_labels()
-        for handle, label in zip(handles, labels):
-            legend_items[label] = handle  # Ensures unique labels
+        if ax.get_visible():  # Only process visible axes, this is very important, because some subplots will be empty
+            handles, labels = ax.get_legend_handles_labels()
+            if handles:  # Ensure there are artists with labels
+                for handle, label in zip(handles, labels):
+                    legend_items[label] = handle  # Add unique labels
+
             
     # Modify marker size in the legend
     legend_handles = list(legend_items.values())
@@ -152,10 +161,10 @@ def plot_embeddings_split(adata,
                           dpi:int=80,
                           col_size:int=5,
                           row_size:int=5,
-                          save=None,
-                          vmax=None,
-                          vmin=None,
-                          show_figure=True,
+                          vmax:float=None,
+                          vmin:float=None,
+                          show_figure:bool=True,
+                          save:bool=None,
                           layer:str=None,
                           basis:str='X_umap',
                           fix_coordinate_ratio:bool=True, ### Fix the coordinate ratio
@@ -196,14 +205,14 @@ def plot_embeddings_split(adata,
         Width (in inches) of each subplot column.
     row_size : int, optional (default=5)
         Height (in inches) of each subplot row.
-    save : str or None, optional (default=None)
-        File path to save the resulting figure. If None, the figure will not be saved.
     vmax : float or None, optional (default=None)
         Maximum value for the color scale. If not provided, the upper limit is determined automatically.
     vmin : float or None, optional (default=None)
         Minimum value for the color scale. If not provided, the lower limit is determined automatically.
     show_figure : bool, optional (default=True)
         Whether to display the figure after plotting.
+    save : str or None, optional (default=None)
+        File path to save the resulting figure. If None, the figure will not be saved.
     layer : str or None, optional (default=None)
         If specified, the name of the layer in `adata.layers` from which to obtain the gene expression values.
     basis : str, optional (default='X_umap')
@@ -408,7 +417,8 @@ def plot_embeddings_split(adata,
                     
                 ### if the legend_loc is not on data:    
                 else:
-                    if i<(len(variables)-1):
+                    if i<len(variables):
+                    # if i<(len(variables)-1):
                         if basis=='X_umap':
                             sc.pl.umap(
                                 adata[adata.obs[splitby]==variables[i]],
@@ -428,8 +438,8 @@ def plot_embeddings_split(adata,
                                 basis=basis,
                                 color=color,
                                 title=color+' in '+variables[i],
-                                legend_fontsize=12,
-                                legend_fontoutline=2,
+                                legend_fontsize=legend_fontsize,
+                                legend_fontoutline=legend_fontoutline,
                                 ncols=4,
                                 show=False, ax=axs[i],
                                 legend_loc=legend_loc, ## Not showing the legends except for the last subplot
@@ -440,33 +450,33 @@ def plot_embeddings_split(adata,
                         ### Fix the coordinates ratio
                         if fix_coordinate_ratio:
                             axs[i].set_aspect('equal')
-                    ### Treat the last subplot differently
-                    elif i==(len(variables)-1):
-                        if basis=='X_umap':
-                            sc.pl.umap(
-                                adata[adata.obs[splitby]==variables[i]],
-                                color=color,
-                                title=color+' in '+variables[i],
-                                legend_fontsize=legend_fontsize,
-                                legend_fontoutline=legend_fontoutline,
-                                ncols=4,
-                                show=False, ax=axs[i],
-                                legend_loc=legend_loc,
-                                **kwargs
-                            )
-                        else:
-                            sc.pl.embedding(
-                                adata[adata.obs[splitby]==variables[i]],
-                                basis=basis,
-                                color=color,
-                                title=color+' in '+variables[i],
-                                legend_fontsize=legend_fontsize,
-                                legend_fontoutline=legend_fontoutline,
-                                ncols=4,
-                                show=False, ax=axs[i],
-                                legend_loc=legend_loc,
-                                **kwargs
-                            )
+                    # ### Treat the last subplot differently
+                    # elif i==(len(variables)-1):
+                    #     if basis=='X_umap':
+                    #         sc.pl.umap(
+                    #             adata[adata.obs[splitby]==variables[i]],
+                    #             color=color,
+                    #             title=color+' in '+variables[i],
+                    #             legend_fontsize=legend_fontsize,
+                    #             legend_fontoutline=legend_fontoutline,
+                    #             ncols=4,
+                    #             show=False, ax=axs[i],
+                    #             legend_loc=legend_loc,
+                    #             **kwargs
+                    #         )
+                    #     else:
+                    #         sc.pl.embedding(
+                    #             adata[adata.obs[splitby]==variables[i]],
+                    #             basis=basis,
+                    #             color=color,
+                    #             title=color+' in '+variables[i],
+                    #             legend_fontsize=legend_fontsize,
+                    #             legend_fontoutline=legend_fontoutline,
+                    #             ncols=4,
+                    #             show=False, ax=axs[i],
+                    #             legend_loc=legend_loc,
+                    #             **kwargs
+                    #         )
 
                     else:
                         axs[i].set_visible(False)
@@ -477,7 +487,13 @@ def plot_embeddings_split(adata,
             if legend_loc=='right margin':
                 #### Do not show legends inside subplots
                 for i in range(len(axs)):
-                    axs[i].legend().set_visible(False)
+                    ### Add try-except blocks around axs[i].legend().set_visible(False) to avoid crashes if no legend exists
+                    try:
+                        if axs[i].get_visible():  # Only process visible axes, this is very important, because some subplots will be empty
+                            axs[i].legend().set_visible(False)
+                    except AttributeError:
+                        pass
+                    # axs[i].legend().set_visible(False)
             
 
             ### End of the for loop: for i in range(len(axs)):
@@ -494,14 +510,17 @@ def plot_embeddings_split(adata,
     ### for gene
     else:
     
-        ### Calculate the max values for all the plots
-        if layer is not None:
-            gene_df=pd.DataFrame(np.ravel(adata.layers[layer][:,np.where(adata.var_names==color)[0]].todense()))
-        elif sparse.isspmatrix(adata.X):
-            gene_df=pd.DataFrame(np.ravel(adata.X[:,np.where(adata.var_names==color)[0]].todense()))
-        else:
-            ### Check whether adata.X is in sparse format or not
-            gene_df=pd.DataFrame(np.ravel(adata.X[:,np.where(adata.var_names==color)[0]]))
+        # ### Calculate the max values for all the plots
+        # if layer is not None:
+        #     gene_df=pd.DataFrame(np.ravel(adata.layers[layer][:,np.where(adata.var_names==color)[0]].todense()))
+        # elif sparse.isspmatrix(adata.X):
+        #     gene_df=pd.DataFrame(np.ravel(adata.X[:,np.where(adata.var_names==color)[0]].todense()))
+        # else:
+        #     ### Check whether adata.X is in sparse format or not
+        #     gene_df=pd.DataFrame(np.ravel(adata.X[:,np.where(adata.var_names==color)[0]]))
+            
+        ### Simplify the sparse matrix check:
+        gene_df = pd.DataFrame(np.ravel(adata.layers[layer][:, adata.var_names == color].todense() if layer else adata.X[:, adata.var_names == color].todense() if sparse.issparse(adata.X) else adata.X[:, adata.var_names == color]))
 
         
         if vmax is None:
@@ -599,11 +618,23 @@ def plot_embeddings_split(adata,
     
    
         
+    # ### Save the figure
+    # if save is not None:
+    #     if show_figure:
+    #         plt.show()
+    #     fig.savefig(save, bbox_inches='tight')   # save the figure to file
+    #     print("Figure saved to: ", save)
+    #     plt.close(fig)    # close the figure window   
+        
+    ### Whether to show the figure or not
+    if show_figure:
+        plt.show()  # Explicitly display the figure
+
     ### Save the figure
-    if save is not None:
-        if show_figure:
-            plt.show()
-        fig.savefig(save, bbox_inches='tight')   # save the figure to file
+    if save:
+        fig.savefig(save, bbox_inches='tight')  # Save the figure to file
         print("Figure saved to: ", save)
-        plt.close(fig)    # close the figure window   
+        plt.close(fig)  # Close the figure to prevent display
+    elif not show_figure:
+        plt.close(fig)  # Close the figure if not showing or saving
         
