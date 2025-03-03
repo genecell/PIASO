@@ -450,40 +450,12 @@ def plot_embeddings_split(adata,
                         ### Fix the coordinates ratio
                         if fix_coordinate_ratio:
                             axs[i].set_aspect('equal')
-                    # ### Treat the last subplot differently
-                    # elif i==(len(variables)-1):
-                    #     if basis=='X_umap':
-                    #         sc.pl.umap(
-                    #             adata[adata.obs[splitby]==variables[i]],
-                    #             color=color,
-                    #             title=color+' in '+variables[i],
-                    #             legend_fontsize=legend_fontsize,
-                    #             legend_fontoutline=legend_fontoutline,
-                    #             ncols=4,
-                    #             show=False, ax=axs[i],
-                    #             legend_loc=legend_loc,
-                    #             **kwargs
-                    #         )
-                    #     else:
-                    #         sc.pl.embedding(
-                    #             adata[adata.obs[splitby]==variables[i]],
-                    #             basis=basis,
-                    #             color=color,
-                    #             title=color+' in '+variables[i],
-                    #             legend_fontsize=legend_fontsize,
-                    #             legend_fontoutline=legend_fontoutline,
-                    #             ncols=4,
-                    #             show=False, ax=axs[i],
-                    #             legend_loc=legend_loc,
-                    #             **kwargs
-                    #         )
+                   
 
                     else:
                         axs[i].set_visible(False)
                         
-                    ### Hide individual subplot legends while keeping legend info
-                    # axs[i].legend(handlelength=0, frameon=False)  # Ensures we can collect handles but doesn't show legends
-            
+                   
             if legend_loc=='right margin':
                 #### Do not show legends inside subplots
                 for i in range(len(axs)):
@@ -493,7 +465,7 @@ def plot_embeddings_split(adata,
                             axs[i].legend().set_visible(False)
                     except AttributeError:
                         pass
-                    # axs[i].legend().set_visible(False)
+                    
             
 
             ### End of the for loop: for i in range(len(axs)):
@@ -504,21 +476,11 @@ def plot_embeddings_split(adata,
                                       marker_size=legend_marker_size,
                                       fontsize=legend_fontsize,
                                       max_rows_per_col=18)
-                # ### Create a global legend in the right margin
-                # fig.legend(legend_items.values(), legend_items.keys(), loc="center left", bbox_to_anchor=(1.02, 0.5))
-
+                
     ### for gene
     else:
     
-        # ### Calculate the max values for all the plots
-        # if layer is not None:
-        #     gene_df=pd.DataFrame(np.ravel(adata.layers[layer][:,np.where(adata.var_names==color)[0]].todense()))
-        # elif sparse.isspmatrix(adata.X):
-        #     gene_df=pd.DataFrame(np.ravel(adata.X[:,np.where(adata.var_names==color)[0]].todense()))
-        # else:
-        #     ### Check whether adata.X is in sparse format or not
-        #     gene_df=pd.DataFrame(np.ravel(adata.X[:,np.where(adata.var_names==color)[0]]))
-            
+              
         ### Simplify the sparse matrix check:
         gene_df = pd.DataFrame(np.ravel(adata.layers[layer][:, adata.var_names == color].todense() if layer else adata.X[:, adata.var_names == color].todense() if sparse.issparse(adata.X) else adata.X[:, adata.var_names == color]))
 
@@ -604,10 +566,6 @@ def plot_embeddings_split(adata,
             else:
                 axs[i].set_visible(False)  
     
-    # ### Fix the coordinates ratio
-    # if fix_coordinate_ratio:
-    #     for ax in axs:
-    #         ax.set_aspect('equal')
             
     ### Show the axis ticks
     if show_axis_ticks:
@@ -616,15 +574,7 @@ def plot_embeddings_split(adata,
             ax.set_xticks(np.arange(xy_min[0]-xy_margin[0], xy_max[0]+xy_margin[0], (xy_max[0]-xy_min[0])/4))
             ax.set_yticks(np.arange(xy_min[1]-xy_margin[1], xy_max[1]+xy_margin[1], (xy_max[1]-xy_min[1])/4))
     
-   
-        
-    # ### Save the figure
-    # if save is not None:
-    #     if show_figure:
-    #         plt.show()
-    #     fig.savefig(save, bbox_inches='tight')   # save the figure to file
-    #     print("Figure saved to: ", save)
-    #     plt.close(fig)    # close the figure window   
+
         
     ### Whether to show the figure or not
     if show_figure:
