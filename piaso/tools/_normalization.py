@@ -8,6 +8,7 @@ from typing import Iterable, Union, Optional
 def infog(
     adata,
     copy: bool = False,
+    inplace: bool = False,
     n_top_genes: int = 3000,
     key_added: str = 'infog',
     key_added_highly_variable_gene: str = 'highly_variable',
@@ -26,6 +27,8 @@ def infog(
         An AnnData object.
     copy : bool, optional, default=False
         If True, returns a new AnnData object with the normalized data instead of modifying `adata` in place.
+    inplace : bool, optional, default=False
+        If True, the normalized data is stored in `adata.X` rather than in `adata.layers[key_added]`.
     n_top_genes : int, optional, default=3000
         The number of top highly variable genes to select.
     key_added : str, optional, default='infog'
@@ -43,7 +46,8 @@ def infog(
     -------
     If `copy` is True, returns a modified AnnData object with the normalized expression matrix. 
     Otherwise, modifies `adata` in place.
-    The normalized gene expression values will be saved in `adata.layers` with key as `infog` by default or `key_added` if specified.
+    The normalized gene expression values will be saved in `adata.X` if `inplace` is True, or in `adata.layers`
+    with the key `key_added` by default if `inplace` is False.
 
     Example
     -------
@@ -65,39 +69,104 @@ def infog(
     adata = adata.copy() if copy else adata
     
     ### To get the gene expression matrix
-    if layer:
-        counts = adata.layers[layer]
-    else:
-        counts = adata.X
+    counts = adata.layers[layer] if layer else adata.X
     
-    ### Convert to csr sparse matrix:
+    ### Ensure counts is in csr sparse format
     if not sparse.issparse(counts):
         counts=sparse.csr_matrix(counts)    
     
-
-    cell_depth=counts.sum(axis=1).A
-    gene_depth=counts.sum(axis=0).A   
-    counts_sum  = np.sum(counts)
-    scale = np.median(cell_depth.ravel())
-    ### should use this one, especially for downsampling experiment, only this one works, the sequencing baises are corrected, partially because only this transformation is linear
-    normalized =  sparse.diags(scale/cell_depth.ravel()) @ counts 
+        #### Raise an error if any negative values are found in counts. Only check when the input is not in a sparse format
+        if counts.data.size > 0 and counts.data.min() < 0:
+            raise ValueError("Input counts contain negative values, which is not allowed.")
     
-    info_factor=sparse.diags(counts_sum/cell_depth.ravel()) @ counts @ sparse.diags(1/gene_depth.ravel())
-    normalized2=normalized.multiply(info_factor).sqrt()
+    ### Compute cell and gene depths
+    cell_depth = np.array(counts.sum(axis=1)).ravel()
+    gene_depth = np.array(counts.sum(axis=0)).ravel()
+    
+    
+    
+    counts_sum = counts.sum()
+    scale = np.median(cell_depth)
+    
+#     cell_depth=counts.sum(axis=1).A
+#     gene_depth=counts.sum(axis=0).A   
+#     counts_sum  = np.sum(counts)
+#     scale = np.median(cell_depth.ravel())
+    
+    
+    ### should use this one, especially for downsampling experiment, only this one works, the sequencing baises are corrected, partially because only this transformation is linear
+    ### Instead of using sparse.diags, use element-wise multiplication with broadcasting.
+    normalized = counts.multiply(scale / cell_depth[:, None])    
+    # normalized =  sparse.diags(scale/cell_depth.ravel()) @ counts 
+    
+    # Compute info_factor: first, scale rows by counts_sum/cell_depth, then columns by 1/gene_depth. 
+    # Avoid division by zero: for gene_depth==0, set reciprocal to 0
+    with np.errstate(divide='ignore', invalid='ignore'):
+        inv_gene_depth = 1.0 / gene_depth
+    inv_gene_depth[~np.isfinite(inv_gene_depth)] = 0.0
+    info_factor = counts.multiply(counts_sum / cell_depth[:, None]).multiply(inv_gene_depth)
+
+    ### Avoid division by zero: for gene_depth==0, set reciprocal to 0
+    # inv_gene_depth = np.divide(1, gene_depth, out=np.zeros_like(gene_depth, dtype=float), where=gene_depth != 0)    
+    # info_factor = counts.multiply(counts_sum / cell_depth[:, None]).multiply(inv_gene_depth)
+    
+    # info_factor = counts.multiply(counts_sum / cell_depth[:, None]).multiply(1 / gene_depth)
+   
+    # info_factor = counts.multiply(counts_sum / cell_depth[:, None])
+    # info_factor = info_factor.multiply(1 / gene_depth)
+    
+    # info_factor=sparse.diags(counts_sum/cell_depth.ravel()) @ counts @ sparse.diags(1/gene_depth.ravel())
+    
+    # Element-wise multiplication and square root.
+    ### Previously, here I created another name, but it's not good for the memory usage, so here I kept using normalized
+    normalized = normalized.multiply(info_factor)
+    # Apply element-wise square root
+    normalized.data = np.sqrt(normalized.data)
+    
+    # normalized2=normalized.multiply(info_factor).sqrt()
+    
     if trim:
         threshold = np.sqrt(counts.shape[0])
-        normalized2.data[normalized2.data >  threshold] =  threshold
+        normalized.data[normalized.data >  threshold] =  threshold
+        
+    
 
-    adata.layers[key_added]=normalized2
+
+    # Save the normalized data according to the inplace flag
+    if inplace:
+        adata.X = normalized.copy()
+    else:
+        adata.layers[key_added] = normalized.copy()
     
     ### Calculate the variance
-    c = normalized2.copy()
-    mean=np.array(c.mean(axis=0))
-    mean **=2
-    c.data **= 2
-    residual_var_orig_b=np.squeeze(np.array(c.mean(axis=0))-mean) 
-#     del c
-    adata.var[key_added+'_var']=residual_var_orig_b
+    # Compute mean of normalized2 (from the unmodified copy stored in adata)
+    mean = np.array(normalized.mean(axis=0)).ravel()
+    
+    # Fast in-place squaring for mean-of-squares calculation
+    normalized.data **= 2
+    mean_sq = np.array(normalized.mean(axis=0)).ravel()
+    
+    residual_var_orig_b = mean_sq - mean**2
+    adata.var[key_added + '_var'] = residual_var_orig_b
+    
+    
+#     ### already make a copy when setting the adata, so no need to make a copy here
+#     # c = normalized2.copy()
+#     mean=np.array(normalized2.mean(axis=0)).ravel()
+#     mean **=2
+#     normalized2.data **= 2
+#     residual_var_orig_b=np.squeeze(np.array(normalized2.mean(axis=0))-mean) 
+# #     del c
+#     adata.var[key_added+'_var']=residual_var_orig_b
+
+    ###Original implementation
+#     c = normalized2.copy()
+#     mean=np.array(c.mean(axis=0))
+#     mean **=2
+#     c.data **= 2
+#     residual_var_orig_b=np.squeeze(np.array(c.mean(axis=0))-mean) 
+# #     del c
+#     adata.var[key_added+'_var']=residual_var_orig_b
     
     ### Feature selection    
     pos_gene=_select_top_n(adata.var[key_added+'_var'],n_top_genes)
@@ -106,11 +175,13 @@ def infog(
     ### Change 'highly_variable_'+key_added to 'highly_variable', let's use it by default
     adata.var[key_added_highly_variable_gene]=tmp
     
-    if verbosity>0:
-        
-        print(f'The normalized data is saved as `{key_added}` in `adata.layers`.')
-        print(f'The highly variable genes are saved as `{key_added_highly_variable_gene}` in `adata.obs`.')
-        print(f'Finished INFOG normalization.')
+    if verbosity > 0:
+        if inplace:
+            print(f'The normalized data is saved in `adata.X`.')
+        else:
+            print(f'The normalized data is saved as `{key_added}` in `adata.layers`.')
+        print(f'The highly variable genes are saved as `{key_added_highly_variable_gene}` in `adata.var`.')
+        print('Finished INFOG normalization.')
          
     ### Return the result
     return adata if copy else None
