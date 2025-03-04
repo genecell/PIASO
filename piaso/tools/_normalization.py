@@ -162,8 +162,12 @@ def _select_top_n(scores, n_top):
     return global_indices
 
 ### Refer to scDRS for _get_p_from_empi_null function
-def _get_p_from_empi_null(v_t, v_t_null):
-    """Compute p-value from empirical null
+def _get_p_from_empi_null(
+    v_t,
+    v_t_null
+):
+    """
+    Compute p-value from empirical null
     For score T and a set of null score T_1,...T_N, the p-value is
 
         p= [1 + \Sigma_{i=1}^N 1_{ (T_i \geq T) }] / (1+N)
