@@ -88,16 +88,10 @@ def infog(
     counts_sum = counts.sum()
     scale = np.median(cell_depth)
     
-#     cell_depth=counts.sum(axis=1).A
-#     gene_depth=counts.sum(axis=0).A   
-#     counts_sum  = np.sum(counts)
-#     scale = np.median(cell_depth.ravel())
-    
     
     ### should use this one, especially for downsampling experiment, only this one works, the sequencing baises are corrected, partially because only this transformation is linear
     ### Instead of using sparse.diags, use element-wise multiplication with broadcasting.
     normalized = counts.multiply(scale / cell_depth[:, None])    
-    # normalized =  sparse.diags(scale/cell_depth.ravel()) @ counts 
     
     # Compute info_factor: first, scale rows by counts_sum/cell_depth, then columns by 1/gene_depth. 
     # Avoid division by zero: for gene_depth==0, set reciprocal to 0
@@ -106,16 +100,7 @@ def infog(
     inv_gene_depth[~np.isfinite(inv_gene_depth)] = 0.0
     info_factor = counts.multiply(counts_sum / cell_depth[:, None]).multiply(inv_gene_depth)
 
-    ### Avoid division by zero: for gene_depth==0, set reciprocal to 0
-    # inv_gene_depth = np.divide(1, gene_depth, out=np.zeros_like(gene_depth, dtype=float), where=gene_depth != 0)    
-    # info_factor = counts.multiply(counts_sum / cell_depth[:, None]).multiply(inv_gene_depth)
-    
-    # info_factor = counts.multiply(counts_sum / cell_depth[:, None]).multiply(1 / gene_depth)
-   
-    # info_factor = counts.multiply(counts_sum / cell_depth[:, None])
-    # info_factor = info_factor.multiply(1 / gene_depth)
-    
-    # info_factor=sparse.diags(counts_sum/cell_depth.ravel()) @ counts @ sparse.diags(1/gene_depth.ravel())
+
     
     # Element-wise multiplication and square root.
     ### Previously, here I created another name, but it's not good for the memory usage, so here I kept using normalized
@@ -130,7 +115,6 @@ def infog(
         normalized.data[normalized.data >  threshold] =  threshold
         
     
-
 
     # Save the normalized data according to the inplace flag
     if inplace:
@@ -149,24 +133,6 @@ def infog(
     residual_var_orig_b = mean_sq - mean**2
     adata.var[key_added + '_var'] = residual_var_orig_b
     
-    
-#     ### already make a copy when setting the adata, so no need to make a copy here
-#     # c = normalized2.copy()
-#     mean=np.array(normalized2.mean(axis=0)).ravel()
-#     mean **=2
-#     normalized2.data **= 2
-#     residual_var_orig_b=np.squeeze(np.array(normalized2.mean(axis=0))-mean) 
-# #     del c
-#     adata.var[key_added+'_var']=residual_var_orig_b
-
-    ###Original implementation
-#     c = normalized2.copy()
-#     mean=np.array(c.mean(axis=0))
-#     mean **=2
-#     c.data **= 2
-#     residual_var_orig_b=np.squeeze(np.array(c.mean(axis=0))-mean) 
-# #     del c
-#     adata.var[key_added+'_var']=residual_var_orig_b
     
     ### Feature selection    
     pos_gene=_select_top_n(adata.var[key_added+'_var'],n_top_genes)
