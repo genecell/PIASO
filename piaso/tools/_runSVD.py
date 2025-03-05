@@ -177,7 +177,6 @@ def runSVDLazy(
             layer=infog_layer,
             n_top_genes=n_top_genes,
             key_added='infog',
-            random_state=random_state,
             trim=infog_trim,
             verbosity=verbosity
         )

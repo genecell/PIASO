@@ -667,8 +667,8 @@ def _calculateScoreParallel_single_batch(batch_key,  shared_data, batch_i, marke
     
     ### Only directly select slices
     batch_mask = shared_data['obs'][batch_key] == batch_i
-    adata = sc.AnnData(matrix[batch_mask])
-    adata.obs = shared_data['obs'][batch_mask].copy()
+    adata = sc.AnnData(matrix[batch_mask.to_numpy()])
+    adata.obs = shared_data['obs'][batch_mask.to_numpy()].copy()
     #### Need to reset the gene names, because this will be used in gene set scoring, need to know the genes
     adata.var_names=shared_data["var_names"].copy()
     
@@ -898,8 +898,8 @@ def _runCOSGParallel_single_batch(
 
     ### Only directly select slices
     batch_mask = shared_data['obs'][batch_key] == batch_i
-    adata = sc.AnnData(matrix[batch_mask])
-    adata.obs = shared_data['obs'][batch_mask].copy()
+    adata = sc.AnnData(matrix[batch_mask.to_numpy()])
+    adata.obs = shared_data['obs'][batch_mask.to_numpy()].copy()
     
     
     # Temporarily suppress Scanpy verbosity
