@@ -384,7 +384,7 @@ def score(
     
     
     ### Caculate pool_valu
-    pooled_p = _get_p_from_empi_null(cellxgene_query, cellxgene_ctrl.A.flatten())
+    pooled_p = _get_p_from_empi_null(cellxgene_query, cellxgene_ctrl.toarray().flatten())
     nlog10_pooled_p = -np.log10(pooled_p)
     
     pooled_p_FDR=multipletests(pooled_p, method="fdr_bh")[1]
