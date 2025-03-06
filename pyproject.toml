@@ -4,7 +4,7 @@ requires = [ "hatchling"]
 
 [project]
 name = "piaso-tools"
-version = "1.0.0"
+version = "1.0.1"
 description = "Precise Integrative Analysis of Single-cell Omics."
 requires-python = ">=3.9"
 license = "BSD-3-clause"
@@ -38,7 +38,7 @@ classifiers = [
 dependencies = [
     "anndata>=0.8",
     "scanpy>=1.9.1",
-    "cosg>=1.0.1",
+    "cosg>=1.0.2",
     "numpy>=1.21.6",
     "matplotlib>=3.5.2",
     "pandas>=1.4.4",
