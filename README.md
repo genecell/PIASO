@@ -36,7 +36,10 @@ You could simply install PIASO via `pip` in your conda environment:
 ```bash
 pip install piaso-tools
 ```
-For the developmental version, you could clone PIASO GitHub repos and install it.
+For the development version in GitHub, you could install via:
+```bash
+pip install git+https://github.com/genecell/PIASO.git
+```
 
 ### Citation
 
