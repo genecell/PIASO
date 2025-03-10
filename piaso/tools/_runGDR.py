@@ -427,8 +427,9 @@ def _calculate_gene_set_score_shared(gene_indices, metadata, score_name, is_spar
         
     Returns
     -------
-    np.ndarray
-        Scores for the gene set.
+    tuple or np.ndarray
+        If score_method is 'piaso', returns a tuple of (scores, p_values).
+        If score_method is 'scanpy', returns only scores for the gene set.
     """
     import warnings
     
@@ -479,15 +480,27 @@ def _calculate_gene_set_score_shared(gene_indices, metadata, score_name, is_spar
             warnings.simplefilter("ignore", category=FutureWarning)
             if score_method=='scanpy':
                 sc.tl.score_genes(adata_tmp, adata_tmp.var.index[gene_indices].tolist(), score_name=score_name, random_state=random_seed)
+                
+                
+                return adata_tmp.obs[score_name].values.copy()
+                
             elif score_method=='piaso':
                 ## Set layer to None, because the scoring layer is already constructed as the adata.X
                 score(adata_tmp, gene_list=adata_tmp.var.index[gene_indices].tolist(), key_added=score_name, layer=None, random_seed=random_seed)
+                
+                                # Get both scores and -log10(p-values)
+                scores = adata_tmp.obs[score_name].values.copy()
+                nlog10_pvals = None
+                if score_name in adata_tmp.uns and 'nlog10_pval' in adata_tmp.uns[score_name]:
+                    nlog10_pvals = adata_tmp.uns[score_name]['nlog10_pval'].copy()
+                
+                return scores, nlog10_pvals
+                
             else:
                 raise ValueError(f"Invalid score_method: '{score_method}'. Must be either 'scanpy' or 'piaso'.")
 
-        scores=adata_tmp.obs[score_name].values.copy()
- 
-        return scores
+        # scores=adata_tmp.obs[score_name].values.copy()
+        # return scores
     
     finally:
         # Clean up shared memory
@@ -520,14 +533,17 @@ from functools import partial
 import numpy as np
 import scanpy as sc
 from typing import Literal
+from tqdm import tqdm
 
 def calculateScoreParallel(
     adata,
     gene_set,
     score_method: Literal["scanpy", "piaso"],
-    random_seed:int=1927,
-    score_layer=None,
-    max_workers=None,
+    random_seed: int = 1927,
+    score_layer = None,
+    max_workers = None,
+    return_pvals: bool = False,
+    verbosity: int = 0,
 ):
     """
     Compute gene set scores in parallel using shared memory for efficiency.
@@ -551,16 +567,25 @@ def calculateScoreParallel(
         Layer of the AnnData object to use. If None, `adata.X` is used.
     max_workers : int or None, optional
         Number of parallel workers to use. Defaults to the number of CPUs.
-        
+    return_pvals : bool, optional
+        Whether to return -log10 p-values when using 'piaso' method. Default is False.
+    verbosity : int, optional
+        Level of verbosity. Default is 0.
+
         
     Returns
     -------
     tuple
-        - np.ndarray: A 2D array where each column contains the scores for a gene set.
-            If `gene_set` is a dictionary, columns correspond to the keys of the dictionary.
-            If `gene_set` is a list of lists, columns correspond to the index of the sublists.
-            If `gene_set` is pandas.DataFrame, columns correspond to the index of the columns.
-        - list: The names of the gene sets.
+        If score_method is 'scanpy':
+            - np.ndarray: A 2D array where each column contains the scores for a gene set.
+            - list: The names of the gene sets.
+        If score_method is 'piaso' and return_pvals is True:
+            - np.ndarray: A 2D array where each column contains the scores for a gene set.
+            - list: The names of the gene sets.
+            - np.ndarray: A 2D array where each column contains the -log10(p-values) for a gene set.
+        If score_method is 'piaso' and return_pvals is False:
+            - np.ndarray: A 2D array where each column contains the scores for a gene set.
+            - list: The names of the gene sets.
     """
     
     # Validate score_method
@@ -603,9 +628,24 @@ def calculateScoreParallel(
     )
     
     
+    
+    
     # Execute in parallel
-    with ProcessPoolExecutor(max_workers=max_workers) as executor:
-        score_list = list(executor.map(partial_func, valid_gene_sets_indices))
+    if verbosity > 0:
+        total_gene_sets = len(valid_gene_sets_indices)
+        # print(f"Processing {total_gene_sets} gene sets using {score_method} method...")
+        # Create a progress bar and process with tqdm
+        with ProcessPoolExecutor(max_workers=max_workers) as executor:
+            results = list(tqdm(
+                executor.map(partial_func, valid_gene_sets_indices),
+                total=total_gene_sets,
+                desc="Scoring gene sets",
+                # file=sys.stdout,
+                # unit=""
+            ))
+    else:
+        with ProcessPoolExecutor(max_workers=max_workers) as executor:
+            results = list(executor.map(partial_func, valid_gene_sets_indices))
 
     # Clean up shared memory
     if is_sparse:
@@ -619,10 +659,47 @@ def calculateScoreParallel(
         shm_metadata["shm"].close()
         shm_metadata["shm"].unlink()
     
-    # Convert score_list to a 2D array
-    score_matrix = np.vstack(score_list).T
+    # Process results based on score_method
     gene_set_names=list(valid_gene_sets.keys())
-    return score_matrix, gene_set_names
+    
+    if score_method == 'piaso':
+        # For piaso, results should be tuples of (scores, nlog10_pvals)
+        first_result = results[0]
+        is_tuple_result = isinstance(first_result, tuple) and len(first_result) == 2
+        
+        if is_tuple_result:
+            # Results are in tuple format (score, pvals)
+            scores, nlog10_pvals = zip(*results)
+            
+            # Only process p-values if needed and if they exist
+            nlog10_pval_matrix = None
+            if return_pvals and any(p is not None for p in nlog10_pvals[:1]):
+                nlog10_pval_matrix = np.vstack(nlog10_pvals).T
+        else:
+            # Not tuple format - direct scores
+            scores = results
+            nlog10_pval_matrix = None
+            
+        score_matrix = np.vstack(scores).T
+        
+        if return_pvals:
+            return score_matrix, gene_set_names, nlog10_pval_matrix
+        else:
+            return score_matrix, gene_set_names
+    else:
+        # For scanpy, results only contain scores
+        score_matrix = np.vstack(results).T
+        
+        return score_matrix, gene_set_names
+
+    
+    
+    # # Convert score_list to a 2D array
+    # score_matrix = np.vstack(score_list).T
+    
+    
+    
+    # return score_matrix, gene_set_names
 
 
 
