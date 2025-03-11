@@ -757,8 +757,25 @@ def predictCellTypeByMarker(
         # Replace original predictions with smoothed ones
         adata.obs[key_added] = adata.obs[smoothed_key].copy()
     
+        
     if verbosity > 0:
-        print("Cell type prediction completed.")
+        print(f"Cell type prediction completed. Results saved to:")
+        print(f"  - adata.obs['{key_added}']: predicted cell types")
+        
+        if use_score:
+            print(f"  - adata.obsm['{key_added}_score']: full score matrix")
+            print(f"  - adata.obs['{key_added}_score']: maximum scores")
+        else:
+            print(f"  - adata.obsm['{key_added}_score']: full score matrix")
+            print(f"  - adata.obsm['{key_added}_nlog10pvals']: full -log10(p-value) matrix")
+            print(f"  - adata.obs['{key_added}_nlog10pvals']: maximum -log10(p-values)")
+            
+        if smooth_prediction:
+            print(f"  - adata.obs['{key_added}_raw']: original unsmoothed predictions")
+            print(f"  - adata.obs['{key_added}_smoothed']: intermediate smoothed predictions")
+            if return_confidence:
+                print(f"  - adata.obs['{key_added}_confidence_smoothed']: smoothing confidence scores")
+
     
     if not inplace:
         return adata
