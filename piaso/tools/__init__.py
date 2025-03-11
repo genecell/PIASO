@@ -6,5 +6,5 @@ from ._clustering import leiden_local
 
 from ._normalization import infog, score
 
-from ._predictCellType import predictCellTypeByGDR, smoothCellTypePredictions
+from ._predictCellType import predictCellTypeByGDR, smoothCellTypePrediction, predictCellTypeByMarker
 

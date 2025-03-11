@@ -1,4 +1,4 @@
-from ._runGDR import runGDR
+from ._runGDR import runGDR, calculateScoreParallel
 
 import numpy as np
 import pandas as pd
@@ -203,14 +203,15 @@ def predictCellTypeByGDR(
     if return_integration:
         return(adata_combine)
 
-    
+
+   
     
 import numpy as np
 import pandas as pd
 from scipy import stats
 
-def smoothCellTypePredictions(
-    adata: "AnnData", 
+def smoothCellTypePrediction(
+    adata, 
     groupby: str, 
     use_rep: str = 'X_pca', 
     k_nearest_neighbors: int = 5, 
@@ -219,7 +220,8 @@ def smoothCellTypePredictions(
     use_existing_adjacency_graph: bool = True,
     use_faiss: bool = False,
     key_added: str = None,
-    verbosity: int = 1
+    verbosity: int = 1,
+    n_jobs: int = -1
 ):
     """
     Smooth cell type predictions using k-nearest neighbors in a low-dimensional embedding.
@@ -246,6 +248,8 @@ def smoothCellTypePredictions(
         If provided, use this key as the output key in adata.obs instead of '{groupby}_smoothed'
     verbosity : int, default=1
         Level of verbosity (0=no output, 1=basic info, 2=detailed info)
+    n_jobs : int, default=-1
+        Number of jobs for parallel processing. -1 means using all processors.
         
     Returns
     -------
@@ -261,7 +265,7 @@ def smoothCellTypePredictions(
     >>> import piaso
     >>> 
     >>> # Basic usage
-    >>> piaso.tl.smoothCellTypePredictions(
+    >>> piaso.tl.smoothCellTypePrediction(
     ...     adata, 
     ...     groupby='CellTypes_pred',
     ...     use_rep='X_pca',
@@ -269,7 +273,7 @@ def smoothCellTypePredictions(
     ... )
     >>> 
     >>> # With confidence scores
-    >>> piaso.tl.smoothCellTypePredictions(
+    >>> piaso.tl.smoothCellTypePrediction(
     ...     adata, 
     ...     groupby='CellTypes_pred',
     ...     k_nearest_neighbors=15,
@@ -301,7 +305,7 @@ def smoothCellTypePredictions(
             if use_faiss:
                 print("Using FAISS for accelerated nearest neighbor search")
             else:
-                print("Using scikit-learn NearestNeighbors")
+                print(f"Using scikit-learn NearestNeighbors with n_jobs={n_jobs}")
     
     # Initialize arrays for storing results
     smoothed_predictions = np.empty(len(adata), dtype=object)
@@ -424,10 +428,10 @@ def smoothCellTypePredictions(
                 use_faiss = False
         
         if not use_faiss:
-            # Use scikit-learn NearestNeighbors
+            # Use scikit-learn NearestNeighbors with parallel processing
             from sklearn.neighbors import NearestNeighbors
             
-            nn = NearestNeighbors(n_neighbors=k_nearest_neighbors)
+            nn = NearestNeighbors(n_neighbors=k_nearest_neighbors, n_jobs=n_jobs)
             nn.fit(X_embed)
             _, indices = nn.kneighbors(X_embed)
             
@@ -509,4 +513,254 @@ def smoothCellTypePredictions(
     
     if not inplace:
         return adata
+    
+    
+    
+import numpy as np
+import pandas as pd
+import scanpy as sc
+from typing import Literal, List, Dict, Union, Optional, Tuple
+from scipy.sparse import issparse
+from multiprocessing import shared_memory
+from concurrent.futures import ProcessPoolExecutor
+from functools import partial
+from tqdm import tqdm
+
+def predictCellTypeByMarker(
+    adata,
+    marker_gene_set: Union[List, Dict, pd.DataFrame],
+    score_method: Literal["scanpy", "piaso"] = "piaso",
+    score_layer: Optional[str] = "infog",
+    use_score: bool = True,
+    max_workers: Optional[int] = None,
+    smooth_prediction: bool = True,
+    use_rep: str = 'X_gdr',
+    k_nearest_neighbors: int = 7,
+    return_confidence: bool = True,
+    use_existing_adjacency_graph: bool = False,
+    use_faiss: bool = False,
+    key_added: str = "CellTypes_predicted",
+    extract_cell_type: bool = False,
+    delimiter_cell_type: str = '-',
+    inplace: bool = True,
+    random_seed: int = 1927,
+    verbosity: int = 1,
+    n_jobs: int = -1
+):
+    """
+    Predict cell types using marker genes and optionally smooth predictions.
+    
+    This function performs cell type prediction using marker genes in two steps:
+    1. Calculate gene set scores for marker genes
+    2. Optionally smooth the predictions using k-nearest neighbors
+    
+    Parameters
+    ----------
+    adata : AnnData
+        AnnData object containing single-cell data
+    marker_gene_set : list, dict, or pandas.DataFrame
+        Collection of marker genes for different cell types (pre-filtered/prepared)
+    score_method : {'scanpy', 'piaso'}, default='piaso'
+        Method to use for scoring marker genes
+    score_layer : str or None, default='infog'
+        Layer of the AnnData object to use for scoring
+    use_score : bool, default=True
+        Whether to use scores (True) or p-values (False) for cell type prediction
+    max_workers : int, default=32
+        Number of parallel workers for score calculation
+    smooth_prediction : bool, default=True
+        Whether to smooth predictions using k-nearest neighbors
+    use_rep : str, default='X_gdr'
+        Key in adata.obsm containing the low-dimensional embedding to use for neighbor search
+    k_nearest_neighbors : int, default=7
+        Number of neighbors to consider for smoothing
+    return_confidence : bool, default=True
+        Whether to return confidence scores for smoothed predictions
+    use_existing_adjacency_graph : bool, default=False
+        Whether to use existing neighborhood graph if available
+    use_faiss : bool, default=False
+        Whether to use FAISS for faster neighbor search
+    key_added : str, default='CellTypes_predicted'
+        Key to use for storing cell type predictions in adata.obs
+    extract_cell_type : bool, default=False
+        Whether to extract cell type name by removing suffix after delimiter
+    delimiter_cell_type : str, default='-'
+        Delimiter to use when extracting cell type names (only used if extract_cell_type=True)
+    inplace : bool, default=True
+        Whether to modify adata in place or return a copy
+    random_seed : int, default=1927
+        Random seed for reproducibility
+    verbosity : int, default=1
+        Level of verbosity (0=quiet, 1=basic info, 2=detailed)
+    n_jobs : int, default=-1
+        Number of jobs for parallel processing during smoothing
+        
+    Returns
+    -------
+    If inplace=False:
+        AnnData: Copy of adata with cell type predictions added
+    If inplace=True:
+        None, but adata is modified in place
+        
+    Examples
+    --------
+    >>> import scanpy as sc
+    >>> import piaso
+    >>> 
+    >>> # Basic usage with default parameters
+    >>> adata_out = predictCellTypeByMarker(
+    ...     adata,
+    ...     marker_gene_set=cosgMarkerDB,
+    ...     inplace=False
+    ... )
+    >>> 
+    >>> # Custom usage without smoothing, modifying adata in place
+    >>> predictCellTypeByMarker(
+    ...     adata,
+    ...     marker_gene_set=cosgMarkerDB,
+    ...     score_method='piaso',
+    ...     use_score=False,
+    ...     smooth_prediction=False,
+    ...     inplace=True
+    ... )
+    """
+    # Make a copy if not modifying in place
+    if not inplace:
+        adata = adata.copy()
+    
+    if verbosity > 0:
+        print(f"Calculating gene set scores using {score_method} method...")
+        
+    
+    # Calculate gene set scores
+    if score_method == 'piaso':
+        marker_results = calculateScoreParallel(
+            adata,
+            gene_set=marker_gene_set,
+            score_method=score_method,
+            score_layer=score_layer,
+            max_workers=max_workers,
+            return_pvals=True,
+            random_seed=random_seed,
+            verbosity=verbosity
+        )
+        
+        # Extract results
+        marker_gene_score = marker_results[0]
+        gene_set_names = marker_results[1]
+        marker_gene_nlog10pvals = marker_results[2]
+    else:
+        # For scanpy method
+        marker_results = calculateScoreParallel(
+            adata,
+            gene_set=marker_gene_set,
+            score_method=score_method,
+            score_layer=score_layer,
+            max_workers=max_workers,
+            random_seed=random_seed,
+            verbosity=verbosity
+        )
+        
+        # Extract results
+        marker_gene_score = marker_results[0]
+        gene_set_names = marker_results[1]
+        
+    # Predict cell types based on scores or p-values
+    if use_score:
+        if verbosity > 0:
+            print("Predicting cell types based on marker gene scores...")
+            
+        # Store scores in AnnData
+        score_key = f"{key_added}_score"
+        adata.obsm[score_key] = marker_gene_score
+        
+        # Convert to DataFrame and assign column names
+        score_df = pd.DataFrame(marker_gene_score)
+        score_df.columns = gene_set_names
+        
+        # Predict cell types based on maximum score
+        adata.obs[key_added] = score_df.idxmax(axis=1).values
+        
+        # Extract cell type name if requested
+        if extract_cell_type:
+            if verbosity > 1:
+                print(f"Extracting cell type names using delimiter: '{delimiter_cell_type}'")
+            adata.obs[key_added] = [np.str_.rsplit(i, delimiter_cell_type, 1)[0] for i in adata.obs[key_added].values]
+        
+        # Store maximum score value
+        adata.obs[f"{key_added}_score"] = score_df.max(axis=1).values
+        
+    else:
+        if verbosity > 0:
+            print("Predicting cell types based on marker gene p-values...")
+            
+        # Store scores in AnnData (even when using p-values for prediction)
+        score_key = f"{key_added}_score"
+        adata.obsm[score_key] = marker_gene_score
+        
+        # Store p-values in AnnData
+        pval_key = f"{key_added}_nlog10pvals"
+        adata.obsm[pval_key] = marker_gene_nlog10pvals
+        
+        # Convert to DataFrame and assign column names
+        pval_df = pd.DataFrame(marker_gene_nlog10pvals)
+        pval_df.columns = gene_set_names
+        
+        # Predict cell types based on maximum -log10(p-value)
+        adata.obs[key_added] = pval_df.idxmax(axis=1).values
+        
+        # Extract cell type name if requested
+        if extract_cell_type:
+            if verbosity > 1:
+                print(f"Extracting cell type names using delimiter: '{delimiter_cell_type}'")
+            adata.obs[key_added] = [np.str_.rsplit(i, delimiter_cell_type, 1)[0] for i in adata.obs[key_added].values]
+        
+        # Store maximum -log10(p-value)
+        adata.obs[f"{key_added}_nlog10pvals"] = pval_df.max(axis=1).values
+    
+    # Smooth predictions if requested
+    if smooth_prediction:
+        if verbosity > 0:
+            print("Smoothing cell type predictions...")
+        
+        # Store original predictions for smoothing
+        smoothing_input_key = f"{key_added}_raw"
+        adata.obs[smoothing_input_key] = adata.obs[key_added].copy()
+        
+        # Set key for smoothed predictions
+        smoothed_key = f"{key_added}_smoothed"
+        
+        # Smooth predictions
+        smoothCellTypePrediction(
+            adata,
+            groupby=smoothing_input_key,
+            key_added=smoothed_key,
+            use_rep=use_rep,
+            k_nearest_neighbors=k_nearest_neighbors,
+            return_confidence=return_confidence,
+            inplace=True,
+            use_existing_adjacency_graph=use_existing_adjacency_graph,
+            use_faiss=use_faiss,
+            verbosity=verbosity,
+            n_jobs=n_jobs
+        )
+        
+        # Update main prediction key with smoothed predictions
+        if verbosity > 1:
+            print(f"Updating {key_added} with smoothed predictions...")
+        
+        # If confidence scores are calculated during smoothing
+        if return_confidence:
+            smoothed_confidence_key = f"{smoothed_key}_confidence"
+            adata.obs[f"{key_added}_confidence_smoothed"] = adata.obs[smoothed_confidence_key].copy()
+        
+        # Replace original predictions with smoothed ones
+        adata.obs[key_added] = adata.obs[smoothed_key].copy()
+    
+    if verbosity > 0:
+        print("Cell type prediction completed.")
+    
+    if not inplace:
+        return adata
+    return None
 
