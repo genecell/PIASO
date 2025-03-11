@@ -772,7 +772,6 @@ def predictCellTypeByMarker(
             
         if smooth_prediction:
             print(f"  - adata.obs['{key_added}_raw']: original unsmoothed predictions")
-            print(f"  - adata.obs['{key_added}_smoothed']: intermediate smoothed predictions")
             if return_confidence:
                 print(f"  - adata.obs['{key_added}_confidence_smoothed']: smoothing confidence scores")
 
