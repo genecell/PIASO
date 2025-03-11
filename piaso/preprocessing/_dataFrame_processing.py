@@ -25,6 +25,8 @@ def getCrossCategories(df, col1, col2, delimiter='@', iterate_by_second_column=T
     pd.Categorical
         A Pandas Categorical series of the combined columns with a defined order.
     """
+
+    
     # Determine the order of values in col1 and col2, respecting categorical order if present
     if pd.api.types.is_categorical_dtype(df[col1]):
         col1_categories = df[col1].cat.categories
@@ -41,13 +43,13 @@ def getCrossCategories(df, col1, col2, delimiter='@', iterate_by_second_column=T
         categories = [f"{x}{delimiter}{y}" for x in col1_categories for y in col2_categories]
     else:
         categories = [f"{x}{delimiter}{y}" for y in col2_categories for x in col1_categories]
+        
+    # Directly create the combined series without modifying the dataframe
+    combined_series = df[col1].astype(str) + delimiter + df[col2].astype(str)
     
-    # Create a new column by combining col1 and col2 with the specified delimiter
-    df['combined'] = df[col1].astype(str) + delimiter + df[col2].astype(str)
+    # Convert to a categorical type with the defined order
+    return pd.Categorical(combined_series, categories=categories, ordered=True)
     
-    # Convert the new column to a categorical type with the defined order
-    return pd.Categorical(df['combined'], categories=categories, ordered=True)
-
 
 from collections import Counter
 def table(
