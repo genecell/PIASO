@@ -203,7 +203,11 @@ def predictCellTypeByGDR(
     if return_integration:
         return(adata_combine)
 
-
+    
+    
+import numpy as np
+import pandas as pd
+from scipy import stats
 
 def smoothCellTypePredictions(
     adata: "AnnData", 
@@ -299,18 +303,64 @@ def smoothCellTypePredictions(
             else:
                 print("Using scikit-learn NearestNeighbors")
     
+    # Initialize arrays for storing results
+    smoothed_predictions = np.empty(len(adata), dtype=object)
+    if return_confidence:
+        confidence_scores = np.empty(len(adata))
+    
+    # Track cells with insufficient neighbors
+    cells_with_insufficient_neighbors = 0
+    
     if has_neighbors:
-        # Use existing connectivity matrix from adata
+        # Use existing connectivity matrix from adata (CSR format)
+        # Check if the connectivity matrix is in CSR format
+        from scipy.sparse import csr_matrix
+        if not isinstance(adata.obsp['connectivities'], csr_matrix):
+            raise ValueError(
+                f"Expected adata.obsp['connectivities'] to be a CSR matrix, but got {type(adata.obsp['connectivities']).__name__}. "
+                f"Please convert it using `.tocsr()` method."
+            )
         conn_matrix = adata.obsp['connectivities']
         
-        # For each cell, find top k neighbors from connectivity matrix
-        neighbor_indices = []
+        if verbosity > 1:
+            print(f"Processing {len(adata)} cells using CSR connectivity matrix...")
+        
+        # Process each cell
         for i in range(conn_matrix.shape[0]):
-            # Get row, convert to dense format if sparse
-            row = conn_matrix[i].toarray().flatten() if hasattr(conn_matrix[i], 'toarray') else conn_matrix[i]
-            # Get indices of top k neighbors (including self)
-            top_k = np.argsort(row)[::-1][:k_nearest_neighbors]
-            neighbor_indices.append(top_k)
+            # Direct access to CSR data structures - memory efficient
+            row_start, row_end = conn_matrix.indptr[i], conn_matrix.indptr[i+1]
+            data = conn_matrix.data[row_start:row_end]
+            col_indices = conn_matrix.indices[row_start:row_end]
+            
+            # Check if we have enough connections
+            if len(data) < k_nearest_neighbors:
+                cells_with_insufficient_neighbors += 1
+                # Use all available connections
+                top_k = col_indices
+            else:
+                # Get top k connections by strength
+                top_k_idx = np.argsort(data)[::-1][:k_nearest_neighbors]
+                top_k = col_indices[top_k_idx]
+            
+            # Get neighbor types for this cell
+            neighbor_types = original_predictions.iloc[top_k] if hasattr(original_predictions, 'iloc') else original_predictions[top_k]
+            
+            # Get most common type
+            try:
+                most_common = stats.mode(neighbor_types, keepdims=False)
+                majority_type = most_common.mode
+            except TypeError:
+                most_common = stats.mode(neighbor_types)
+                majority_type = most_common[0][0]
+            
+            # Store results directly
+            smoothed_predictions[i] = majority_type
+            if return_confidence:
+                confidence_scores[i] = np.mean(neighbor_types == majority_type)
+            
+            # Print progress periodically
+            if verbosity > 1 and i > 0 and i % 10000 == 0:
+                print(f"  Processed {i}/{conn_matrix.shape[0]} cells...")
         
     else:
         # We need to compute neighbors
@@ -327,10 +377,13 @@ def smoothCellTypePredictions(
             try:
                 import faiss
                 # Use FAISS for faster neighbor search
-                n_samples, n_features = X_embed.shape
+                n_features = X_embed.shape[1]
                 
-                # Convert to float32 as required by FAISS
-                X_embed_float32 = X_embed.astype('float32')
+                # Check if already float32 before conversion to avoid unnecessary memory allocation
+                if X_embed.dtype == np.float32:
+                    X_embed_float32 = X_embed
+                else:
+                    X_embed_float32 = X_embed.astype('float32')
                 
                 # Build index
                 index = faiss.IndexFlatL2(n_features)
@@ -338,7 +391,31 @@ def smoothCellTypePredictions(
                 
                 # Search for nearest neighbors
                 distances, indices = index.search(X_embed_float32, k_nearest_neighbors)
-                neighbor_indices = indices
+                
+                if verbosity > 1:
+                    print(f"Processing {len(adata)} cells to determine majority labels...")
+                
+                # Process each cell
+                for i in range(len(adata)):
+                    neighbor_indices_i = indices[i]
+                    neighbor_types = original_predictions.iloc[neighbor_indices_i] if hasattr(original_predictions, 'iloc') else original_predictions[neighbor_indices_i]
+                    
+                    # Get most common type
+                    try:
+                        most_common = stats.mode(neighbor_types, keepdims=False)
+                        majority_type = most_common.mode
+                    except TypeError:
+                        most_common = stats.mode(neighbor_types)
+                        majority_type = most_common[0][0]
+                    
+                    # Store results
+                    smoothed_predictions[i] = majority_type
+                    if return_confidence:
+                        confidence_scores[i] = np.mean(neighbor_types == majority_type)
+                    
+                    # Print progress periodically
+                    if verbosity > 1 and i > 0 and i % 10000 == 0:
+                        print(f"  Processed {i}/{len(adata)} cells...")
                 
             except ImportError:
                 print("FAISS not available, falling back to scikit-learn NearestNeighbors")
@@ -353,47 +430,43 @@ def smoothCellTypePredictions(
             nn = NearestNeighbors(n_neighbors=k_nearest_neighbors)
             nn.fit(X_embed)
             _, indices = nn.kneighbors(X_embed)
-            neighbor_indices = indices
-    
-    # For each cell, get the most common cell type among its neighbors
-    smoothed_predictions = []
-    confidence_scores = []
-    
-    if verbosity > 1:
-        print(f"Processing {len(adata)} cells to determine majority labels...")
-    
-    for i in range(len(adata)):
-        # Get neighbors for this cell
-        if has_neighbors or use_faiss:
-            neighbor_indices_i = neighbor_indices[i]
-        else:
-            neighbor_indices_i = indices[i]
             
-        neighbor_types = original_predictions.iloc[neighbor_indices_i] if hasattr(original_predictions, 'iloc') else original_predictions[neighbor_indices_i]
-        
-        # Get most common type and its count
-        try:
-            # Try newer SciPy version (1.9.0+) with keepdims parameter
-            most_common = stats.mode(neighbor_types, keepdims=False)
-            majority_type = most_common.mode
-        except TypeError:
-            # Fall back to older SciPy version
-            most_common = stats.mode(neighbor_types)
-            majority_type = most_common[0][0]
-        
-        # Calculate confidence (proportion of neighbors with majority label)
-        if return_confidence:
-            confidence = np.mean(neighbor_types == majority_type)
-            confidence_scores.append(confidence)
-        
-        smoothed_predictions.append(majority_type)
+            if verbosity > 1:
+                print(f"Processing {len(adata)} cells to determine majority labels...")
+            
+            # Process each cell
+            for i in range(len(adata)):
+                neighbor_indices_i = indices[i]
+                neighbor_types = original_predictions.iloc[neighbor_indices_i] if hasattr(original_predictions, 'iloc') else original_predictions[neighbor_indices_i]
+                
+                # Get most common type
+                try:
+                    most_common = stats.mode(neighbor_types, keepdims=False)
+                    majority_type = most_common.mode
+                except TypeError:
+                    most_common = stats.mode(neighbor_types)
+                    majority_type = most_common[0][0]
+                
+                # Store results
+                smoothed_predictions[i] = majority_type
+                if return_confidence:
+                    confidence_scores[i] = np.mean(neighbor_types == majority_type)
+                
+                # Print progress periodically
+                if verbosity > 1 and i > 0 and i % 10000 == 0:
+                    print(f"  Processed {i}/{len(adata)} cells...")
     
     # Add smoothed predictions to the result
     smoothed_key = key_added if key_added is not None else f"{groupby}_smoothed"
-    adata.obs[smoothed_key] = pd.Categorical(
-        smoothed_predictions,
-        categories=original_predictions.cat.categories if hasattr(original_predictions, 'cat') else None
-    )
+    
+    # Convert array to pandas categorical 
+    if hasattr(original_predictions, 'cat'):
+        adata.obs[smoothed_key] = pd.Categorical(
+            smoothed_predictions,
+            categories=original_predictions.cat.categories
+        )
+    else:
+        adata.obs[smoothed_key] = smoothed_predictions
     
     # Add confidence scores if requested
     if return_confidence:
@@ -410,6 +483,11 @@ def smoothCellTypePredictions(
         changed = (adata.obs[smoothed_key] != original_predictions).sum()
         change_percent = (changed / len(adata)) * 100
         print(f"Modified {changed} cell labels ({change_percent:.2f}% of total)")
+        
+        # Report cells with insufficient neighbors
+        if cells_with_insufficient_neighbors > 0:
+            insufficient_percent = (cells_with_insufficient_neighbors / len(adata)) * 100
+            print(f"Warning: {cells_with_insufficient_neighbors} cells ({insufficient_percent:.2f}%) had fewer than {k_nearest_neighbors} neighbors in the connectivity matrix")
         
         if verbosity > 1:
             # Show distribution of confidence scores
@@ -431,3 +509,4 @@ def smoothCellTypePredictions(
     
     if not inplace:
         return adata
+
