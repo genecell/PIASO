@@ -566,7 +566,7 @@ def predictCellTypeByMarker(
         Layer of the AnnData object to use for scoring
     use_score : bool, default=True
         Whether to use scores (True) or p-values (False) for cell type prediction
-    max_workers : int, default=32
+    max_workers : int or None, default=None
         Number of parallel workers for score calculation
     smooth_prediction : bool, default=True
         Whether to smooth predictions using k-nearest neighbors
@@ -607,20 +607,13 @@ def predictCellTypeByMarker(
     >>> import scanpy as sc
     >>> import piaso
     >>> 
-    >>> # Basic usage with default parameters
-    >>> adata_out = predictCellTypeByMarker(
-    ...     adata,
-    ...     marker_gene_set=cosgMarkerDB,
-    ...     inplace=False
-    ... )
-    >>> 
-    >>> # Custom usage without smoothing, modifying adata in place
-    >>> predictCellTypeByMarker(
+    >>> # Basic usage
+    >>> piaso.tl.predictCellTypeByMarker(
     ...     adata,
     ...     marker_gene_set=cosgMarkerDB,
     ...     score_method='piaso',
     ...     use_score=False,
-    ...     smooth_prediction=False,
+    ...     smooth_prediction=True,
     ...     inplace=True
     ... )
     """

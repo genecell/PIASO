@@ -16,34 +16,122 @@ import warnings
 
 def runGDR(
     adata,
-    batch_key:str=None,
-    groupby:str=None,
-    n_gene:int=30,
-    mu:float=1.0,
-    use_highly_variable:bool=True,
-    n_highly_variable_genes:int=5000,
-    layer:str=None,
-    score_layer:str=None,
-    infog_layer:str=None,
-    n_svd_dims:int=50,
-    resolution:float=1.0,
-    scoring_method:str=None,
-    key_added:str=None,
-    verbosity: int=0,
-    random_seed:int=1927
+    batch_key: str = None,
+    groupby: str = None,
+    n_gene: int = 30,
+    mu: float = 1.0,
+    layer: str = None,
+    score_layer: str = None,
+    infog_layer: str = None,
+    use_highly_variable: bool = True,
+    n_highly_variable_genes: int = 5000,
+    n_svd_dims: int = 50,
+    resolution: float = 1.0,
+    scoring_method: str = None,
+    key_added: str = None,
+    verbosity: int = 0,
+    random_seed: int = 1927
 ):
+    """
+    Run GDR (marker Gene-guided dimensionality reduction) on single-cell data.
+    
+    GDR performs dimensionality reduction guided by marker genes to better preserve biological signals. 
+
+    Parameters
+    -----------
+    adata : AnnData
+        Annotated data matrix.
+    batch_key : str, optional
+        Key in `adata.obs` representing batch information. Defaults to None. If provided, marker gene identifications will be performed for each batch separately.
+    groupby : str, optional
+        Key in `adata.obs` to specify which cell group information to use. Defaults to None. If none, de novo clustering will be performed.
+    n_gene : int, optional
+        Number of genes, parameter used in COSG. Defaults to 30.
+    mu : float, optional
+        Gene expression specificity parameter, used in COSG. Defaults to 1.0.  
+    layer : str, optional
+        Layer in `adata.layers` to use for the analysis. Defaults to None, which uses `adata.X`.
+    score_layer : str, optional
+        If specified, the gene scoring will be calculated using this layer of `adata.layers`. Defaults to None.    
+    infog_layer : str, optional
+        If specified, INFOG normalization will be applied using this layer, which should
+        contain the raw UMI count matrix. Defaults to None.
+    use_highly_variable : bool, optional
+        Whether to use only highly variable genes when rerunning the dimensionality reduction. Defaults to True. Only effective when `groupby=None`.
+    n_highly_variable_genes : int, optional
+        Number of highly variable genes to use when `use_highly_variable` is True. Defaults to 5000. Only effective when `groupby=None`.
+    n_svd_dims : int, optional
+        Number of dimensions to use for SVD. Defaults to 50. Only effective when `groupby=None`.
+    resolution : float, optional
+        Resolution parameter for de novo clustering. Defaults to 1.0. Only effective when `groupby=None`.
+    scoring_method : str, optional
+        Specifies the gene set scoring method used to compute gene scores.
+    key_added : str, optional
+        Key under which the GDR dimensionality reduction results will be stored in `adata.obsm`. If None, results will be saved to `adata.obsm[X_gdr]`.
+    verbosity : int, optional
+        Verbosity level of the function. Higher values provide more detailed logs. Defaults to 0.
+    random_seed : int, optional
+        Random seed for reproducibility. Default is 1927.
+
+    Returns
+    -------
+    None
+        The function modifies `adata` in place by adding GDR dimensionality reduction result to `adata.obsm[key_added]`.
+
+    Examples
+    --------
+    >>> import scanpy as sc
+    >>> import piaso
+    >>> 
+    >>> adata = sc.read_h5ad("example.h5ad")
+    >>> piaso.tl.runGDR(
+    ...     adata,
+    ...     batch_key="batch",
+    ...     groupby="CellTypes",
+    ...     n_gene=30,
+    ...     verbosity=0
+    ... )
+    >>> print(adata.obsm["X_gdr"])
+    """
     
     ### Check the scoring method, improve this part of codes later
     if scoring_method is not None:
-        # Validate scoring_method
-        if scoring_method not in {"scanpy", "piaso"}:
-            raise ValueError(f"Invalid scoring_method: '{scoring_method}'. Must be either 'scanpy' or 'piaso'.")
+        valid_methods = {"scanpy", "piaso"}
+        if scoring_method not in valid_methods:
+            raise ValueError(f"Invalid scoring_method: '{scoring_method}'. Must be one of {', '.join(valid_methods)}.")
     else:
-        ### Use scanpy's scoring method as the default
-        scoring_method='scanpy'
+        scoring_method = 'scanpy'  # Use scanpy's scoring method as default
+        
+    # Check if key exists in adata.obs
+    if batch_key is not None and batch_key not in adata.obs.columns:
+        raise ValueError(f"Batch key '{batch_key}' not found in adata.obs.columns.")
     
-
-    sc.settings.verbosity=0
+    if groupby is not None and groupby not in adata.obs.columns:
+        raise ValueError(f"Group key '{groupby}' not found in adata.obs.columns.")
+    
+    # Check for layer existence if specified
+    if layer is not None and layer not in adata.layers:
+        raise ValueError(f"Layer '{layer}' not found in adata.layers.")
+    
+    if score_layer is not None and score_layer not in adata.layers:
+        raise ValueError(f"Score layer '{score_layer}' not found in adata.layers.")
+    
+    if infog_layer is not None and infog_layer not in adata.layers:
+        raise ValueError(f"INFOG layer '{infog_layer}' not found in adata.layers.")
+    
+    # Remove empty log1p entry in adata.uns if it exists
+    ### add this to avoid the errors in pp.highly_variable_genes and _highly_variable_genes_single_batch in scanpy
+    if 'log1p' in adata.uns and (not adata.uns['log1p'] or adata.uns['log1p'] == {}):
+        del adata.uns['log1p']
+        if verbosity > 1:
+            print("Removed empty log1p entry from adata.uns")
+    
+ 
+    # Set scanpy verbosity
+    original_verbosity = sc.settings.verbosity
+    sc.settings.verbosity = 0  # Suppress scanpy messages
+    
+    # Initialize collection for marker gene scores
     score_list_collection_collection=[]
     
     if batch_key is None:
@@ -55,6 +143,14 @@ def runGDR(
     if nbatches==1:
         ### Calculate the clustering labels if there is no specified clustering labels to use
         if groupby is None:
+            if verbosity > 0:
+                print("No groupby provided, performing de novo clustering")
+                
+            # Run SVD
+            if verbosity > 0:
+                print(f"Running SVD with {n_svd_dims} dimensions and {n_highly_variable_genes} highly variable genes")
+           
+            
             ### Run SVD in a lazy mode
             runSVDLazy(
                 adata,
@@ -62,53 +158,65 @@ def runGDR(
                 n_components=n_svd_dims,
                 n_top_genes=n_highly_variable_genes,
                 use_highly_variable=use_highly_variable,
-                verbosity=verbosity,
+                verbosity=0,
                 batch_key=None,
                 scale_data=False,
                 layer=layer,
                 infog_layer=infog_layer,
                 infog_trim=True,
-                key_added='X_svd',
+                key_added='X_svd_TMP_GDR',
                 random_state=random_seed
             )
             ### Because the verbosity will be reset in the above function
             sc.settings.verbosity=0
             
-            ### Run clustering
-            sc.pp.neighbors(adata,
-                use_rep='X_svd',
-                n_neighbors=15,random_state=10,knn=True,
-                method="umap")
-            sc.tl.leiden(adata, resolution=resolution, key_added='gdr_local')
+            # Run clustering
+            if verbosity > 0:
+                print("Computing clustering")
             
-            groupby='gdr_local'
+            ### Run clustering
+            sc.pp.neighbors(
+                adata,
+                use_rep='X_svd_TMP_GDR',
+                n_neighbors=15,
+                random_state=random_seed,
+                knn=True,
+                method="umap",
+                key_added='neighbors_TMP_GDR'
+            )
+            sc.tl.leiden(adata, resolution=resolution, key_added='gdr_local', neighbors_key='neighbors_TMP_GDR') ## Leiden also used a random_state parameter
+            
+            groupby = 'gdr_local_TMP_GDR'
             
         if verbosity>0:
-            print('Number of clusters: ',len(np.unique(adata.obs[groupby])))
+            print(f"Identified {len(np.unique(adata.obs[groupby]))} clusters.'")
             
+        # Run marker gene identification with COSG
+        if verbosity > 0:
+            print(f"Identifying marker genes using COSG (mu={mu})")
+ 
         ### Run marker gene identification
-        if layer is not None:
-            cosg.cosg(adata,
-                key_added='cosg',
-                use_raw=False,
-                layer=layer,
-                mu=mu,
-                expressed_pct=0.1,
-                remove_lowly_expressed=True,
-                n_genes_user=n_gene,
-                groupby=groupby
-                     )
-        else:
-            cosg.cosg(adata,
-                key_added='cosg',
-                mu=mu,
-                expressed_pct=0.1,
-                remove_lowly_expressed=True,
-                n_genes_user=n_gene,
-                groupby=groupby
-                     )
+        cosg_params = {
+            'key_added': 'cosg_TMP_GDR',
+            'mu': mu,
+            'expressed_pct': 0.1,
+            'remove_lowly_expressed': True,
+            'n_genes_user': n_gene,
+            'groupby': groupby
+        }
         
-        marker_gene=pd.DataFrame(adata.uns['cosg']['names'])
+        if layer is not None:
+            cosg_params['use_raw'] = False
+            cosg_params['layer'] = layer
+            
+        cosg.cosg(adata, **cosg_params)
+        
+        marker_gene=pd.DataFrame(adata.uns['cosg_TMP_GDR']['names'])
+        
+        
+        # Calculate scores
+        if verbosity > 0:
+            print(f"Calculating gene scores using '{scoring_method}' method")
 
     
         ### Calculate scores
@@ -148,8 +256,7 @@ def runGDR(
 
         marker_gene_scores=np.hstack(score_list_collection_collection)
 
-        sc.settings.verbosity=3
-
+       
         ### Make sure the order are matched to the adata
         marker_gene_scores=pd.DataFrame(marker_gene_scores)
         marker_gene_scores.index=adata.obs_names
@@ -160,12 +267,18 @@ def runGDR(
     else:
         ### Store the cell barcodes info
         cellbarcode_info=list()
-        for batch_i in batch_list:
+        for batch_idx, batch_i in enumerate(batch_list):
+            if verbosity > 0:
+                print(f"Processing batch {batch_idx+1}/{nbatches}: '{batch_i}'")
+                
             adata_i=adata[adata.obs[batch_key]==batch_i].copy()
-        
+
             ### Extract marker gene signatures
             ### Calculate clustering labels if no clustering info was specified
             if groupby is None:
+                if verbosity > 0:
+                    print(f"Running SVD for batch '{batch_i}'")
+                
                 ### Run SVD in a lazy mode
                 runSVDLazy(
                     adata_i,
@@ -173,7 +286,7 @@ def runGDR(
                     n_components=n_svd_dims,
                     n_top_genes=n_highly_variable_genes,
                     use_highly_variable=use_highly_variable,
-                    verbosity=verbosity,
+                    verbosity=0,
                     batch_key=None, ### Need to set as None, because the SVD is calculated in each batch separately
                     scale_data=False,
                     layer=layer,
@@ -184,6 +297,10 @@ def runGDR(
                 )
                 ### Because the verbosity will be reset in the above function, the good way is to remember the previous state of verbosity
                 sc.settings.verbosity=0
+                
+                
+                if verbosity > 0:
+                    print(f"Computing clustering for batch '{batch_i}'")
                 
                 ### Run clustering
                 sc.pp.neighbors(adata_i,
@@ -196,29 +313,31 @@ def runGDR(
                 groupby_i=groupby    
             
             if verbosity>0:
-                print('Processing the batch ', batch_i ,' which contains ',len(np.unique(adata_i.obs[groupby_i])), ' clusters.')
+                print(f"Identified {len(np.unique(adata_i.obs[groupby_i]))} clusters in batch '{batch_i}'")
+                
+                
             cellbarcode_info.append(adata_i.obs_names.values)
+            
+            # Run marker gene identification with COSG
+            if verbosity > 0:
+                print(f"Identifying marker genes for batch '{batch_i}'")
+            
+            
             ### Run marker gene identification
+            cosg_params = {
+                'key_added': 'cosg',
+                'mu': mu,
+                'expressed_pct': 0.1,
+                'remove_lowly_expressed': True,
+                'n_genes_user': n_gene,
+                'groupby': groupby_i
+            }
+            
             if layer is not None:
-                cosg.cosg(adata_i,
-                    key_added='cosg',
-                    use_raw=False,
-                    layer=layer,
-                    mu=mu,
-                    expressed_pct=0.1,
-                    remove_lowly_expressed=True,
-                    n_genes_user=n_gene,
-                    groupby=groupby_i
-                         )
-            else:
-                cosg.cosg(adata_i,
-                    key_added='cosg',
-                    mu=mu,
-                    expressed_pct=0.1,
-                    remove_lowly_expressed=True,
-                    n_genes_user=n_gene,
-                    groupby=groupby_i
-                         )
+                cosg_params['use_raw'] = False
+                cosg_params['layer'] = layer
+                
+            cosg.cosg(adata_i, **cosg_params)
 
             marker_gene=pd.DataFrame(adata_i.uns['cosg']['names'])
             
@@ -265,20 +384,72 @@ def runGDR(
             score_list_collection_collection.append(score_list_collection)
             
         marker_gene_scores=np.hstack(score_list_collection_collection)
-        sc.settings.verbosity=3
         
         ### Make sure the order are matched to the adata
         marker_gene_scores=pd.DataFrame(marker_gene_scores)
         marker_gene_scores.index=np.hstack(cellbarcode_info)
         marker_gene_scores=marker_gene_scores.loc[adata.obs_names]
     
-    ### Set the low-dimensional representations for the integrated dataset
+    ### Set the low-dimensional representations
     if key_added is not None:
-        adata.obsm[key_added]=marker_gene_scores.values
-        print(f'The cell embeddings calculated by GDR were saved as `{key_added}` in adata.obsm.')
+        output_key = key_added
     else:
-        adata.obsm['X_gdr']=marker_gene_scores.values
-        print(f'The cell embeddings calculated by GDR were saved as `X_gdr` in adata.obsm.')
+        output_key = 'X_gdr'
+        
+    adata.obsm[output_key] = marker_gene_scores.values
+    
+    # Store metadata about the GDR run
+    adata.uns['gdr'] = {
+        'params': {
+            'n_gene': n_gene,
+            'mu': mu,
+            'layer': layer,
+            'score_layer': score_layer,
+            'infog_layer': infog_layer,
+            'scoring_method': scoring_method,
+            'random_seed': random_seed
+        }
+    }
+    
+    
+    
+    # Clean up intermediate data if batch_key is None and we performed de novo clustering
+    if nbatches == 1 and groupby == 'gdr_local_TMP_GDR':
+        # Remove intermediate SVD result
+        if 'X_svd_TMP_GDR' in adata.obsm:
+            del adata.obsm['X_svd_TMP_GDR']
+            if verbosity > 1:
+                print("Removed temporary X_svd_TMP_GDR from adata.obsm")
+        
+        
+        # Remove temporary neighbors data
+        if 'neighbors_TMP_GDR' in adata.uns:
+            del adata.uns['neighbors_TMP_GDR']
+            if verbosity > 1:
+                print("Removed temporary neighbors_TMP_GDR data from adata.uns")
+        
+                
+        # Keep the cluster information for reference by default, but rename it to remove TMP suffix
+        if 'gdr_local_TMP_GDR' in adata.obs.columns:
+            del adata.obs['gdr_local_TMP_GDR']
+            if verbosity > 1:
+                print("Removed temporary cell labels gdr_local_TMP_GDR from adata.obs")
+                
+    # Clean up the COSG results if batch_key is None            
+    if nbatches == 1:           
+        # Remove intermediate COSG result
+        if 'cosg_TMP_GDR' in adata.uns:
+            del adata.uns['cosg_TMP_GDR']
+            if verbosity > 1:
+                print("Removed temporary COSG_TMP_GDR results from adata.uns")
+    
+    
+    
+    # Restore original scanpy verbosity
+    sc.settings.verbosity = original_verbosity
+    
+    print(f"GDR embeddings saved to adata.obsm['{output_key}']")
+    
 
         
 ########################################        
@@ -1550,6 +1721,23 @@ def runGDRParallel(
         marker_gene_scores=pd.DataFrame(marker_gene_scores)
         marker_gene_scores.index=np.hstack(cellbarcode_info)
         marker_gene_scores=marker_gene_scores.loc[adata.obs_names]
+    
+    
+    
+    
+    # Store metadata about the GDR run
+    adata.uns['gdr'] = {
+        'params': {
+            'n_gene': n_gene,
+            'mu': mu,
+            'layer': layer,
+            'score_layer': score_layer,
+            'infog_layer': infog_layer,
+            'scoring_method': scoring_method,
+            'random_seed': random_seed
+        }
+    }
+    
     
     ### Set the low-dimensional representations for the integrated dataset
     if key_added is not None:
