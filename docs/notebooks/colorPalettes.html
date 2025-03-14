@@ -50,7 +50,7 @@
     <script src="../_static/sidebar_toggle.js?v=3b053ec6"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="API" href="../modules.html" />
+    <link rel="next" title="Miscellaneous setup" href="../misc_setup.html" />
     <link rel="prev" title="Plotting functions in PIASO" href="01_showThePlotFunction.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
@@ -413,13 +413,11 @@ sys.path.append(path)
 </pre></div>
 </div>
 </div>
-<div class="nbinput nblast docutils container">
+<div class="nbinput docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[2]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>import importlib
-from scipy import sparse
-import piaso
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>import piaso
 import scanpy as sc
 import numpy as np
 import matplotlib.pyplot as plt
@@ -427,6 +425,15 @@ import warnings
 import piaso.plotting.color as color
 </pre></div>
 </div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+/home/vas744/.local/lib/python3.9/site-packages/networkx/utils/backends.py:135: RuntimeWarning: networkx backend defined more than once: nx-loopback
+  backends.update(_get_backends(&#34;networkx.backends&#34;))
+</pre></div></div>
 </div>
 <div class="nbinput nblast docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[3]:
@@ -451,17 +458,8 @@ prefix=&#39;GitHub_testing&#39;
 </div>
 <section id="Load-the-data">
 <h2>Load the data<a class="headerlink" href="#Load-the-data" title="Link to this heading">#</a></h2>
-<p>Let us load a 20k subsampled version of the Seattle Alzheimer’s Disease Brain Cell Atlas (SEA-AD) project dataset described in detail in <a class="reference external" href="../references.html#cell1">Gabitto et. al. (2024)</a>. We will be using the scRNA-seq data from the dataset in this tutorial.</p>
-<p>Download the subsampled dataset from Google Drive: <a class="reference external" href="https://drive.google.com/file/d/1EdRA0ECvPlEnNaOzKqj19GrEtucB7hmE/view?usp=drive_link">https://drive.google.com/file/d/1EdRA0ECvPlEnNaOzKqj19GrEtucB7hmE/view?usp=drive_link</a></p>
-<p>The original data is available on <a class="reference external" href="https://portal.brain-map.org/explore/seattle-alzheimers-disease">https://portal.brain-map.org/explore/seattle-alzheimers-disease</a>.</p>
-<div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
-</pre></div>
-</div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>!/home/vas744/Software/gdrive files download --destination /home/vas744/Data/Public/PIASO 1EdRA0ECvPlEnNaOzKqj19GrEtucB7hmE
-</pre></div>
-</div>
-</div>
+<p>The 20k subsampled snRNA-seq data from Allen SEA-AD project is available in google drive: <a class="reference external" href="https://drive.google.com/file/d/1nH-CRaTQFxJ5pAVpy8_hUQn1nrIcakq2/view?usp=drive_link">https://drive.google.com/file/d/1nH-CRaTQFxJ5pAVpy8_hUQn1nrIcakq2/view?usp=drive_link</a>.</p>
+<p>The original data is available in <a class="reference external" href="https://portal.brain-map.org/explore/seattle-alzheimers-disease">https://portal.brain-map.org/explore/seattle-alzheimers-disease</a>.</p>
 <div class="nbinput nblast docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[5]:
 </pre></div>
@@ -504,7 +502,7 @@ AnnData object with n_obs × n_vars = 20000 × 36601
 n = len(palettes)
 ncol = 4
 nrow = None
-row_size, col_size = 2.3, 2.3
+row_size, col_size = 2.4, 2.4
 if ncol is None:
         nrow = int(np.sqrt(n))
         ncol = int(np.ceil(n / nrow))
@@ -527,14 +525,14 @@ for i in range(len(axs)):
                             size=3,
                             frameon=False,
                             ax=axs[i][j],
-                            title=&#39;piaso.plotting.color.&#39;+str(palettes[c]),
+                            title=&#39;piaso.plotting.color.&#39;+str(palettes[c]+f&#39; - {len(getattr(color, palettes[c], None))} colors&#39;),
                             legend_loc=None,
                             show=False)
             axs[i][j].title.set_size(9)
         else:
             axs[i][j].set_visible(False)
         c += 1
-plt.suptitle(&quot;Selection of 15 discrete color palettes&quot;)
+plt.suptitle(&quot;Selection of discrete color palettes&quot;)
 plt.tight_layout()
 plt.show()
 </pre></div>
@@ -553,7 +551,7 @@ WARNING: Length of palette colors is smaller than the number of categories (pale
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/notebooks_colorPalettes_11_1.png" class="no-scaled-link" src="../_images/notebooks_colorPalettes_11_1.png" style="width: 862px; height: 864px;" />
+<img alt="../_images/notebooks_colorPalettes_10_1.png" class="no-scaled-link" src="../_images/notebooks_colorPalettes_10_1.png" style="width: 909px; height: 902px;" />
 </div>
 </div>
 </section>
@@ -595,7 +593,7 @@ for i in range(len(axs)):
         else:
             axs[i][j].set_visible(False)
         c += 1
-plt.suptitle(&quot;Selection of 8 continuous color palettes&quot;)
+plt.suptitle(&quot;Selection of continuous color palettes&quot;)
 plt.tight_layout()
 plt.show()
 </pre></div>
@@ -605,7 +603,7 @@ plt.show()
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/notebooks_colorPalettes_13_0.png" class="no-scaled-link" src="../_images/notebooks_colorPalettes_13_0.png" style="width: 859px; height: 431px;" />
+<img alt="../_images/notebooks_colorPalettes_12_0.png" class="no-scaled-link" src="../_images/notebooks_colorPalettes_12_0.png" style="width: 859px; height: 431px;" />
 </div>
 </div>
 </section>
@@ -631,11 +629,11 @@ plt.show()
       </div>
     </a>
     <a class="right-next"
-       href="../modules.html"
+       href="../misc_setup.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">API</p>
+        <p class="prev-next-title">Miscellaneous setup</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>

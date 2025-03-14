@@ -412,19 +412,26 @@ sys.path.append(path)
 </pre></div>
 </div>
 </div>
-<div class="nbinput nblast docutils container">
+<div class="nbinput docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[2]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>import importlib
-from scipy import sparse
-import piaso
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>import piaso
 import scanpy as sc
 import numpy as np
 import matplotlib.pyplot as plt
 import warnings
 </pre></div>
 </div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+/home/vas744/.local/lib/python3.9/site-packages/networkx/utils/backends.py:135: RuntimeWarning: networkx backend defined more than once: nx-loopback
+  backends.update(_get_backends(&#34;networkx.backends&#34;))
+</pre></div></div>
 </div>
 <div class="nbinput nblast docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[3]:
@@ -433,9 +440,6 @@ import warnings
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.set_figure_params(dpi=80,dpi_save=300, color_map=&#39;viridis&#39;,facecolor=&#39;white&#39;)
 from matplotlib import rcParams
 rcParams[&#39;figure.figsize&#39;] = 4, 4
-save_dir=&#39;/data1/vallaris/Results/single-cell/Methods/PIASO&#39;
-sc.settings.figdir = save_dir
-prefix=&#39;GitHub_testing&#39;
 </pre></div>
 </div>
 </div>
@@ -452,16 +456,25 @@ prefix=&#39;GitHub_testing&#39;
 <p>Let us load a 20k subsampled version of the Seattle Alzheimer’s Disease Brain Cell Atlas (SEA-AD) project dataset described in detail in <a class="reference external" href="../references.html#cell1">Gabitto et. al. (2024)</a>. We will be using the scRNA-seq data from the dataset in this tutorial.</p>
 <p>Download the subsampled dataset from Google Drive: <a class="reference external" href="https://drive.google.com/file/d/1EdRA0ECvPlEnNaOzKqj19GrEtucB7hmE/view?usp=drive_link">https://drive.google.com/file/d/1EdRA0ECvPlEnNaOzKqj19GrEtucB7hmE/view?usp=drive_link</a></p>
 <p>The original data is available on <a class="reference external" href="https://portal.brain-map.org/explore/seattle-alzheimers-disease">https://portal.brain-map.org/explore/seattle-alzheimers-disease</a>.</p>
-<div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
-</pre></div>
-</div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>!/home/vas744/Software/gdrive files download --destination /home/vas744/Data/Public/PIASO 1EdRA0ECvPlEnNaOzKqj19GrEtucB7hmE
-</pre></div>
-</div>
-</div>
-<div class="nbinput nblast docutils container">
+<div class="nbinput docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[5]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>!/home/vas744/Software/gdrive files download --overwrite --destination /n/scratch/users/v/vas744/Data/Public/PIASO 1EdRA0ECvPlEnNaOzKqj19GrEtucB7hmE
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Downloading SEA-AD_RNA_MTG_subsample_excludeReference_20k_piaso.h5ad
+Successfully downloaded SEA-AD_RNA_MTG_subsample_excludeReference_20k_piaso.h5ad
+</pre></div></div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[6]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata=sc.read(&#39;/n/scratch/users/v/vas744/Data/Public/PIASO/SEA-AD_RNA_MTG_subsample_excludeReference_20k_piaso.h5ad&#39;)
@@ -469,7 +482,7 @@ prefix=&#39;GitHub_testing&#39;
 </div>
 </div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[6]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[7]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata
@@ -477,7 +490,7 @@ prefix=&#39;GitHub_testing&#39;
 </div>
 </div>
 <div class="nboutput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[6]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[7]:
 </pre></div>
 </div>
 <div class="output_area docutils container">
@@ -496,7 +509,7 @@ AnnData object with n_obs × n_vars = 20000 × 36601
 <h2>Visualize with a discrete color map<a class="headerlink" href="#Visualize-with-a-discrete-color-map" title="Link to this heading">#</a></h2>
 <p>The discrete color map can be used to visualize the categorical variables such as cell subclass.</p>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[7]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[8]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.embedding(adata,
@@ -519,7 +532,7 @@ AnnData object with n_obs × n_vars = 20000 × 36601
 </div>
 </div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[8]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[9]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.embedding(adata,
@@ -548,7 +561,7 @@ AnnData object with n_obs × n_vars = 20000 × 36601
 <h2>Visualize with a continuous color map<a class="headerlink" href="#Visualize-with-a-continuous-color-map" title="Link to this heading">#</a></h2>
 <p>The continuous color map can be used to visualize the continuous variables such as gene expression.</p>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[9]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[10]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(adata,
@@ -570,7 +583,7 @@ AnnData object with n_obs × n_vars = 20000 × 36601
 </div>
 </div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[10]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[11]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(adata,
@@ -595,7 +608,7 @@ AnnData object with n_obs × n_vars = 20000 × 36601
 <section id="Split-the-UMAP-by-condition">
 <h2>Split the UMAP by condition<a class="headerlink" href="#Split-the-UMAP-by-condition" title="Link to this heading">#</a></h2>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[11]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[12]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>mapping_dict=dict(zip(adata.obs[&#39;CERAD score&#39;], adata.obs[&#39;CERAD score&#39;]))
@@ -603,7 +616,7 @@ AnnData object with n_obs × n_vars = 20000 × 36601
 </div>
 </div>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[12]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[13]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>mapping_dict={&#39;Absent&#39;: &#39;Absent&#39;,
@@ -614,7 +627,7 @@ AnnData object with n_obs × n_vars = 20000 × 36601
 </div>
 </div>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[13]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[14]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata.obs[&#39;Condition&#39;]=adata.obs[&#39;CERAD score&#39;].map(mapping_dict)
@@ -622,7 +635,7 @@ AnnData object with n_obs × n_vars = 20000 × 36601
 </div>
 </div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[14]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[15]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.embedding(adata,
@@ -647,7 +660,7 @@ AnnData object with n_obs × n_vars = 20000 × 36601
 <section id="Visualizing-the-expression-of-a-specific-gene-across-two-different-experimental-conditions">
 <h3>Visualizing the expression of a specific gene across two different experimental conditions<a class="headerlink" href="#Visualizing-the-expression-of-a-specific-gene-across-two-different-experimental-conditions" title="Link to this heading">#</a></h3>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[15]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[16]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>piaso.pl.plot_embeddings_split(adata,
@@ -669,7 +682,7 @@ AnnData object with n_obs × n_vars = 20000 × 36601
 </div>
 </div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[16]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[17]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>piaso.pl.plot_embeddings_split(adata,
@@ -694,7 +707,7 @@ AnnData object with n_obs × n_vars = 20000 × 36601
 <section id="Visulaizing-continuous-variables-(Number-of-UMIs)-across-different-experimental-conditions">
 <h3>Visulaizing continuous variables (Number of UMIs) across different experimental conditions<a class="headerlink" href="#Visulaizing-continuous-variables-(Number-of-UMIs)-across-different-experimental-conditions" title="Link to this heading">#</a></h3>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[17]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[18]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>piaso.pl.plot_embeddings_split(adata,
@@ -719,7 +732,7 @@ AnnData object with n_obs × n_vars = 20000 × 36601
 <section id="Visualizing-categorical-variables-(Cell-subclass)-across-different-experimental-conditions">
 <h3>Visualizing categorical variables (Cell subclass) across different experimental conditions<a class="headerlink" href="#Visualizing-categorical-variables-(Cell-subclass)-across-different-experimental-conditions" title="Link to this heading">#</a></h3>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[18]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[19]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>piaso.pl.plot_embeddings_split(adata,
@@ -735,12 +748,12 @@ AnnData object with n_obs × n_vars = 20000 × 36601
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/notebooks_01_showThePlotFunction_28_0.png" class="no-scaled-link" src="../_images/notebooks_01_showThePlotFunction_28_0.png" style="width: 1033px; height: 381px;" />
+<img alt="../_images/notebooks_01_showThePlotFunction_28_0.png" class="no-scaled-link" src="../_images/notebooks_01_showThePlotFunction_28_0.png" style="width: 1037px; height: 391px;" />
 </div>
 </div>
 <p>We can visualize these cell subclasses alongside the subclass legend. To enhance clarity, the ncol parameter can be used to adjust the number of subplots per row.</p>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[19]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[20]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>piaso.pl.plot_embeddings_split(adata,
@@ -757,11 +770,11 @@ AnnData object with n_obs × n_vars = 20000 × 36601
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/notebooks_01_showThePlotFunction_30_0.png" class="no-scaled-link" src="../_images/notebooks_01_showThePlotFunction_30_0.png" style="width: 639px; height: 781px;" />
+<img alt="../_images/notebooks_01_showThePlotFunction_30_0.png" class="no-scaled-link" src="../_images/notebooks_01_showThePlotFunction_30_0.png" style="width: 633px; height: 781px;" />
 </div>
 </div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[20]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[21]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>piaso.pl.plot_embeddings_split(adata,
@@ -790,7 +803,7 @@ AnnData object with n_obs × n_vars = 20000 × 36601
 <h2>Violin plots of grouped data<a class="headerlink" href="#Violin-plots-of-grouped-data" title="Link to this heading">#</a></h2>
 <p>Visulaize how the groups in the dataset vary across a list of different features. Here, you can plot a different subplot for each feature of interest.</p>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[21]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[22]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>piaso.pl.plot_features_violin(adata,
@@ -811,7 +824,7 @@ AnnData object with n_obs × n_vars = 20000 × 36601
 </div>
 <p>Adding the horizontal grid line</p>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[22]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[23]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>piaso.pl.plot_features_violin(adata,
@@ -831,7 +844,7 @@ AnnData object with n_obs × n_vars = 20000 × 36601
 </div>
 <p>The height and widhts of these plots can be adjusted according to the number of features and groups you have for better visualization.</p>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[23]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[24]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>piaso.pl.plot_features_violin(adata,
@@ -855,7 +868,7 @@ AnnData object with n_obs × n_vars = 20000 × 36601
 <h2>Violin plots of entire data<a class="headerlink" href="#Violin-plots-of-entire-data" title="Link to this heading">#</a></h2>
 <p>We can visualize the entire dataset as a single group, adjusting the dot size to plot all the cells onto the violin plot.</p>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[24]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[25]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>piaso.pl.plot_features_violin(adata,
@@ -875,7 +888,7 @@ AnnData object with n_obs × n_vars = 20000 × 36601
 </div>
 <p>We can visualize the distributions of the cells across various features together.</p>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[25]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[26]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>piaso.pl.plot_features_violin(adata,
@@ -899,7 +912,7 @@ AnnData object with n_obs × n_vars = 20000 × 36601
 <h2>Save output plots<a class="headerlink" href="#Save-output-plots" title="Link to this heading">#</a></h2>
 <p>Use the <code class="docutils literal notranslate"><span class="pre">save</span></code> parameter to specific the file name and path to save:</p>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[26]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[27]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>piaso.pl.plot_embeddings_split(adata,
@@ -930,7 +943,7 @@ Figure saved to:  ./PIASO_UMAP_split_by_condition.pdf
 </pre></div></div>
 </div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[27]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[28]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>piaso.pl.plot_features_violin(adata,
@@ -962,7 +975,7 @@ Figure saved to: ./violin_plot_piaso.pdf
 <section id="Combine-categorical-variables">
 <h2>Combine categorical variables<a class="headerlink" href="#Combine-categorical-variables" title="Link to this heading">#</a></h2>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[28]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[29]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>mapping_dict={&#39;Absent&#39;: &#39;Control&#39;,
@@ -973,7 +986,7 @@ Figure saved to: ./violin_plot_piaso.pdf
 </div>
 </div>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[29]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[30]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata.obs[&#39;Condition&#39;]=adata.obs[&#39;CERAD score&#39;].map(mapping_dict)
@@ -981,7 +994,7 @@ Figure saved to: ./violin_plot_piaso.pdf
 </div>
 </div>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[30]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[31]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata.obs[&#39;SubclassXCondition&#39;] = piaso.pp.getCrossCategories(adata.obs, &#39;Subclass&#39;, &#39;Condition&#39;, )
@@ -990,7 +1003,7 @@ Figure saved to: ./violin_plot_piaso.pdf
 </div>
 <p>By combining multiple categories, while maintaining the original orders of the categories, you could show the gene expression changes at cell type level across different conditions.</p>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[31]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[32]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.dotplot(
@@ -1012,7 +1025,7 @@ Figure saved to: ./violin_plot_piaso.pdf
 </div>
 <p>We can also switch the order in which we combine the categorical variables.</p>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[32]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[33]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata.obs[&#39;ConditionXSubclass&#39;] = piaso.pp.getCrossCategories(adata.obs, &#39;Condition&#39;, &#39;Subclass&#39;,)
@@ -1020,7 +1033,7 @@ Figure saved to: ./violin_plot_piaso.pdf
 </div>
 </div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[33]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[34]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.dotplot(
@@ -1044,7 +1057,7 @@ Figure saved to: ./violin_plot_piaso.pdf
 <section id="Count-the-number-of-cells-in-each-category">
 <h2>Count the number of cells in each category<a class="headerlink" href="#Count-the-number-of-cells-in-each-category" title="Link to this heading">#</a></h2>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[34]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[35]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>piaso.pp.table(adata.obs[&#39;Subclass&#39;])
@@ -1052,7 +1065,7 @@ Figure saved to: ./violin_plot_piaso.pdf
 </div>
 </div>
 <div class="nboutput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[34]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[35]:
 </pre></div>
 </div>
 <div class="output_area docutils container">
@@ -1085,7 +1098,7 @@ Figure saved to: ./violin_plot_piaso.pdf
 </div>
 <p>You can use the rank parameter to order the results, and the ascending parameter to determine the order of the ranking.</p>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[35]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[36]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>piaso.pp.table(adata.obs[&#39;Subclass&#39;], rank = True, ascending = True)
@@ -1093,7 +1106,7 @@ Figure saved to: ./violin_plot_piaso.pdf
 </div>
 </div>
 <div class="nboutput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[35]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[36]:
 </pre></div>
 </div>
 <div class="output_area docutils container">
@@ -1125,7 +1138,7 @@ Figure saved to: ./violin_plot_piaso.pdf
 </pre></div></div>
 </div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[36]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[37]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>piaso.pp.table(adata.obs[&#39;Subclass&#39;], rank = True, ascending = False)
@@ -1133,7 +1146,7 @@ Figure saved to: ./violin_plot_piaso.pdf
 </div>
 </div>
 <div class="nboutput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[36]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[37]:
 </pre></div>
 </div>
 <div class="output_area docutils container">
@@ -1166,7 +1179,7 @@ Figure saved to: ./violin_plot_piaso.pdf
 </div>
 <p>In order to store the results as a dataframe, set as_dataframe = True.</p>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[37]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[38]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>subclass_df = piaso.pp.table(adata.obs[&#39;Subclass&#39;], rank = True, ascending = False, as_dataframe = True)

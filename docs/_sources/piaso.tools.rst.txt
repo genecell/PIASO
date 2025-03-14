@@ -18,3 +18,5 @@ piaso.tools package
 .. autofunction:: runGDRParallel
 .. autofunction:: runSVD
 .. autofunction:: runSVDLazy
+.. autofunction:: smoothCellTypePrediction
+.. autofunction:: predictCellTypeByMarker

@@ -13,34 +13,50 @@
   {
    "cell_type": "code",
    "execution_count": 1,
-   "id": "99262c8d-cf57-4fab-9099-c1289e8c8fa0",
+   "id": "677683c1-eedf-4724-bd97-5b74ca01a40d",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "import numpy as np\n",
+    "import pandas as pd\n",
+    "import scanpy as sc\n",
+    "import matplotlib.pyplot as plt\n",
+    "from sklearn import metrics\n",
+    "import seaborn as sns\n",
+    "import logging\n",
+    "from matplotlib import rcParams\n",
+    "import sys\n",
+    "from sklearn.metrics import f1_score\n",
+    "import warnings"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 2,
+   "id": "281f6055-51ef-4324-8982-a6edf1141bd1",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "warnings.simplefilter(action='ignore', category=FutureWarning)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 3,
+   "id": "3bfba0e1-400d-4cd6-8ade-5eb175fcfa97",
    "metadata": {},
    "outputs": [
     {
      "name": "stdout",
      "output_type": "stream",
      "text": [
-      "scanpy==1.10.3 anndata==0.10.8 umap==0.5.7 numpy==1.26.4 scipy==1.12.0 pandas==2.2.3 scikit-learn==1.5.2 statsmodels==0.14.4 igraph==0.11.8 louvain==0.8.2 pynndescent==0.5.13\n"
+      "scanpy==1.10.3 anndata==0.10.8 umap==0.5.7 numpy==1.26.4 scipy==1.13.0 pandas==2.2.3 scikit-learn==1.5.2 statsmodels==0.14.4 igraph==0.11.5 louvain==0.8.2 pynndescent==0.5.13\n"
      ]
     }
    ],
    "source": [
-    "import numpy as np\n",
-    "import pandas as pd\n",
-    "import scanpy as sc\n",
-    "import os\n",
-    "from typing import Iterable, Union, Optional\n",
-    "import matplotlib.pyplot as plt\n",
-    "import anndata as ad\n",
-    "from sklearn import metrics\n",
-    "import seaborn as sns\n",
-    "from matplotlib import cm\n",
-    "from matplotlib import colors, colorbar\n",
-    "# from tqdm import tqdm\n",
-    "import logging\n",
-    "sc.set_figure_params(dpi=80,dpi_save=300, color_map='viridis',facecolor='white')\n",
-    "from matplotlib import rcParams\n",
     "# To modify the default figure size, use rcParams.\n",
+    "sc.set_figure_params(dpi=80,dpi_save=300, color_map='viridis',facecolor='white')\n",
     "rcParams['figure.figsize'] = 5, 5\n",
     "rcParams['font.sans-serif'] = \"Arial\"\n",
     "rcParams['font.family'] = \"Arial\"\n",
@@ -50,13 +66,23 @@
   },
   {
    "cell_type": "code",
-   "execution_count": 2,
+   "execution_count": 4,
    "id": "c88f21a8-58cd-4760-a8a5-218f2b96fb35",
    "metadata": {},
-   "outputs": [],
+   "outputs": [
+    {
+     "name": "stderr",
+     "output_type": "stream",
+     "text": [
+      "/home/vas744/.local/lib/python3.9/site-packages/networkx/utils/backends.py:135: RuntimeWarning: networkx backend defined more than once: nx-loopback\n",
+      "  backends.update(_get_backends(\"networkx.backends\"))\n"
+     ]
+    }
+   ],
    "source": [
     "path = '/home/vas744/Analysis/Python/Packages/PIASO'\n",
-    "import sys\n",
+    "sys.path.append(path)\n",
+    "path = '/home/vas744/Analysis/Python/Packages/COSG'\n",
     "sys.path.append(path)\n",
     "import piaso"
    ]
@@ -85,7 +111,7 @@
   },
   {
    "cell_type": "code",
-   "execution_count": 3,
+   "execution_count": 5,
    "id": "88e63c4a-e30f-4add-97e3-180ece9d4d24",
    "metadata": {},
    "outputs": [],
@@ -95,7 +121,7 @@
   },
   {
    "cell_type": "code",
-   "execution_count": 1,
+   "execution_count": 6,
    "id": "0a4226ee-99c7-4c19-a27b-216f08ec6c37",
    "metadata": {},
    "outputs": [
@@ -103,17 +129,18 @@
      "name": "stdout",
      "output_type": "stream",
      "text": [
-      "Downloading SEA-AD_RNA_MTG_subsample_excludeReference_20k_piaso_preprocessed.h5ad\n"
+      "Downloading SEA-AD_RNA_MTG_subsample_excludeReference_20k_piaso_preprocessed.h5ad\n",
+      "Successfully downloaded SEA-AD_RNA_MTG_subsample_excludeReference_20k_piaso_preprocessed.h5ad\n"
      ]
     }
    ],
    "source": [
-    "!/home/vas744/Software/gdrive files download --destination {data_dir} 1pDBIgPvEO-sBuIMEhrvVhnf7tfU7H6Xy"
+    "!/home/vas744/Software/gdrive files download --overwrite --destination {data_dir} 1pDBIgPvEO-sBuIMEhrvVhnf7tfU7H6Xy"
    ]
   },
   {
    "cell_type": "code",
-   "execution_count": 4,
+   "execution_count": 6,
    "id": "2352021f-7e70-42c2-b8ae-e5996c8ea393",
    "metadata": {},
    "outputs": [
@@ -129,7 +156,7 @@
        "    obsp: 'connectivities', 'distances'"
       ]
      },
-     "execution_count": 4,
+     "execution_count": 6,
      "metadata": {},
      "output_type": "execute_result"
     }
@@ -154,17 +181,26 @@
   },
   {
    "cell_type": "code",
-   "execution_count": null,
+   "execution_count": 8,
    "id": "ced0c900-881d-45e9-b06b-82b582309e44",
    "metadata": {},
-   "outputs": [],
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Downloading GreatApesMTG_RNA_integrated_raw_onlyOrthogonal_gdr_humanSubset_aibs.h5ad\n",
+      "Successfully downloaded GreatApesMTG_RNA_integrated_raw_onlyOrthogonal_gdr_humanSubset_aibs.h5ad\n"
+     ]
+    }
+   ],
    "source": [
     "!/home/vas744/Software/gdrive files download --overwrite --destination {data_dir} 1nF0iRTGFFQcEcM6hYcPptiYkxs65k2p4"
    ]
   },
   {
    "cell_type": "code",
-   "execution_count": 5,
+   "execution_count": 7,
    "id": "5dfe10fd-ebc8-4c0d-84b9-c19afdbae684",
    "metadata": {},
    "outputs": [
@@ -180,7 +216,7 @@
        "    obsp: 'connectivities', 'distances'"
       ]
      },
-     "execution_count": 5,
+     "execution_count": 7,
      "metadata": {},
      "output_type": "execute_result"
     }
@@ -209,6 +245,20 @@
   {
    "cell_type": "code",
    "execution_count": 8,
+   "id": "9165ae6a-8a94-4083-adf5-ea1ce31fe458",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "categories = ['Astrocyte', 'Chandelier', 'Endothelial', 'L2/3 IT', 'L4 IT', 'L5 ET', 'L5 IT',\n",
+    "              'L5/6 NP', 'L6 CT', 'L6 IT', 'L6 IT Car3', 'L6b', 'Lamp5', 'Lamp5 Lhx6',\n",
+    "              'Microglia-PVM', 'OPC', 'Oligodendrocyte', 'Pax6', 'Pvalb', 'Sncg', 'Sst',\n",
+    "              'Sst Chodl', 'VLMC', 'Vip']\n",
+    "aibs_query_adata.obs['subclass'] = aibs_query_adata.obs['subclass'].cat.rename_categories(categories)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 9,
    "id": "adf0baed-d38a-4892-8b13-d894a2fb5e92",
    "metadata": {},
    "outputs": [],
@@ -219,7 +269,7 @@
   },
   {
    "cell_type": "code",
-   "execution_count": 9,
+   "execution_count": 10,
    "id": "70e86e95-ce9b-44db-854d-0cb0ab0894f8",
    "metadata": {},
    "outputs": [
@@ -250,7 +300,7 @@
   },
   {
    "cell_type": "code",
-   "execution_count": 10,
+   "execution_count": 11,
    "id": "0c13a30a-4148-489d-bf3b-c0589ed39994",
    "metadata": {},
    "outputs": [
@@ -289,7 +339,7 @@
   },
   {
    "cell_type": "code",
-   "execution_count": 11,
+   "execution_count": 12,
    "id": "6a03e618-8c8a-453c-85af-1428d6d92a27",
    "metadata": {},
    "outputs": [
@@ -299,9 +349,9 @@
      "text": [
       "running Leiden clustering\n",
       "    finished: found 26 clusters and added\n",
-      "    'Leiden', the cluster labels (adata.obs, categorical) (0:00:09)\n",
-      "CPU times: user 4.49 s, sys: 254 ms, total: 4.74 s\n",
-      "Wall time: 9.14 s\n"
+      "    'Leiden', the cluster labels (adata.obs, categorical) (0:00:03)\n",
+      "CPU times: user 2.82 s, sys: 253 ms, total: 3.07 s\n",
+      "Wall time: 3.05 s\n"
      ]
     }
    ],
@@ -312,7 +362,7 @@
   },
   {
    "cell_type": "code",
-   "execution_count": 12,
+   "execution_count": 13,
    "id": "362edbba-c852-4b0d-9cb0-a2816bb39a31",
    "metadata": {},
    "outputs": [],
@@ -322,7 +372,7 @@
   },
   {
    "cell_type": "code",
-   "execution_count": 13,
+   "execution_count": 14,
    "id": "753cc5a5-d1d0-4877-b5f0-ce3983c67830",
    "metadata": {},
    "outputs": [
@@ -364,42 +414,32 @@
   },
   {
    "cell_type": "code",
-   "execution_count": 14,
+   "execution_count": 15,
    "id": "45956cf1-472d-4cfa-8266-820ed23bf5eb",
    "metadata": {
     "scrolled": true
    },
    "outputs": [
     {
-     "name": "stderr",
-     "output_type": "stream",
-     "text": [
-      "/home/vas744/Analysis/Python/Packages/PIASO/piaso/tools/_runGDR.py:1623: FutureWarning: Use anndata.concat instead of AnnData.concatenate, AnnData.concatenate is deprecated and will be removed in the future. See the tutorial for concat at: https://anndata.readthedocs.io/en/latest/concatenation.html\n",
-      "  adata_combine=sc.AnnData.concatenate(adata_ref, adata[:,adata_ref.var_names])\n"
-     ]
-    },
-    {
      "name": "stdout",
      "output_type": "stream",
      "text": [
       "Running GDR for the query dataset and the reference dataset:\n",
-      "**finished identifying marker genes by COSG**\n",
-      "**finished identifying marker genes by COSG**\n",
-      "The cell embeddings calculated by GDR were saved as `X_gdr` in adata.obsm.\n"
+      "GDR embeddings saved to adata.obsm['X_gdr']\n"
      ]
     },
     {
      "name": "stderr",
      "output_type": "stream",
      "text": [
-      "2025-02-27 12:13:18,827 - harmonypy - INFO - Computing initial centroids with sklearn.KMeans...\n",
-      "2025-02-27 12:13:52,026 - harmonypy - INFO - sklearn.KMeans initialization complete.\n",
-      "2025-02-27 12:13:55,015 - harmonypy - INFO - Iteration 1 of 10\n",
-      "2025-02-27 12:18:14,030 - harmonypy - INFO - Iteration 2 of 10\n",
-      "2025-02-27 12:22:31,074 - harmonypy - INFO - Iteration 3 of 10\n",
-      "2025-02-27 12:24:40,560 - harmonypy - INFO - Iteration 4 of 10\n",
-      "2025-02-27 12:26:29,620 - harmonypy - INFO - Iteration 5 of 10\n",
-      "2025-02-27 12:28:09,995 - harmonypy - INFO - Converged after 5 iterations\n"
+      "2025-03-13 17:56:06,884 - harmonypy - INFO - Computing initial centroids with sklearn.KMeans...\n",
+      "2025-03-13 17:56:17,410 - harmonypy - INFO - sklearn.KMeans initialization complete.\n",
+      "2025-03-13 17:56:18,858 - harmonypy - INFO - Iteration 1 of 10\n",
+      "2025-03-13 17:57:19,554 - harmonypy - INFO - Iteration 2 of 10\n",
+      "2025-03-13 17:58:25,833 - harmonypy - INFO - Iteration 3 of 10\n",
+      "2025-03-13 17:58:58,705 - harmonypy - INFO - Iteration 4 of 10\n",
+      "2025-03-13 17:59:24,916 - harmonypy - INFO - Iteration 5 of 10\n",
+      "2025-03-13 17:59:46,990 - harmonypy - INFO - Converged after 5 iterations\n"
      ]
     },
     {
@@ -442,7 +482,7 @@
   },
   {
    "cell_type": "code",
-   "execution_count": 15,
+   "execution_count": 16,
    "id": "9b472920-69b1-48eb-b996-d8ebbb0cbd82",
    "metadata": {},
    "outputs": [],
@@ -461,7 +501,7 @@
   },
   {
    "cell_type": "code",
-   "execution_count": 16,
+   "execution_count": 17,
    "id": "07cb4831-f495-4b61-b270-4f1fc82c1ed0",
    "metadata": {},
    "outputs": [
@@ -502,7 +542,7 @@
   },
   {
    "cell_type": "code",
-   "execution_count": 17,
+   "execution_count": 18,
    "id": "c22a55c2-8695-4063-a0bd-bbc57df82387",
    "metadata": {},
    "outputs": [],
@@ -513,7 +553,7 @@
   },
   {
    "cell_type": "code",
-   "execution_count": 18,
+   "execution_count": 19,
    "id": "9d667c11-65ef-47ad-8af2-29678ca43d66",
    "metadata": {},
    "outputs": [],
@@ -523,7 +563,7 @@
   },
   {
    "cell_type": "code",
-   "execution_count": 19,
+   "execution_count": 20,
    "id": "e167e3aa-e926-49f5-b5bf-d6007156a628",
    "metadata": {},
    "outputs": [
@@ -554,13 +594,35 @@
     "plt.ylabel(\"True Subclass\")\n",
     "plt.show()"
    ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 21,
+   "id": "04405ca0-3cec-4d32-a42a-7ab6a4079ef9",
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "The Micro F1 score for PIASO prediction: 0.967\n",
+      "The Macro F1 score for PIASO prediction: 0.951\n"
+     ]
+    }
+   ],
+   "source": [
+    "piaso_f1_score=np.round(f1_score(aibs_query_adata.obs['subclass'], aibs_query_adata.obs['CellTypes_gdr'], average='micro'), decimals=3)\n",
+    "print(f\"The Micro F1 score for PIASO prediction: {piaso_f1_score}\")\n",
+    "piaso_f1_score=np.round(f1_score(aibs_query_adata.obs['subclass'], aibs_query_adata.obs['CellTypes_gdr'], average='macro'), decimals=3)\n",
+    "print(f\"The Macro F1 score for PIASO prediction: {piaso_f1_score}\")"
+   ]
   }
  ],
  "metadata": {
   "kernelspec": {
-   "display_name": "Python [conda env:miniconda3-vvs]",
+   "display_name": "Python [conda env:.conda-genecell_env]",
    "language": "python",
-   "name": "conda-env-miniconda3-vvs-py"
+   "name": "conda-env-.conda-genecell_env-py"
   },
   "language_info": {
    "codemirror_mode": {
@@ -572,7 +634,7 @@
    "name": "python",
    "nbconvert_exporter": "python",
    "pygments_lexer": "ipython3",
-   "version": "3.9.20"
+   "version": "3.9.21"
   }
  },
  "nbformat": 4,

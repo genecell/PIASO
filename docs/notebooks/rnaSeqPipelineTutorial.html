@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>Pre-processing CellRanger outputs &#8212; PIASO 0.1.0 documentation</title>
+    <title>Pre-processing CellRanger outputs (single sample) &#8212; PIASO 0.1.0 documentation</title>
   
   
   
@@ -50,8 +50,8 @@
     <script src="../_static/sidebar_toggle.js?v=3b053ec6"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Finer clustering on selected cluster(s)" href="LeidenLocalTutorial.html" />
-    <link rel="prev" title="Cell type prediction by GDR" href="GDRPredictCellTypeTutorial.html" />
+    <link rel="next" title="Pre-processing CellRanger outputs (multiple samples)" href="rnaSeqPipelineTutorial_E18.html" />
+    <link rel="prev" title="GDR for scATAC-seq data" href="GDR_ATAC_Tutorial.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   <meta name="docsearch:version" content="" />
@@ -382,7 +382,7 @@
     
     <li class="breadcrumb-item"><a href="../tutorials.html" class="nav-link">Tutorials</a></li>
     
-    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Pre-processing CellRanger outputs</span></li>
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Pre-processing CellRanger outputs (single sample)</span></li>
   </ul>
 </nav>
 </div>
@@ -399,19 +399,31 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section id="Pre-processing-CellRanger-outputs">
-<h1>Pre-processing CellRanger outputs<a class="headerlink" href="#Pre-processing-CellRanger-outputs" title="Link to this heading">#</a></h1>
+  <section id="Pre-processing-CellRanger-outputs-(single-sample)">
+<h1>Pre-processing CellRanger outputs (single sample)<a class="headerlink" href="#Pre-processing-CellRanger-outputs-(single-sample)" title="Link to this heading">#</a></h1>
 <p>This notebook demonstrates the pipeline for processing scRNA-seq data, covering metric computation, normalization, clustering, cell type prediction, and the identification/removal of doublets and low-quality clusters. The final output is pre-processed, annotated scRNA-seq data.</p>
-<div class="nbinput nblast docutils container">
+<div class="nbinput docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[1]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>path = &#39;/home/vas744/Analysis/Python/Packages/PIASO&#39;
-import sys
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>import sys
+path = &#39;/home/vas744/Analysis/Python/Packages/PIASO&#39;
+sys.path.append(path)
+path = &#39;/home/vas744/Analysis/Python/Packages/COSG&#39;
 sys.path.append(path)
 import piaso
+import cosg
 </pre></div>
 </div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+/home/vas744/.local/lib/python3.9/site-packages/networkx/utils/backends.py:135: RuntimeWarning: networkx backend defined more than once: nx-loopback
+  backends.update(_get_backends(&#34;networkx.backends&#34;))
+</pre></div></div>
 </div>
 <div class="nbinput docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[2]:
@@ -420,18 +432,10 @@ import piaso
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>import numpy as np
 import pandas as pd
 import scanpy as sc
-from typing import Iterable, Union, Optional
-import matplotlib.pyplot as plt
-import anndata as ad
-from scipy import sparse
 import logging
 from matplotlib import rcParams
-import seaborn as sns
-from matplotlib import cm
-from matplotlib import colors, colorbar
 from sklearn.preprocessing import StandardScaler
 import warnings
-import cosg
 
 # To modify the default figure size, use rcParams.
 rcParams[&#39;figure.figsize&#39;] = 4, 4
@@ -448,7 +452,7 @@ sc.set_figure_params(dpi=80,dpi_save=300, color_map=&#39;viridis&#39;,facecolor=
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-scanpy==1.10.3 anndata==0.10.8 umap==0.5.7 numpy==1.26.4 scipy==1.12.0 pandas==2.2.3 scikit-learn==1.5.2 statsmodels==0.14.4 igraph==0.11.8 louvain==0.8.2 pynndescent==0.5.13
+scanpy==1.10.3 anndata==0.10.8 umap==0.5.7 numpy==1.26.4 scipy==1.13.0 pandas==2.2.3 scikit-learn==1.5.2 statsmodels==0.14.4 igraph==0.11.5 louvain==0.8.2 pynndescent==0.5.13
 </pre></div></div>
 </div>
 <div class="nbinput nblast docutils container">
@@ -462,13 +466,23 @@ scanpy==1.10.3 anndata==0.10.8 umap==0.5.7 numpy==1.26.4 scipy==1.12.0 pandas==2
 <section id="Load-the-data">
 <h2>Load the data<a class="headerlink" href="#Load-the-data" title="Link to this heading">#</a></h2>
 <p>The dataset used in this tutorial was obtained from: <a class="reference external" href="https://www.10xgenomics.com/datasets/10k-Mouse-Brain-CNIK-3p-gemx">https://www.10xgenomics.com/datasets/10k-Mouse-Brain-CNIK-3p-gemx</a></p>
-<div class="nbinput nblast docutils container">
+<p>Download the required dataset from Google Drive: <a class="reference external" href="https://drive.google.com/file/d/1nsaOC-__jUjXUjGqaUMaGBT2LWyu_L5_/view?usp=drive_link">https://drive.google.com/file/d/1nsaOC-__jUjXUjGqaUMaGBT2LWyu_L5_/view?usp=drive_link</a></p>
+<div class="nbinput docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[4]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>save_dir = &#39;/n/scratch/users/v/vas744/Results/PIASO_Testing/&#39;
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>!/home/vas744/Software/gdrive files download --overwrite --destination /n/scratch/users/v/vas744/Data/Public/PIASO 1nsaOC-__jUjXUjGqaUMaGBT2LWyu_L5_
 </pre></div>
 </div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Downloading 10k_Mouse_Brain_CNIK_3p_gemx_10k_Mouse_Brain_CNIK_3p_gemx_count_sample_filtered_feature_bc_matrix.h5
+Successfully downloaded 10k_Mouse_Brain_CNIK_3p_gemx_10k_Mouse_Brain_CNIK_3p_gemx_count_sample_filtered_feature_bc_matrix.h5
+</pre></div></div>
 </div>
 <div class="nbinput docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[5]:
@@ -641,7 +655,7 @@ Estimated detectable doublet fraction = 62.5%
 Overall doublet rate:
         Expected   = 10.0%
         Estimated  = 9.2%
-Elapsed time: 71.0 seconds
+Elapsed time: 70.9 seconds
 </pre></div></div>
 </div>
 <div class="nboutput nblast docutils container">
@@ -649,12 +663,12 @@ Elapsed time: 71.0 seconds
 </div>
 <div class="output_area stderr docutils container">
 <div class="highlight"><pre>
-/tmp/ipykernel_4133/2312138584.py:10: SettingWithCopyWarning:
+/tmp/ipykernel_16745/2312138584.py:10: SettingWithCopyWarning:
 A value is trying to be set on a copy of a slice from a DataFrame
 
 See the caveats in the documentation: https://pandas.pydata.org/pandas-docs/stable/user_guide/indexing.html#returning-a-view-versus-a-copy
   adata.obs[&#39;predicted_doublets&#39;][adatai.obs_names]=predicted_doublets
-/tmp/ipykernel_4133/2312138584.py:12: SettingWithCopyWarning:
+/tmp/ipykernel_16745/2312138584.py:12: SettingWithCopyWarning:
 A value is trying to be set on a copy of a slice from a DataFrame
 
 See the caveats in the documentation: https://pandas.pydata.org/pandas-docs/stable/user_guide/indexing.html#returning-a-view-versus-a-copy
@@ -745,25 +759,16 @@ piaso.tl.infog(adata,
 </pre></div>
 </div>
 </div>
-<div class="nboutput docutils container">
-<div class="prompt empty docutils container">
-</div>
-<div class="output_area stderr docutils container">
-<div class="highlight"><pre>
-/home/vas744/Analysis/Python/Packages/PIASO/piaso/tools/_normalization.py:85: RuntimeWarning: divide by zero encountered in divide
-  info_factor=sparse.diags(counts_sum/cell_depth.ravel()) @ counts @ sparse.diags(1/gene_depth.ravel())
-</pre></div></div>
-</div>
 <div class="nboutput nblast docutils container">
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
 The normalized data is saved as `infog` in `adata.layers`.
-The highly variable genes are saved as `highly_variable` in `adata.obs`.
+The highly variable genes are saved as `highly_variable` in `adata.var`.
 Finished INFOG normalization.
-CPU times: user 3.29 s, sys: 2.09 s, total: 5.38 s
-Wall time: 5.38 s
+CPU times: user 3.74 s, sys: 3.86 s, total: 7.6 s
+Wall time: 7.59 s
 </pre></div></div>
 </div>
 </section>
@@ -810,9 +815,9 @@ computing neighbors
 computing UMAP
     finished: added
     &#39;X_umap&#39;, UMAP coordinates (adata.obsm)
-    &#39;umap&#39;, UMAP parameters (adata.uns) (0:00:12)
-CPU times: user 52.7 s, sys: 6.07 s, total: 58.8 s
-Wall time: 49.3 s
+    &#39;umap&#39;, UMAP parameters (adata.uns) (0:00:14)
+CPU times: user 1min 15s, sys: 267 ms, total: 1min 16s
+Wall time: 51.2 s
 </pre></div></div>
 </div>
 <div class="nbinput docutils container">
@@ -854,10 +859,10 @@ sc.tl.leiden(adata,resolution=0.5,key_added=&#39;Leiden&#39;)
 <div class="output_area docutils container">
 <div class="highlight"><pre>
 running Leiden clustering
-    finished: found 33 clusters and added
-    &#39;Leiden&#39;, the cluster labels (adata.obs, categorical) (0:00:04)
-CPU times: user 4.38 s, sys: 25.7 ms, total: 4.41 s
-Wall time: 4.4 s
+    finished: found 32 clusters and added
+    &#39;Leiden&#39;, the cluster labels (adata.obs, categorical) (0:00:00)
+CPU times: user 877 ms, sys: 23 ms, total: 900 ms
+Wall time: 894 ms
 </pre></div></div>
 </div>
 <div class="nbinput docutils container">
@@ -881,7 +886,7 @@ Wall time: 4.4 s
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-WARNING: Length of palette colors is smaller than the number of categories (palette length: 19, categories length: 33. Some categories will have the same color.
+WARNING: Length of palette colors is smaller than the number of categories (palette length: 19, categories length: 32. Some categories will have the same color.
 </pre></div></div>
 </div>
 <div class="nboutput nblast docutils container">
@@ -933,10 +938,11 @@ cosg.cosg(adata,
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-CPU times: user 3.22 s, sys: 1.12 s, total: 4.34 s
-Wall time: 4.34 s
+CPU times: user 3.01 s, sys: 825 ms, total: 3.83 s
+Wall time: 3.83 s
 </pre></div></div>
 </div>
+<p>We can use a dendrogram dot plot to visualize the expression of the top three marker genes of each Leiden cluster.</p>
 <div class="nbinput docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[28]:
 </pre></div>
@@ -970,7 +976,44 @@ Storing dendrogram info using `.uns[&#39;dendrogram_Leiden&#39;]`
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/notebooks_rnaSeqPipelineTutorial_39_1.png" class="no-scaled-link" src="../_images/notebooks_rnaSeqPipelineTutorial_39_1.png" style="width: 2476px; height: 931px;" />
+<img alt="../_images/notebooks_rnaSeqPipelineTutorial_40_1.png" class="no-scaled-link" src="../_images/notebooks_rnaSeqPipelineTutorial_40_1.png" style="width: 2407px; height: 910px;" />
+</div>
+</div>
+<p>Another way to visualize the expression of the top three marker genes from each Leiden cluster is by using COSG’s plotMarkerDendrogram method to create a circular dendrogram.</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[29]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>cosg.plotMarkerDendrogram(
+     adata,
+     group_by=&quot;Leiden&quot;,
+     use_rep=&quot;X_svd&quot;,
+     calculate_dendrogram_on_cosg_scores=True,
+     top_n_genes=3,
+     radius_step=4.5,
+     cmap=&quot;Purples&quot;,
+     gene_label_offset=0.25,
+     gene_label_color=&quot;black&quot;,
+     linkage_method=&quot;ward&quot;,
+     distance_metric=&quot;correlation&quot;,
+     hierarchy_merge_scale=0,
+     collapse_scale=0.5,
+     add_cluster_node_for_single_node_cluster=True,
+     palette=None,
+     figure_size= (10, 10),
+     colorbar_width=0.01,
+     gene_color_min=0,
+     gene_color_max=None,
+     show_figure=True,
+)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_rnaSeqPipelineTutorial_42_0.png" class="no-scaled-link" src="../_images/notebooks_rnaSeqPipelineTutorial_42_0.png" style="width: 752px; height: 616px;" />
 </div>
 </div>
 </section>
@@ -979,7 +1022,7 @@ Storing dendrogram info using `.uns[&#39;dendrogram_Leiden&#39;]`
 <h2>Marker genes of an individual cluster<a class="headerlink" href="#Marker-genes-of-an-individual-cluster" title="Link to this heading">#</a></h2>
 <p>We can use dotplots and UMAPs to visualize the expression of the top marker genes in a selected cluster, which can be used to evaluate cluster quality.</p>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[29]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[30]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>marker_gene=pd.DataFrame(adata.uns[&#39;cosg&#39;][&#39;names&#39;])
@@ -987,7 +1030,7 @@ Storing dendrogram info using `.uns[&#39;dendrogram_Leiden&#39;]`
 </div>
 </div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[30]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[31]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>cluster_check=&#39;8&#39;
@@ -996,33 +1039,33 @@ marker_gene[cluster_check].values
 </div>
 </div>
 <div class="nboutput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[30]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[31]:
 </pre></div>
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
 array([&#39;ENSMUSG00000120124&#39;, &#39;Nxph3&#39;, &#39;A630023P12Rik&#39;, &#39;Trpv6&#39;, &#39;Gm27040&#39;,
-       &#39;Chrna5&#39;, &#39;Fezf2&#39;, &#39;5330416C01Rik&#39;, &#39;Nlrp6&#39;, &#39;Tbata&#39;,
+       &#39;Chrna5&#39;, &#39;Nlrp6&#39;, &#39;Fezf2&#39;, &#39;5330416C01Rik&#39;, &#39;Tbata&#39;,
        &#39;4930551E15Rik&#39;, &#39;Hs3st4&#39;, &#39;Krt80&#39;, &#39;Abi3bp&#39;, &#39;Gm35161&#39;, &#39;Gm15942&#39;,
-       &#39;B4galnt3&#39;, &#39;Gm17171&#39;, &#39;Htr1f&#39;, &#39;Rxfp1&#39;, &#39;Prss12&#39;, &#39;Tmem178&#39;,
-       &#39;Gm49422&#39;, &#39;Serinc2&#39;, &#39;Cwh43&#39;, &#39;Prss35&#39;, &#39;Gm11762&#39;, &#39;Gm13335&#39;,
-       &#39;Gm36736&#39;, &#39;Gm31308&#39;, &#39;Rprm&#39;, &#39;Ipcef1&#39;, &#39;Myl4&#39;, &#39;Ccn4&#39;, &#39;Hs3st2&#39;,
-       &#39;Hmga2&#39;, &#39;Hcrtr2&#39;, &#39;Galnt9&#39;, &#39;Col5a1&#39;, &#39;Nptx1&#39;, &#39;Sdk2&#39;, &#39;Sel1l3&#39;,
-       &#39;Slc16a10&#39;, &#39;Sv2b&#39;, &#39;Ephb6&#39;, &#39;A830018L16Rik&#39;, &#39;Trbc2&#39;, &#39;Mirt1&#39;,
-       &#39;Cpa6&#39;, &#39;Gm15270&#39;, &#39;Gm27234&#39;, &#39;Pcsk5&#39;, &#39;Hcrtr1&#39;, &#39;Rspo2&#39;,
-       &#39;Gm20878&#39;, &#39;Gm13391&#39;, &#39;Kcnmb4&#39;, &#39;Cdh18&#39;, &#39;Diras2&#39;, &#39;Adgra1&#39;,
-       &#39;Gm5468&#39;, &#39;Zmiz1os1&#39;, &#39;Khdrbs3&#39;, &#39;Rgsl1&#39;, &#39;Etl4&#39;, &#39;Serpinb8&#39;,
-       &#39;Gm17167&#39;, &#39;Gm12394&#39;, &#39;Gm9899&#39;, &#39;Garnl3&#39;, &#39;Ptpru&#39;, &#39;Scube2&#39;,
-       &#39;Slc17a7&#39;, &#39;Zdhhc23&#39;, &#39;Ano3&#39;, &#39;Tbr1&#39;, &#39;Grik3&#39;, &#39;Gm2824&#39;, &#39;Gm42056&#39;,
-       &#39;Vwc2l&#39;, &#39;Ccl27a&#39;, &#39;Gm35853&#39;, &#39;Sigmar1&#39;, &#39;Grp&#39;, &#39;Kcnmb4os2&#39;,
-       &#39;Pamr1&#39;, &#39;Gm47715&#39;, &#39;Chgb&#39;, &#39;Col24a1&#39;, &#39;2900026A02Rik&#39;, &#39;Gramd2&#39;,
-       &#39;Nrip3&#39;, &#39;Gm14120&#39;, &#39;Smim43&#39;, &#39;Ttc9b&#39;, &#39;Grm8&#39;, &#39;Hcn1&#39;, &#39;Gm5468-1&#39;,
-       &#39;Rph3a&#39;, &#39;Gm32679&#39;], dtype=object)
+       &#39;B4galnt3&#39;, &#39;Gm17171&#39;, &#39;Rxfp1&#39;, &#39;Htr1f&#39;, &#39;Cwh43&#39;, &#39;Tmem178&#39;,
+       &#39;Prss12&#39;, &#39;Gm49422&#39;, &#39;Prss35&#39;, &#39;Serinc2&#39;, &#39;Gm11762&#39;, &#39;Gm13335&#39;,
+       &#39;Gm36736&#39;, &#39;Gm31308&#39;, &#39;Rprm&#39;, &#39;Myl4&#39;, &#39;Hs3st2&#39;, &#39;Ipcef1&#39;, &#39;Hmga2&#39;,
+       &#39;Ccn4&#39;, &#39;Galnt9&#39;, &#39;Hcrtr2&#39;, &#39;Col5a1&#39;, &#39;Sdk2&#39;, &#39;Nptx1&#39;, &#39;Sel1l3&#39;,
+       &#39;Slc16a10&#39;, &#39;Gm13391&#39;, &#39;Sv2b&#39;, &#39;Ephb6&#39;, &#39;Rspo2&#39;, &#39;A830018L16Rik&#39;,
+       &#39;Scube2&#39;, &#39;Trbc2&#39;, &#39;Mirt1&#39;, &#39;Pcsk5&#39;, &#39;Adgra1&#39;, &#39;Gm15270&#39;,
+       &#39;Gm27234&#39;, &#39;Cpa6&#39;, &#39;Gm20878&#39;, &#39;Kcnmb4&#39;, &#39;Cdh18&#39;, &#39;Diras2&#39;,
+       &#39;Hcrtr1&#39;, &#39;Khdrbs3&#39;, &#39;Gm5468&#39;, &#39;Zmiz1os1&#39;, &#39;Etl4&#39;, &#39;Rgsl1&#39;,
+       &#39;Serpinb8&#39;, &#39;Gm17167&#39;, &#39;Gm9899&#39;, &#39;Garnl3&#39;, &#39;Gm12394&#39;, &#39;Vwc2l&#39;,
+       &#39;Ptpru&#39;, &#39;Slc17a7&#39;, &#39;Ano3&#39;, &#39;Zdhhc23&#39;, &#39;Tbr1&#39;, &#39;Grik3&#39;, &#39;Gm2824&#39;,
+       &#39;Pamr1&#39;, &#39;Gm42056&#39;, &#39;Ccl27a&#39;, &#39;Kcnmb4os2&#39;, &#39;Col24a1&#39;, &#39;Gm32679&#39;,
+       &#39;Sigmar1&#39;, &#39;Gm35853&#39;, &#39;Nrip3&#39;, &#39;Grp&#39;, &#39;Chgb&#39;, &#39;Gm47715&#39;, &#39;Ttc9b&#39;,
+       &#39;2900026A02Rik&#39;, &#39;Gramd2&#39;, &#39;Gm14120&#39;, &#39;Smim43&#39;, &#39;Grm8&#39;, &#39;Hcn1&#39;,
+       &#39;Rph3a&#39;, &#39;Gm5468-1&#39;], dtype=object)
 </pre></div></div>
 </div>
 <p>The dot plot below displays the expression of the top marker genes from cluster 8 across all clusters. For cluster 8 to be considered high quality, its top marker genes should be primarily specific to cluster 8, showing little to no expression in other clusters.</p>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[31]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[32]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.dotplot(adata,
@@ -1039,12 +1082,12 @@ array([&#39;ENSMUSG00000120124&#39;, &#39;Nxph3&#39;, &#39;A630023P12Rik&#39;, &
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/notebooks_rnaSeqPipelineTutorial_44_0.png" class="no-scaled-link" src="../_images/notebooks_rnaSeqPipelineTutorial_44_0.png" style="width: 1033px; height: 1163px;" />
+<img alt="../_images/notebooks_rnaSeqPipelineTutorial_47_0.png" class="no-scaled-link" src="../_images/notebooks_rnaSeqPipelineTutorial_47_0.png" style="width: 1010px; height: 1163px;" />
 </div>
 </div>
 <p>We can visualize the expression of the top 12 genes from cluster 8 on UMAPs to assess whether their expression is specific to the cluster 8 region. This involves comparing the location of cluster 8 on the Leiden cluster UMAP with the gene expression UMAPs. In a high-quality cluster, marker gene expression should be predominantly localized to the cluster 8 area.</p>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[32]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[33]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(adata,
@@ -1065,11 +1108,11 @@ array([&#39;ENSMUSG00000120124&#39;, &#39;Nxph3&#39;, &#39;A630023P12Rik&#39;, &
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/notebooks_rnaSeqPipelineTutorial_46_0.png" class="no-scaled-link" src="../_images/notebooks_rnaSeqPipelineTutorial_46_0.png" style="width: 954px; height: 1124px;" />
+<img alt="../_images/notebooks_rnaSeqPipelineTutorial_49_0.png" class="no-scaled-link" src="../_images/notebooks_rnaSeqPipelineTutorial_49_0.png" style="width: 954px; height: 1124px;" />
 </div>
 </div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[33]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[34]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(adata,
@@ -1090,14 +1133,14 @@ array([&#39;ENSMUSG00000120124&#39;, &#39;Nxph3&#39;, &#39;A630023P12Rik&#39;, &
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-WARNING: Length of palette colors is smaller than the number of categories (palette length: 19, categories length: 33. Some categories will have the same color.
+WARNING: Length of palette colors is smaller than the number of categories (palette length: 19, categories length: 32. Some categories will have the same color.
 </pre></div></div>
 </div>
 <div class="nboutput nblast docutils container">
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/notebooks_rnaSeqPipelineTutorial_47_1.png" class="no-scaled-link" src="../_images/notebooks_rnaSeqPipelineTutorial_47_1.png" style="width: 265px; height: 277px;" />
+<img alt="../_images/notebooks_rnaSeqPipelineTutorial_50_1.png" class="no-scaled-link" src="../_images/notebooks_rnaSeqPipelineTutorial_50_1.png" style="width: 265px; height: 277px;" />
 </div>
 </div>
 <p>This pipeline is still in development. The next steps include using a reference dataset to annotate cell types with PIASO’s predictCellTypesByGDR, followed by multiple iterations of low-quality cluster removal and re-clustering until well-defined clusters are obtained.</p>
@@ -1115,20 +1158,20 @@ WARNING: Length of palette colors is smaller than the number of categories (pale
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="GDRPredictCellTypeTutorial.html"
+       href="GDR_ATAC_Tutorial.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Cell type prediction by GDR</p>
+        <p class="prev-next-title">GDR for scATAC-seq data</p>
       </div>
     </a>
     <a class="right-next"
-       href="LeidenLocalTutorial.html"
+       href="rnaSeqPipelineTutorial_E18.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Finer clustering on selected cluster(s)</p>
+        <p class="prev-next-title">Pre-processing CellRanger outputs (multiple samples)</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>

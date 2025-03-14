@@ -51,7 +51,7 @@
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="next" title="Plotting functions in PIASO" href="01_showThePlotFunction.html" />
-    <link rel="prev" title="Pre-processing CellRanger outputs" href="rnaSeqPipelineTutorial.html" />
+    <link rel="prev" title="Pre-processing CellRanger outputs (multiple samples)" href="rnaSeqPipelineTutorial_E18.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   <meta name="docsearch:version" content="" />
@@ -406,20 +406,15 @@
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[1]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>import numpy as np
-import pandas as pd
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>import pandas as pd
 import scanpy as sc
 import os
-from typing import Iterable, Union, Optional
-import matplotlib.pyplot as plt
-import anndata as ad
-import seaborn as sns
 from matplotlib import cm
-# from tqdm import tqdm
 import logging
-sc.set_figure_params(dpi=80,dpi_save=300, color_map=&#39;viridis&#39;,facecolor=&#39;white&#39;)
 from matplotlib import rcParams
+
 # To modify the default figure size, use rcParams.
+sc.set_figure_params(dpi=80,dpi_save=300, color_map=&#39;viridis&#39;,facecolor=&#39;white&#39;)
 rcParams[&#39;figure.figsize&#39;] = 5, 5
 rcParams[&#39;font.sans-serif&#39;] = &quot;Arial&quot;
 rcParams[&#39;font.family&#39;] = &quot;Arial&quot;
@@ -433,10 +428,10 @@ sc.logging.print_header()
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-scanpy==1.10.3 anndata==0.10.8 umap==0.5.7 numpy==1.26.4 scipy==1.12.0 pandas==2.2.3 scikit-learn==1.5.2 statsmodels==0.14.4 igraph==0.11.8 louvain==0.8.2 pynndescent==0.5.13
+scanpy==1.10.3 anndata==0.10.8 umap==0.5.7 numpy==1.26.4 scipy==1.13.0 pandas==2.2.3 scikit-learn==1.5.2 statsmodels==0.14.4 igraph==0.11.5 louvain==0.8.2 pynndescent==0.5.13
 </pre></div></div>
 </div>
-<div class="nbinput nblast docutils container">
+<div class="nbinput docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[2]:
 </pre></div>
 </div>
@@ -446,6 +441,15 @@ sys.path.append(path)
 import piaso
 </pre></div>
 </div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+/home/vas744/.local/lib/python3.9/site-packages/networkx/utils/backends.py:135: RuntimeWarning: networkx backend defined more than once: nx-loopback
+  backends.update(_get_backends(&#34;networkx.backends&#34;))
+</pre></div></div>
 </div>
 <section id="Load-the-data">
 <h2>Load the data<a class="headerlink" href="#Load-the-data" title="Link to this heading">#</a></h2>
@@ -464,12 +468,12 @@ import piaso
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>!/home/vas744/Software/gdrive files download --destination {data_dir} 1pDBIgPvEO-sBuIMEhrvVhnf7tfU7H6Xy
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>!/home/vas744/Software/gdrive files download --overwrite --destination {data_dir} 1pDBIgPvEO-sBuIMEhrvVhnf7tfU7H6Xy
 </pre></div>
 </div>
 </div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[4]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[5]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata=sc.read(data_dir+ &#39;/SEA-AD_RNA_MTG_subsample_excludeReference_20k_piaso_preprocessed.h5ad&#39;)
@@ -478,7 +482,7 @@ adata
 </div>
 </div>
 <div class="nboutput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[4]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[5]:
 </pre></div>
 </div>
 <div class="output_area docutils container">
@@ -496,7 +500,7 @@ AnnData object with n_obs × n_vars = 20000 × 36601
 <section id="Visualize-with-UMAP">
 <h2>Visualize with UMAP<a class="headerlink" href="#Visualize-with-UMAP" title="Link to this heading">#</a></h2>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[5]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[6]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(adata,
@@ -519,7 +523,7 @@ AnnData object with n_obs × n_vars = 20000 × 36601
 <section id="Cluster-the-data-with-Leiden-algorithm">
 <h2>Cluster the data with Leiden algorithm<a class="headerlink" href="#Cluster-the-data-with-Leiden-algorithm" title="Link to this heading">#</a></h2>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[6]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[7]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>%%time
@@ -534,13 +538,13 @@ sc.tl.leiden(adata,resolution=0.5,key_added=&#39;Leiden&#39;,flavor=&quot;igraph
 <div class="highlight"><pre>
 running Leiden clustering
     finished: found 24 clusters and added
-    &#39;Leiden&#39;, the cluster labels (adata.obs, categorical) (0:00:01)
-CPU times: user 735 ms, sys: 66 ms, total: 801 ms
-Wall time: 1.76 s
+    &#39;Leiden&#39;, the cluster labels (adata.obs, categorical) (0:00:00)
+CPU times: user 562 ms, sys: 50.2 ms, total: 612 ms
+Wall time: 609 ms
 </pre></div></div>
 </div>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[7]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[8]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>logging.getLogger(&#39;matplotlib.font_manager&#39;).disabled = True
@@ -548,7 +552,7 @@ Wall time: 1.76 s
 </div>
 </div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[8]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[9]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(adata,
@@ -575,7 +579,7 @@ Wall time: 1.76 s
 <h2>Run leiden_local on one cluster<a class="headerlink" href="#Run-leiden_local-on-one-cluster" title="Link to this heading">#</a></h2>
 <p>Here, we run leiden_local on cluster 8 from the leiden clustering.</p>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[9]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[10]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>piaso.tl.leiden_local(adata,
@@ -599,32 +603,25 @@ filtered out 6493 genes that are detected in less than 1 cells
 computing neighbors
     finished: added to `.uns[&#39;neighbors&#39;]`
     `.obsp[&#39;distances&#39;]`, distances for each pair of neighbors
-    `.obsp[&#39;connectivities&#39;]`, weighted adjacency matrix (0:00:09)
+    `.obsp[&#39;connectivities&#39;]`, weighted adjacency matrix (0:00:04)
 running Leiden clustering
-</pre></div></div>
-</div>
-<div class="nboutput docutils container">
-<div class="prompt empty docutils container">
-</div>
-<div class="output_area stderr docutils container">
-<div class="highlight"><pre>
-/home/vas744/Analysis/Python/Packages/PIASO/piaso/tools/_clustering.py:191: FutureWarning: In the future, the default backend for leiden will be igraph instead of leidenalg.
-
- To achieve the future defaults please pass: flavor=&#34;igraph&#34; and n_iterations=2.  directed must also be False to work with igraph&#39;s implementation.
-  sc.tl.leiden(adata_i, resolution=resolution, key_added=&#39;leiden_local&#39;)
+    finished: found 4 clusters and added
+    &#39;leiden_local&#39;, the cluster labels (adata.obs, categorical) (0:00:00)
 </pre></div></div>
 </div>
 <div class="nboutput nblast docutils container">
 <div class="prompt empty docutils container">
 </div>
-<div class="output_area docutils container">
+<div class="output_area stderr docutils container">
 <div class="highlight"><pre>
-    finished: found 4 clusters and added
-    &#39;leiden_local&#39;, the cluster labels (adata.obs, categorical) (0:00:00)
+/n/data1/hms/neurobio/fishell/vallaris/.conda/envs/genecell_env/lib/python3.9/site-packages/piaso/tools/_clustering.py:191: FutureWarning: In the future, the default backend for leiden will be igraph instead of leidenalg.
+
+ To achieve the future defaults please pass: flavor=&#34;igraph&#34; and n_iterations=2.  directed must also be False to work with igraph&#39;s implementation.
+  sc.tl.leiden(adata_i, resolution=resolution, key_added=&#39;leiden_local&#39;)
 </pre></div></div>
 </div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[10]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[11]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(adata,
@@ -648,7 +645,7 @@ running Leiden clustering
 </div>
 </div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[11]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[12]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(adata,
@@ -673,8 +670,8 @@ running Leiden clustering
 <section id="Identify-markger-genes-in-subclusters">
 <h3>Identify markger genes in subclusters<a class="headerlink" href="#Identify-markger-genes-in-subclusters" title="Link to this heading">#</a></h3>
 <p>Identify the marker genes for each sub-cluster identified by leiden local along with all the leiden clusters.</p>
-<div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[12]:
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[13]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>import cosg
@@ -691,16 +688,8 @@ cosg.cosg(adata,
 </pre></div>
 </div>
 </div>
-<div class="nboutput nblast docutils container">
-<div class="prompt empty docutils container">
-</div>
-<div class="output_area docutils container">
-<div class="highlight"><pre>
-**finished identifying marker genes by COSG**
-</pre></div></div>
-</div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[13]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[14]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.tl.dendrogram(adata,groupby=&#39;Leiden_local_one&#39;,use_rep=&#39;X_svd&#39;)
@@ -743,7 +732,7 @@ Storing dendrogram info using `.uns[&#39;dendrogram_Leiden_local_one&#39;]`
 <section id="Perform-clustering-independently-within-each-group">
 <h3>Perform clustering independently within each group<a class="headerlink" href="#Perform-clustering-independently-within-each-group" title="Link to this heading">#</a></h3>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[14]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[15]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>piaso.tl.leiden_local(adata,
@@ -798,7 +787,7 @@ running Leiden clustering
 </pre></div></div>
 </div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[15]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[16]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(adata,
@@ -825,7 +814,7 @@ running Leiden clustering
 <h3>Perform clustering across all selected groups<a class="headerlink" href="#Perform-clustering-across-all-selected-groups" title="Link to this heading">#</a></h3>
 <p>Here, we will use leiden_local to identify sub-clusters across a group clusters. Let us select a group of subclasses from the data: Lamp5 Lhx6, Lamp5, Pax6, Sncg, and Vip, which are made of clusters ‘1’, ‘8’, ‘9’, and ‘17’.</p>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[16]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[17]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>piaso.tl.leiden_local(adata,
@@ -852,11 +841,11 @@ computing neighbors
     `.obsp[&#39;connectivities&#39;]`, weighted adjacency matrix (0:00:00)
 running Leiden clustering
     finished: found 9 clusters and added
-    &#39;leiden_local&#39;, the cluster labels (adata.obs, categorical) (0:00:02)
+    &#39;leiden_local&#39;, the cluster labels (adata.obs, categorical) (0:00:00)
 </pre></div></div>
 </div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[17]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[18]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(adata,
@@ -880,7 +869,7 @@ running Leiden clustering
 </div>
 <p>We can compare the subclusters identified by leiden_local with the annotated subclasses from the data, and observe that the identified clusters closely align with the actual subclasses.</p>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[18]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[19]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(adata,
@@ -914,12 +903,12 @@ running Leiden clustering
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="rnaSeqPipelineTutorial.html"
+       href="rnaSeqPipelineTutorial_E18.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Pre-processing CellRanger outputs</p>
+        <p class="prev-next-title">Pre-processing CellRanger outputs (multiple samples)</p>
       </div>
     </a>
     <a class="right-next"

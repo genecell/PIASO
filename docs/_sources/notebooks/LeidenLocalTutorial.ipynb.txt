@@ -20,25 +20,20 @@
      "name": "stdout",
      "output_type": "stream",
      "text": [
-      "scanpy==1.10.3 anndata==0.10.8 umap==0.5.7 numpy==1.26.4 scipy==1.12.0 pandas==2.2.3 scikit-learn==1.5.2 statsmodels==0.14.4 igraph==0.11.8 louvain==0.8.2 pynndescent==0.5.13\n"
+      "scanpy==1.10.3 anndata==0.10.8 umap==0.5.7 numpy==1.26.4 scipy==1.13.0 pandas==2.2.3 scikit-learn==1.5.2 statsmodels==0.14.4 igraph==0.11.5 louvain==0.8.2 pynndescent==0.5.13\n"
      ]
     }
    ],
    "source": [
-    "import numpy as np\n",
     "import pandas as pd\n",
     "import scanpy as sc\n",
     "import os\n",
-    "from typing import Iterable, Union, Optional\n",
-    "import matplotlib.pyplot as plt\n",
-    "import anndata as ad\n",
-    "import seaborn as sns\n",
     "from matplotlib import cm\n",
-    "# from tqdm import tqdm\n",
     "import logging\n",
-    "sc.set_figure_params(dpi=80,dpi_save=300, color_map='viridis',facecolor='white')\n",
     "from matplotlib import rcParams\n",
+    "\n",
     "# To modify the default figure size, use rcParams.\n",
+    "sc.set_figure_params(dpi=80,dpi_save=300, color_map='viridis',facecolor='white')\n",
     "rcParams['figure.figsize'] = 5, 5\n",
     "rcParams['font.sans-serif'] = \"Arial\"\n",
     "rcParams['font.family'] = \"Arial\"\n",
@@ -51,7 +46,16 @@
    "execution_count": 2,
    "id": "c88f21a8-58cd-4760-a8a5-218f2b96fb35",
    "metadata": {},
-   "outputs": [],
+   "outputs": [
+    {
+     "name": "stderr",
+     "output_type": "stream",
+     "text": [
+      "/home/vas744/.local/lib/python3.9/site-packages/networkx/utils/backends.py:135: RuntimeWarning: networkx backend defined more than once: nx-loopback\n",
+      "  backends.update(_get_backends(\"networkx.backends\"))\n"
+     ]
+    }
+   ],
    "source": [
     "path = '/home/vas744/Analysis/Python/Packages/PIASO'\n",
     "import sys\n",
@@ -90,12 +94,12 @@
    "metadata": {},
    "outputs": [],
    "source": [
-    "!/home/vas744/Software/gdrive files download --destination {data_dir} 1pDBIgPvEO-sBuIMEhrvVhnf7tfU7H6Xy"
+    "!/home/vas744/Software/gdrive files download --overwrite --destination {data_dir} 1pDBIgPvEO-sBuIMEhrvVhnf7tfU7H6Xy"
    ]
   },
   {
    "cell_type": "code",
-   "execution_count": 4,
+   "execution_count": 5,
    "id": "2352021f-7e70-42c2-b8ae-e5996c8ea393",
    "metadata": {},
    "outputs": [
@@ -111,7 +115,7 @@
        "    obsp: 'connectivities', 'distances'"
       ]
      },
-     "execution_count": 4,
+     "execution_count": 5,
      "metadata": {},
      "output_type": "execute_result"
     }
@@ -131,7 +135,7 @@
   },
   {
    "cell_type": "code",
-   "execution_count": 5,
+   "execution_count": 6,
    "id": "70e86e95-ce9b-44db-854d-0cb0ab0894f8",
    "metadata": {},
    "outputs": [
@@ -170,7 +174,7 @@
   },
   {
    "cell_type": "code",
-   "execution_count": 6,
+   "execution_count": 7,
    "id": "6a03e618-8c8a-453c-85af-1428d6d92a27",
    "metadata": {},
    "outputs": [
@@ -180,9 +184,9 @@
      "text": [
       "running Leiden clustering\n",
       "    finished: found 24 clusters and added\n",
-      "    'Leiden', the cluster labels (adata.obs, categorical) (0:00:01)\n",
-      "CPU times: user 735 ms, sys: 66 ms, total: 801 ms\n",
-      "Wall time: 1.76 s\n"
+      "    'Leiden', the cluster labels (adata.obs, categorical) (0:00:00)\n",
+      "CPU times: user 562 ms, sys: 50.2 ms, total: 612 ms\n",
+      "Wall time: 609 ms\n"
      ]
     }
    ],
@@ -193,7 +197,7 @@
   },
   {
    "cell_type": "code",
-   "execution_count": 7,
+   "execution_count": 8,
    "id": "362edbba-c852-4b0d-9cb0-a2816bb39a31",
    "metadata": {},
    "outputs": [],
@@ -203,7 +207,7 @@
   },
   {
    "cell_type": "code",
-   "execution_count": 8,
+   "execution_count": 9,
    "id": "0be30a00-ac52-4d2e-8c8a-68d150acc0e2",
    "metadata": {},
    "outputs": [
@@ -246,7 +250,7 @@
   },
   {
    "cell_type": "code",
-   "execution_count": 9,
+   "execution_count": 10,
    "id": "b0903409-3adc-4197-958e-aaf66d938bd6",
    "metadata": {},
    "outputs": [
@@ -258,26 +262,20 @@
       "computing neighbors\n",
       "    finished: added to `.uns['neighbors']`\n",
       "    `.obsp['distances']`, distances for each pair of neighbors\n",
-      "    `.obsp['connectivities']`, weighted adjacency matrix (0:00:09)\n",
-      "running Leiden clustering\n"
+      "    `.obsp['connectivities']`, weighted adjacency matrix (0:00:04)\n",
+      "running Leiden clustering\n",
+      "    finished: found 4 clusters and added\n",
+      "    'leiden_local', the cluster labels (adata.obs, categorical) (0:00:00)\n"
      ]
     },
     {
      "name": "stderr",
      "output_type": "stream",
      "text": [
-      "/home/vas744/Analysis/Python/Packages/PIASO/piaso/tools/_clustering.py:191: FutureWarning: In the future, the default backend for leiden will be igraph instead of leidenalg.\n",
+      "/n/data1/hms/neurobio/fishell/vallaris/.conda/envs/genecell_env/lib/python3.9/site-packages/piaso/tools/_clustering.py:191: FutureWarning: In the future, the default backend for leiden will be igraph instead of leidenalg.\n",
       "\n",
       " To achieve the future defaults please pass: flavor=\"igraph\" and n_iterations=2.  directed must also be False to work with igraph's implementation.\n",
       "  sc.tl.leiden(adata_i, resolution=resolution, key_added='leiden_local')\n"
-     ]
-    },
-    {
-     "name": "stdout",
-     "output_type": "stream",
-     "text": [
-      "    finished: found 4 clusters and added\n",
-      "    'leiden_local', the cluster labels (adata.obs, categorical) (0:00:00)\n"
      ]
     }
    ],
@@ -295,7 +293,7 @@
   },
   {
    "cell_type": "code",
-   "execution_count": 10,
+   "execution_count": 11,
    "id": "520a122a-6dcd-405e-92be-90d674abd6fc",
    "metadata": {},
    "outputs": [
@@ -330,7 +328,7 @@
   },
   {
    "cell_type": "code",
-   "execution_count": 11,
+   "execution_count": 12,
    "id": "e6e4a8f0-e544-4bde-ad1a-f5dbe7ff013e",
    "metadata": {},
    "outputs": [
@@ -373,18 +371,10 @@
   },
   {
    "cell_type": "code",
-   "execution_count": 12,
+   "execution_count": 13,
    "id": "397d2702-08a8-46ff-af1a-d3f82e9e16ac",
    "metadata": {},
-   "outputs": [
-    {
-     "name": "stdout",
-     "output_type": "stream",
-     "text": [
-      "**finished identifying marker genes by COSG**\n"
-     ]
-    }
-   ],
+   "outputs": [],
    "source": [
     "import cosg\n",
     "n_gene=30\n",
@@ -401,7 +391,7 @@
   },
   {
    "cell_type": "code",
-   "execution_count": 13,
+   "execution_count": 14,
    "id": "b28a0b89-ea5c-4743-878f-9d5d2876cc9f",
    "metadata": {},
    "outputs": [
@@ -471,7 +461,7 @@
   },
   {
    "cell_type": "code",
-   "execution_count": 14,
+   "execution_count": 15,
    "id": "c7b4c858-e3ae-451e-a811-84404ea1cb86",
    "metadata": {},
    "outputs": [
@@ -528,7 +518,7 @@
   },
   {
    "cell_type": "code",
-   "execution_count": 15,
+   "execution_count": 16,
    "id": "995f8774-11ab-4123-9946-71f443d79b98",
    "metadata": {},
    "outputs": [
@@ -571,7 +561,7 @@
   },
   {
    "cell_type": "code",
-   "execution_count": 16,
+   "execution_count": 17,
    "id": "8a423c51-4221-4374-ac35-ad75dad89de8",
    "metadata": {},
    "outputs": [
@@ -586,7 +576,7 @@
       "    `.obsp['connectivities']`, weighted adjacency matrix (0:00:00)\n",
       "running Leiden clustering\n",
       "    finished: found 9 clusters and added\n",
-      "    'leiden_local', the cluster labels (adata.obs, categorical) (0:00:02)\n"
+      "    'leiden_local', the cluster labels (adata.obs, categorical) (0:00:00)\n"
      ]
     }
    ],
@@ -604,7 +594,7 @@
   },
   {
    "cell_type": "code",
-   "execution_count": 17,
+   "execution_count": 18,
    "id": "08acde46-eaca-40d9-8d31-bbf6ec63828c",
    "metadata": {},
    "outputs": [
@@ -646,7 +636,7 @@
   },
   {
    "cell_type": "code",
-   "execution_count": 18,
+   "execution_count": 19,
    "id": "920b8a62-c164-466a-822c-508b51460ff4",
    "metadata": {},
    "outputs": [
@@ -678,9 +668,9 @@
  ],
  "metadata": {
   "kernelspec": {
-   "display_name": "Python [conda env:miniconda3-vvs]",
+   "display_name": "Python [conda env:.conda-genecell_env]",
    "language": "python",
-   "name": "conda-env-miniconda3-vvs-py"
+   "name": "conda-env-.conda-genecell_env-py"
   },
   "language_info": {
    "codemirror_mode": {
@@ -692,7 +682,7 @@
    "name": "python",
    "nbconvert_exporter": "python",
    "pygments_lexer": "ipython3",
-   "version": "3.9.20"
+   "version": "3.9.21"
   }
  },
  "nbformat": 4,

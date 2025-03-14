@@ -1,0 +1,87 @@
+# Gdrive setup for downloading from Google Drive from command line
+
+## Introduction
+[gdrive](https://github.com/glotlabs/gdrive/tree/main) is a command line application for interacting with Google Drive.
+
+## Prerequisites
+Before starting the setup, you need to create Google API credentials by following the [instructions for creating Google API credentials](https://github.com/glotlabs/gdrive/blob/main/docs/create_google_api_credentials.md).
+
+**Note:** In Step 9 of the credentials setup, the App Domain fields might be mandatory, but you can leave them empty, click Publish, and move on to the next steps.
+
+## Local setup (MacOS)
+
+1. Download the latest binary from the [release section](https://github.com/glotlabs/gdrive/releases) of the GDrive GitHub.
+
+2. Open your terminal and navigate to the folder containing the downloaded tar.gz file. Run the following command to unzip it:
+   ```
+   tar -xzvf file_name
+   ```
+
+3. Move the binary to your system path and make it executable:
+   ```
+   sudo mv gdrive /usr/local/bin/
+   sudo chmod +x /usr/local/bin/gdrive
+   ```
+
+4. Since the binary is not code signed, it may cause a security warning on MacOS. To work around this:
+   - Run `gdrive version` in your terminal
+   - When the security warning appears, select "Go to Finder"
+   - Right-click on the gdrive file and select "Open" to bypass the security warning
+
+5. Open a new terminal window or tab.
+
+6. Run the following command:
+   ```
+   gdrive account add
+   ```
+
+7. Enter the Client ID and Client Secret you created in the Google API credentials step.
+
+8. Follow the URL shown in the terminal and give access to GDrive.
+
+9. Note down the account name from the last line of the output. You'll need this for the remote setup.
+
+10. gdrive is now ready to use on your local machine!
+
+## Remote Setup (Linux)
+
+**Important:** Complete the local setup first, as it's a prerequisite for the remote setup.
+
+1. Navigate to the folder where you want GDrive installed on your remote server.
+
+2. Download the Linux version by copying the link of the latest release from the [release section](https://github.com/glotlabs/gdrive/releases) and run:
+   ```
+   wget <insert_link>
+   ```
+
+3. Unzip the file:
+   ```
+   tar -xzvf file_name
+   ```
+
+4. Make the file executable:
+   ```
+   chmod +x gdrive
+   ```
+
+5. On your local machine, export your GDrive account configuration:
+   ```
+   gdrive account export <account_name>
+   ```
+   (Use the account name from step 9 of the local setup)
+
+6. Transfer the exported account to your remote server:
+   ```
+   scp LOCAL_PATH_OF_EXPORTED_ACCOUNT <username>@<ip_address>:PATH_ON_REMOTE_SERVER
+   ```
+   - LOCAL_PATH_OF_EXPORTED_ACCOUNT: Path where the account was exported in step 5
+   - PATH_ON_REMOTE_SERVER: Path where you installed GDrive on the remote server
+
+7. On the remote server, import the account:
+   ```
+   <PATH_TO_GDRIVE>/gdrive account import PATH_ON_REMOTE_SERVER
+   ```
+   - PATH_TO_GDRIVE: Path where you downloaded and unzipped gdrive
+   - PATH_ON_REMOTE_SERVER: Path where you transferred the exported account file
+
+9. gdrive is now ready to use on your remote server!

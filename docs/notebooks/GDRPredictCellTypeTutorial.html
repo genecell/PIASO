@@ -50,7 +50,7 @@
     <script src="../_static/sidebar_toggle.js?v=3b053ec6"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Pre-processing CellRanger outputs" href="rnaSeqPipelineTutorial.html" />
+    <link rel="next" title="GDR for scATAC-seq data" href="GDR_ATAC_Tutorial.html" />
     <link rel="prev" title="GDR: marker Gene-guided Dimensionality Reduction" href="GDR_Tutorial.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
@@ -402,26 +402,38 @@
   <section id="Cell-type-prediction-by-GDR">
 <h1>Cell type prediction by GDR<a class="headerlink" href="#Cell-type-prediction-by-GDR" title="Link to this heading">#</a></h1>
 <p>In this tutorial, we use a reference dataset to predict the cell type annotations of the query dataset. The cell type annotations of the query dataset are known, therefore our predictions can be verified and checked for accuracy.</p>
-<div class="nbinput docutils container">
+<div class="nbinput nblast docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[1]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>import numpy as np
 import pandas as pd
 import scanpy as sc
-import os
-from typing import Iterable, Union, Optional
 import matplotlib.pyplot as plt
-import anndata as ad
 from sklearn import metrics
 import seaborn as sns
-from matplotlib import cm
-from matplotlib import colors, colorbar
-# from tqdm import tqdm
 import logging
-sc.set_figure_params(dpi=80,dpi_save=300, color_map=&#39;viridis&#39;,facecolor=&#39;white&#39;)
 from matplotlib import rcParams
-# To modify the default figure size, use rcParams.
+import sys
+from sklearn.metrics import f1_score
+import warnings
+</pre></div>
+</div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[2]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>warnings.simplefilter(action=&#39;ignore&#39;, category=FutureWarning)
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[3]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span># To modify the default figure size, use rcParams.
+sc.set_figure_params(dpi=80,dpi_save=300, color_map=&#39;viridis&#39;,facecolor=&#39;white&#39;)
 rcParams[&#39;figure.figsize&#39;] = 5, 5
 rcParams[&#39;font.sans-serif&#39;] = &quot;Arial&quot;
 rcParams[&#39;font.family&#39;] = &quot;Arial&quot;
@@ -435,19 +447,29 @@ sc.logging.print_header()
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-scanpy==1.10.3 anndata==0.10.8 umap==0.5.7 numpy==1.26.4 scipy==1.12.0 pandas==2.2.3 scikit-learn==1.5.2 statsmodels==0.14.4 igraph==0.11.8 louvain==0.8.2 pynndescent==0.5.13
+scanpy==1.10.3 anndata==0.10.8 umap==0.5.7 numpy==1.26.4 scipy==1.13.0 pandas==2.2.3 scikit-learn==1.5.2 statsmodels==0.14.4 igraph==0.11.5 louvain==0.8.2 pynndescent==0.5.13
 </pre></div></div>
 </div>
-<div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[2]:
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[4]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>path = &#39;/home/vas744/Analysis/Python/Packages/PIASO&#39;
-import sys
+sys.path.append(path)
+path = &#39;/home/vas744/Analysis/Python/Packages/COSG&#39;
 sys.path.append(path)
 import piaso
 </pre></div>
 </div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+/home/vas744/.local/lib/python3.9/site-packages/networkx/utils/backends.py:135: RuntimeWarning: networkx backend defined more than once: nx-loopback
+  backends.update(_get_backends(&#34;networkx.backends&#34;))
+</pre></div></div>
 </div>
 <section id="Load-the-data">
 <h2>Load the data<a class="headerlink" href="#Load-the-data" title="Link to this heading">#</a></h2>
@@ -457,7 +479,7 @@ import piaso
 <p>Download the subsampled, pre-processed dataset from Google Drive: <a class="reference external" href="https://drive.google.com/file/d/1pDBIgPvEO-sBuIMEhrvVhnf7tfU7H6Xy/view?usp=drive_link">https://drive.google.com/file/d/1pDBIgPvEO-sBuIMEhrvVhnf7tfU7H6Xy/view?usp=drive_link</a></p>
 <p>The original data is available on <a class="reference external" href="https://portal.brain-map.org/explore/seattle-alzheimers-disease">https://portal.brain-map.org/explore/seattle-alzheimers-disease</a></p>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[3]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[5]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>data_dir = &quot;/n/scratch/users/v/vas744/Data/Public/PIASO&quot;
@@ -465,10 +487,10 @@ import piaso
 </div>
 </div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[1]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[6]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>!/home/vas744/Software/gdrive files download --destination {data_dir} 1pDBIgPvEO-sBuIMEhrvVhnf7tfU7H6Xy
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>!/home/vas744/Software/gdrive files download --overwrite --destination {data_dir} 1pDBIgPvEO-sBuIMEhrvVhnf7tfU7H6Xy
 </pre></div>
 </div>
 </div>
@@ -478,10 +500,11 @@ import piaso
 <div class="output_area docutils container">
 <div class="highlight"><pre>
 Downloading SEA-AD_RNA_MTG_subsample_excludeReference_20k_piaso_preprocessed.h5ad
+Successfully downloaded SEA-AD_RNA_MTG_subsample_excludeReference_20k_piaso_preprocessed.h5ad
 </pre></div></div>
 </div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[4]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[6]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>ref_adata=sc.read(data_dir + &#39;/SEA-AD_RNA_MTG_subsample_excludeReference_20k_piaso_preprocessed.h5ad&#39;)
@@ -491,7 +514,7 @@ ref_adata
 </div>
 </div>
 <div class="nboutput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[4]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[6]:
 </pre></div>
 </div>
 <div class="output_area docutils container">
@@ -510,16 +533,25 @@ AnnData object with n_obs × n_vars = 20000 × 36601
 <h3>Load the query dataset<a class="headerlink" href="#Load-the-query-dataset" title="Link to this heading">#</a></h3>
 <p>We will use a pre-processed Great Apes RNASeq data, particularly the human data subset as the query dataset for predicting cell types in this tutorial.</p>
 <p>Download the dataset from: <a class="reference external" href="https://drive.google.com/file/d/1nF0iRTGFFQcEcM6hYcPptiYkxs65k2p4/view?usp=drive_link">https://drive.google.com/file/d/1nF0iRTGFFQcEcM6hYcPptiYkxs65k2p4/view?usp=drive_link</a></p>
-<div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[8]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>!/home/vas744/Software/gdrive files download --overwrite --destination {data_dir} 1nF0iRTGFFQcEcM6hYcPptiYkxs65k2p4
 </pre></div>
 </div>
 </div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Downloading GreatApesMTG_RNA_integrated_raw_onlyOrthogonal_gdr_humanSubset_aibs.h5ad
+Successfully downloaded GreatApesMTG_RNA_integrated_raw_onlyOrthogonal_gdr_humanSubset_aibs.h5ad
+</pre></div></div>
+</div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[5]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[7]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>aibs_query_adata = sc.read(data_dir + &quot;/GreatApesMTG_RNA_integrated_raw_onlyOrthogonal_gdr_humanSubset_aibs.h5ad&quot;)
@@ -528,7 +560,7 @@ aibs_query_adata
 </div>
 </div>
 <div class="nboutput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[5]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[7]:
 </pre></div>
 </div>
 <div class="output_area docutils container">
@@ -551,13 +583,25 @@ AnnData object with n_obs × n_vars = 76560 × 14346
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[8]:
 </pre></div>
 </div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>categories = [&#39;Astrocyte&#39;, &#39;Chandelier&#39;, &#39;Endothelial&#39;, &#39;L2/3 IT&#39;, &#39;L4 IT&#39;, &#39;L5 ET&#39;, &#39;L5 IT&#39;,
+              &#39;L5/6 NP&#39;, &#39;L6 CT&#39;, &#39;L6 IT&#39;, &#39;L6 IT Car3&#39;, &#39;L6b&#39;, &#39;Lamp5&#39;, &#39;Lamp5 Lhx6&#39;,
+              &#39;Microglia-PVM&#39;, &#39;OPC&#39;, &#39;Oligodendrocyte&#39;, &#39;Pax6&#39;, &#39;Pvalb&#39;, &#39;Sncg&#39;, &#39;Sst&#39;,
+              &#39;Sst Chodl&#39;, &#39;VLMC&#39;, &#39;Vip&#39;]
+aibs_query_adata.obs[&#39;subclass&#39;] = aibs_query_adata.obs[&#39;subclass&#39;].cat.rename_categories(categories)
+</pre></div>
+</div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[9]:
+</pre></div>
+</div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>aibs_query_adata.obs[&#39;subclass&#39;]=aibs_query_adata.obs[&#39;subclass&#39;].astype(&#39;category&#39;)
 aibs_query_adata.obs[&#39;subclass&#39;]=aibs_query_adata.obs[&#39;subclass&#39;].cat.reorder_categories(ref_adata.obs[&#39;Subclass&#39;].cat.categories)
 </pre></div>
 </div>
 </div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[9]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[10]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(ref_adata,
@@ -573,11 +617,11 @@ aibs_query_adata.obs[&#39;subclass&#39;]=aibs_query_adata.obs[&#39;subclass&#39;
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/notebooks_GDRPredictCellTypeTutorial_14_0.png" class="no-scaled-link" src="../_images/notebooks_GDRPredictCellTypeTutorial_14_0.png" style="width: 603px; height: 357px;" />
+<img alt="../_images/notebooks_GDRPredictCellTypeTutorial_17_0.png" class="no-scaled-link" src="../_images/notebooks_GDRPredictCellTypeTutorial_17_0.png" style="width: 603px; height: 357px;" />
 </div>
 </div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[10]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[11]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(aibs_query_adata,
@@ -593,14 +637,14 @@ aibs_query_adata.obs[&#39;subclass&#39;]=aibs_query_adata.obs[&#39;subclass&#39;
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/notebooks_GDRPredictCellTypeTutorial_15_0.png" class="no-scaled-link" src="../_images/notebooks_GDRPredictCellTypeTutorial_15_0.png" style="width: 603px; height: 357px;" />
+<img alt="../_images/notebooks_GDRPredictCellTypeTutorial_18_0.png" class="no-scaled-link" src="../_images/notebooks_GDRPredictCellTypeTutorial_18_0.png" style="width: 603px; height: 357px;" />
 </div>
 </div>
 </section>
 <section id="Cluster-the-query-data">
 <h2>Cluster the query data<a class="headerlink" href="#Cluster-the-query-data" title="Link to this heading">#</a></h2>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[11]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[12]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>%%time
@@ -615,13 +659,13 @@ sc.tl.leiden(aibs_query_adata,resolution=0.2,key_added=&#39;Leiden&#39;,flavor=&
 <div class="highlight"><pre>
 running Leiden clustering
     finished: found 26 clusters and added
-    &#39;Leiden&#39;, the cluster labels (adata.obs, categorical) (0:00:09)
-CPU times: user 4.49 s, sys: 254 ms, total: 4.74 s
-Wall time: 9.14 s
+    &#39;Leiden&#39;, the cluster labels (adata.obs, categorical) (0:00:03)
+CPU times: user 2.82 s, sys: 253 ms, total: 3.07 s
+Wall time: 3.05 s
 </pre></div></div>
 </div>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[12]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[13]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>logging.getLogger(&#39;matplotlib.font_manager&#39;).disabled = True
@@ -629,7 +673,7 @@ Wall time: 9.14 s
 </div>
 </div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[13]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[14]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(aibs_query_adata,
@@ -648,14 +692,14 @@ Wall time: 9.14 s
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/notebooks_GDRPredictCellTypeTutorial_19_0.png" class="no-scaled-link" src="../_images/notebooks_GDRPredictCellTypeTutorial_19_0.png" style="width: 328px; height: 338px;" />
+<img alt="../_images/notebooks_GDRPredictCellTypeTutorial_22_0.png" class="no-scaled-link" src="../_images/notebooks_GDRPredictCellTypeTutorial_22_0.png" style="width: 328px; height: 338px;" />
 </div>
 </div>
 </section>
 <section id="Predict-cell-types-by-GDR">
 <h2>Predict cell types by GDR<a class="headerlink" href="#Predict-cell-types-by-GDR" title="Link to this heading">#</a></h2>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[14]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[15]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>piaso.tl.predictCellTypeByGDR(
@@ -682,21 +726,10 @@ Wall time: 9.14 s
 <div class="nboutput docutils container">
 <div class="prompt empty docutils container">
 </div>
-<div class="output_area stderr docutils container">
-<div class="highlight"><pre>
-/home/vas744/Analysis/Python/Packages/PIASO/piaso/tools/_runGDR.py:1623: FutureWarning: Use anndata.concat instead of AnnData.concatenate, AnnData.concatenate is deprecated and will be removed in the future. See the tutorial for concat at: https://anndata.readthedocs.io/en/latest/concatenation.html
-  adata_combine=sc.AnnData.concatenate(adata_ref, adata[:,adata_ref.var_names])
-</pre></div></div>
-</div>
-<div class="nboutput docutils container">
-<div class="prompt empty docutils container">
-</div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
 Running GDR for the query dataset and the reference dataset:
-**finished identifying marker genes by COSG**
-**finished identifying marker genes by COSG**
-The cell embeddings calculated by GDR were saved as `X_gdr` in adata.obsm.
+GDR embeddings saved to adata.obsm[&#39;X_gdr&#39;]
 </pre></div></div>
 </div>
 <div class="nboutput docutils container">
@@ -704,14 +737,14 @@ The cell embeddings calculated by GDR were saved as `X_gdr` in adata.obsm.
 </div>
 <div class="output_area stderr docutils container">
 <div class="highlight"><pre>
-2025-02-27 12:13:18,827 - harmonypy - INFO - Computing initial centroids with sklearn.KMeans...
-2025-02-27 12:13:52,026 - harmonypy - INFO - sklearn.KMeans initialization complete.
-2025-02-27 12:13:55,015 - harmonypy - INFO - Iteration 1 of 10
-2025-02-27 12:18:14,030 - harmonypy - INFO - Iteration 2 of 10
-2025-02-27 12:22:31,074 - harmonypy - INFO - Iteration 3 of 10
-2025-02-27 12:24:40,560 - harmonypy - INFO - Iteration 4 of 10
-2025-02-27 12:26:29,620 - harmonypy - INFO - Iteration 5 of 10
-2025-02-27 12:28:09,995 - harmonypy - INFO - Converged after 5 iterations
+2025-03-13 17:56:06,884 - harmonypy - INFO - Computing initial centroids with sklearn.KMeans...
+2025-03-13 17:56:17,410 - harmonypy - INFO - sklearn.KMeans initialization complete.
+2025-03-13 17:56:18,858 - harmonypy - INFO - Iteration 1 of 10
+2025-03-13 17:57:19,554 - harmonypy - INFO - Iteration 2 of 10
+2025-03-13 17:58:25,833 - harmonypy - INFO - Iteration 3 of 10
+2025-03-13 17:58:58,705 - harmonypy - INFO - Iteration 4 of 10
+2025-03-13 17:59:24,916 - harmonypy - INFO - Iteration 5 of 10
+2025-03-13 17:59:46,990 - harmonypy - INFO - Converged after 5 iterations
 </pre></div></div>
 </div>
 <div class="nboutput nblast docutils container">
@@ -725,7 +758,7 @@ All finished. The predicted cell types are saved as `CellTypes_gdr` in adata.obs
 </div>
 <p>Reorder the query dataset categories to match the reference dataset categories</p>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[15]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[16]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>aibs_query_adata.obs[&#39;CellTypes_gdr&#39;]=aibs_query_adata.obs[&#39;CellTypes_gdr&#39;].astype(&#39;category&#39;)
@@ -735,7 +768,7 @@ aibs_query_adata.obs[&#39;CellTypes_gdr&#39;]=aibs_query_adata.obs[&#39;CellType
 </div>
 <p>We can now visualize the predicted cell types from GDR using a UMAP and compare them with the UMAP of the true cell types.</p>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[16]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[17]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.embedding(aibs_query_adata,
@@ -753,12 +786,12 @@ aibs_query_adata.obs[&#39;CellTypes_gdr&#39;]=aibs_query_adata.obs[&#39;CellType
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/notebooks_GDRPredictCellTypeTutorial_25_0.png" class="no-scaled-link" src="../_images/notebooks_GDRPredictCellTypeTutorial_25_0.png" style="width: 608px; height: 690px;" />
+<img alt="../_images/notebooks_GDRPredictCellTypeTutorial_28_0.png" class="no-scaled-link" src="../_images/notebooks_GDRPredictCellTypeTutorial_28_0.png" style="width: 608px; height: 690px;" />
 </div>
 </div>
 <p>Since we know the real subclass of the test data, we can test the performance of predictCellTypeByGDR by comparing predicted celltypes and true subclasses.</p>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[17]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[18]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>confusion_matrix = metrics.confusion_matrix(aibs_query_adata.obs[&#39;subclass&#39;].values, aibs_query_adata.obs[&#39;CellTypes_gdr&#39;].values)
@@ -767,7 +800,7 @@ confusion_matrix_df = pd.DataFrame(confusion_matrix, columns=aibs_query_adata.ob
 </div>
 </div>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[18]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[19]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>normalized_cf_matrix_df = confusion_matrix_df/confusion_matrix_df.sum(axis=0)
@@ -775,7 +808,7 @@ confusion_matrix_df = pd.DataFrame(confusion_matrix, columns=aibs_query_adata.ob
 </div>
 </div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[19]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[20]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sns.set_style(&quot;whitegrid&quot;, {&#39;axes.grid&#39; : False})
@@ -794,8 +827,28 @@ plt.show()
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/notebooks_GDRPredictCellTypeTutorial_29_0.png" class="no-scaled-link" src="../_images/notebooks_GDRPredictCellTypeTutorial_29_0.png" style="width: 602px; height: 497px;" />
+<img alt="../_images/notebooks_GDRPredictCellTypeTutorial_32_0.png" class="no-scaled-link" src="../_images/notebooks_GDRPredictCellTypeTutorial_32_0.png" style="width: 602px; height: 497px;" />
 </div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[21]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>piaso_f1_score=np.round(f1_score(aibs_query_adata.obs[&#39;subclass&#39;], aibs_query_adata.obs[&#39;CellTypes_gdr&#39;], average=&#39;micro&#39;), decimals=3)
+print(f&quot;The Micro F1 score for PIASO prediction: {piaso_f1_score}&quot;)
+piaso_f1_score=np.round(f1_score(aibs_query_adata.obs[&#39;subclass&#39;], aibs_query_adata.obs[&#39;CellTypes_gdr&#39;], average=&#39;macro&#39;), decimals=3)
+print(f&quot;The Macro F1 score for PIASO prediction: {piaso_f1_score}&quot;)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+The Micro F1 score for PIASO prediction: 0.967
+The Macro F1 score for PIASO prediction: 0.951
+</pre></div></div>
 </div>
 </section>
 </section>
@@ -820,11 +873,11 @@ plt.show()
       </div>
     </a>
     <a class="right-next"
-       href="rnaSeqPipelineTutorial.html"
+       href="GDR_ATAC_Tutorial.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Pre-processing CellRanger outputs</p>
+        <p class="prev-next-title">GDR for scATAC-seq data</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>

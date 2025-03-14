@@ -411,34 +411,45 @@
 import pandas as pd
 import scanpy as sc
 import os
-from typing import Iterable, Union, Optional
-import matplotlib.pyplot as plt
-import anndata as ad
 import logging
 from matplotlib import rcParams
+from sklearn.model_selection import StratifiedShuffleSplit
+from sklearn import metrics
+from sklearn.metrics import f1_score
 import seaborn as sns
-from matplotlib import cm
-from matplotlib import colors, colorbar
+import matplotlib.pyplot as plt
 </pre></div>
 </div>
 </div>
-<div class="nbinput nblast docutils container">
+<div class="nbinput docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[2]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>path = &#39;/data1/vallaris/Software/PIASO&#39;
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>path = &#39;/home/vas744/Analysis/Python/Packages/PIASO&#39;
+import sys
+sys.path.append(path)
+path = &#39;/home/vas744/Analysis/Python/Packages/COSG&#39;
 import sys
 sys.path.append(path)
 import piaso
+import cosg
 </pre></div>
 </div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+/home/vas744/.local/lib/python3.9/site-packages/networkx/utils/backends.py:135: RuntimeWarning: networkx backend defined more than once: nx-loopback
+  backends.update(_get_backends(&#34;networkx.backends&#34;))
+</pre></div></div>
 </div>
 <div class="nbinput docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[3]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.set_figure_params(dpi=96,dpi_save=300, color_map=&#39;viridis&#39;,facecolor=&#39;white&#39;)
-# rcParams[&#39;figure.figsize&#39;] = 5, 5
 rcParams[&#39;font.sans-serif&#39;] = &quot;Arial&quot;
 rcParams[&#39;font.family&#39;] = &quot;Arial&quot;
 sc.settings.verbosity = 3
@@ -446,21 +457,12 @@ sc.logging.print_header()
 </pre></div>
 </div>
 </div>
-<div class="nboutput docutils container">
-<div class="prompt empty docutils container">
-</div>
-<div class="output_area stderr docutils container">
-<div class="highlight"><pre>
-/data1/vallaris/.conda/envs/vvs/lib/python3.12/site-packages/tqdm/auto.py:21: TqdmWarning: IProgress not found. Please update jupyter and ipywidgets. See https://ipywidgets.readthedocs.io/en/stable/user_install.html
-  from .autonotebook import tqdm as notebook_tqdm
-</pre></div></div>
-</div>
 <div class="nboutput nblast docutils container">
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-scanpy==1.10.3 anndata==0.10.9 umap==0.5.6 numpy==1.26.4 scipy==1.13.1 pandas==2.2.2 scikit-learn==1.5.2 statsmodels==0.14.3 igraph==0.11.6 pynndescent==0.5.13
+scanpy==1.10.3 anndata==0.10.8 umap==0.5.7 numpy==1.26.4 scipy==1.13.0 pandas==2.2.3 scikit-learn==1.5.2 statsmodels==0.14.4 igraph==0.11.5 louvain==0.8.2 pynndescent==0.5.13
 </pre></div></div>
 </div>
 <section id="Load-the-data">
@@ -468,25 +470,34 @@ scanpy==1.10.3 anndata==0.10.9 umap==0.5.6 numpy==1.26.4 scipy==1.13.1 pandas==2
 <p>Let us load a 20k subsampled version of the Seattle Alzheimer’s Disease Brain Cell Atlas (SEA-AD) project dataset described in detail in <a class="reference external" href="../references.html#cell1">Gabitto et. al. (2024)</a>. We will be using the scRNA-seq data from the dataset in this tutorial.</p>
 <p>Download the subsampled dataset from Google Drive: <a class="reference external" href="https://drive.google.com/file/d/1EdRA0ECvPlEnNaOzKqj19GrEtucB7hmE/view?usp=drive_link">https://drive.google.com/file/d/1EdRA0ECvPlEnNaOzKqj19GrEtucB7hmE/view?usp=drive_link</a></p>
 <p>The original data is available on <a class="reference external" href="https://portal.brain-map.org/explore/seattle-alzheimers-disease">https://portal.brain-map.org/explore/seattle-alzheimers-disease</a>.</p>
-<div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
-</pre></div>
-</div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>!/home/vas744/Software/gdrive files download --destination /home/vas744/Data/Public/PIASO 1EdRA0ECvPlEnNaOzKqj19GrEtucB7hmE
-</pre></div>
-</div>
-</div>
 <div class="nbinput docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[4]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata=sc.read(&#39;/data1/vallaris/Analysis/Python/Packages/PIASO_Testing/SEA-AD_RNA_MTG_subsample_excludeReference_20k_piaso.h5ad&#39;)
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>!/home/vas744/Software/gdrive files download --overwrite --destination /n/scratch/users/v/vas744/Data/Public/PIASO 1EdRA0ECvPlEnNaOzKqj19GrEtucB7hmE
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Downloading SEA-AD_RNA_MTG_subsample_excludeReference_20k_piaso.h5ad
+Successfully downloaded SEA-AD_RNA_MTG_subsample_excludeReference_20k_piaso.h5ad
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[5]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata=sc.read(&#39;/n/scratch/users/v/vas744/Data/Public/PIASO/SEA-AD_RNA_MTG_subsample_excludeReference_20k_piaso.h5ad&#39;)
 adata
 </pre></div>
 </div>
 </div>
 <div class="nboutput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[4]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[5]:
 </pre></div>
 </div>
 <div class="output_area docutils container">
@@ -502,7 +513,7 @@ AnnData object with n_obs × n_vars = 20000 × 36601
 </div>
 <p>This data has been pre-processed already. But for the purposes of this tutorial, we will start again with the counts data and go through the normalization and other pre-processing steps.</p>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[5]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[6]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata.X=adata.layers[&#39;UMIs&#39;].copy()
@@ -511,7 +522,7 @@ AnnData object with n_obs × n_vars = 20000 × 36601
 </div>
 <p>Now we filter out cells with less than 200 genes. You can also filter out genes that are lowly expressed in cells.</p>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[6]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[7]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pp.filter_cells(adata, min_genes=200)
@@ -520,7 +531,7 @@ AnnData object with n_obs × n_vars = 20000 × 36601
 </div>
 <p>Identify and annotate the mitochondrial genes in the data and compute their quality control metrics.</p>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[7]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[8]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata.var[&#39;mt&#39;] = adata.var_names.str.startswith(&#39;MT-&#39;)  # annotate the group of mitochondrial genes as &#39;mt&#39;
@@ -530,7 +541,7 @@ sc.pp.calculate_qc_metrics(adata, qc_vars=[&#39;mt&#39;], percent_top=None, log1
 </div>
 <p>Identify and annotate the ribosomal protein genes in the data and compute the percenatge of total genes that are ribosomal protein genes.</p>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[8]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[9]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>ribo_cells = adata.var_names.str.startswith(&#39;RPS&#39;,&#39;RPL&#39;)
@@ -541,7 +552,7 @@ adata.obs[&#39;pct_counts_ribo&#39;] = np.ravel(100*np.sum(adata[:, ribo_cells].
 <p>Visualize the metrics for all genes, and mitochondrial and ribosomal protein genes in a violin plot.</p>
 <p>The levels of these genes can be used to eliminate low-quality cells. Higher percentage if mt or ribo genes in a cell implies a lysed cell prior to mRNA capture.</p>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[9]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[10]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>piaso.pl.plot_features_violin(adata,
@@ -562,7 +573,7 @@ adata.obs[&#39;pct_counts_ribo&#39;] = np.ravel(100*np.sum(adata[:, ribo_cells].
 <h2>Normalize and log-transform the data<a class="headerlink" href="#Normalize-and-log-transform-the-data" title="Link to this heading">#</a></h2>
 <p>Normalize each cell with the total counts over all the genes, and then logarithmize the data.</p>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[10]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[11]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata.layers[&#39;raw&#39;]=adata.X.copy()
@@ -587,7 +598,7 @@ normalizing counts per cell
 <p>RNA-seq data is usually overdispersed, i.e. variance exceeds the mean. Therefore, we normalize such data by adjusting for overdispersion using Pearson residuals derived from the fitted negative binomial model.</p>
 <p><strong>Note</strong>: Since we aren’t filtering any genes here, there might be some genes which don’t express in any cell and therefore lead to columns with all zeros. This is the reason for the RuntimeWarning: invalid value encountered in divide residuals = diff / np.sqrt(mu + mu**2 / theta). But this will not affect our analysis, since we will be using the log1p layer instead of the raw layer.</p>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[11]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[12]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.experimental.pp.highly_variable_genes(adata,
@@ -626,7 +637,7 @@ computing analytic Pearson residuals on raw
 </div>
 <div class="output_area stderr docutils container">
 <div class="highlight"><pre>
-/data1/vallaris/.conda/envs/vvs/lib/python3.12/site-packages/scanpy/experimental/pp/_normalization.py:70: RuntimeWarning: invalid value encountered in divide
+/home/vas744/.local/lib/python3.9/site-packages/scanpy/experimental/pp/_normalization.py:70: RuntimeWarning: invalid value encountered in divide
   residuals = diff / np.sqrt(mu + mu**2 / theta)
 </pre></div></div>
 </div>
@@ -635,7 +646,7 @@ computing analytic Pearson residuals on raw
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-    finished (0:00:14)
+    finished (0:00:33)
 </pre></div></div>
 </div>
 </section>
@@ -643,7 +654,7 @@ computing analytic Pearson residuals on raw
 <h2>Dimensionality reduction and visualization<a class="headerlink" href="#Dimensionality-reduction-and-visualization" title="Link to this heading">#</a></h2>
 <p>Again, since the data has been pre-processed, we have the umap computation given by the authors in the AnnData object, but for the purposes of this tutorial, we will backup that umap, and re-compute again.</p>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[12]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[13]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata.obsm[&#39;X_umap_backup&#39;]=adata.obsm[&#39;X_umap&#39;].copy()
@@ -651,7 +662,7 @@ computing analytic Pearson residuals on raw
 </div>
 </div>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[13]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[14]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>piaso.tl.runSVD(adata,
@@ -663,7 +674,7 @@ computing analytic Pearson residuals on raw
 </div>
 </div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[14]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[15]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>%%time
@@ -685,17 +696,17 @@ sc.tl.umap(adata)
 computing neighbors
     finished: added to `.uns[&#39;neighbors&#39;]`
     `.obsp[&#39;distances&#39;]`, distances for each pair of neighbors
-    `.obsp[&#39;connectivities&#39;]`, weighted adjacency matrix (0:00:17)
+    `.obsp[&#39;connectivities&#39;]`, weighted adjacency matrix (0:00:38)
 computing UMAP
     finished: added
     &#39;X_umap&#39;, UMAP coordinates (adata.obsm)
-    &#39;umap&#39;, UMAP parameters (adata.uns) (0:00:13)
-CPU times: user 1min 51s, sys: 525 ms, total: 1min 51s
-Wall time: 30.6 s
+    &#39;umap&#39;, UMAP parameters (adata.uns) (0:00:36)
+CPU times: user 5min 26s, sys: 843 ms, total: 5min 27s
+Wall time: 1min 14s
 </pre></div></div>
 </div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[15]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[16]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(adata,
@@ -716,7 +727,7 @@ Wall time: 30.6 s
 </div>
 <p>Backup the umap computation based on the raw data.</p>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[16]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[17]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata.obsm[&#39;X_umap_raw&#39;]=adata.obsm[&#39;X_umap&#39;].copy()
@@ -725,7 +736,7 @@ Wall time: 30.6 s
 </div>
 <p>Visualize the overall as well as mitochondrial and ribosomal protein gene expression.</p>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[17]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[18]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(adata,
@@ -749,7 +760,7 @@ Wall time: 30.6 s
 <section id="Cluster-the-data">
 <h2>Cluster the data<a class="headerlink" href="#Cluster-the-data" title="Link to this heading">#</a></h2>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[18]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[19]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>%%time
@@ -781,13 +792,13 @@ running Leiden clustering
 <div class="output_area docutils container">
 <div class="highlight"><pre>
     finished: found 24 clusters and added
-    &#39;Leiden&#39;, the cluster labels (adata.obs, categorical) (0:00:09)
-CPU times: user 1.76 s, sys: 77.5 ms, total: 1.84 s
-Wall time: 9.81 s
+    &#39;Leiden&#39;, the cluster labels (adata.obs, categorical) (0:00:01)
+CPU times: user 1.57 s, sys: 40.1 ms, total: 1.61 s
+Wall time: 1.61 s
 </pre></div></div>
 </div>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[19]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[20]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>logging.getLogger(&#39;matplotlib.font_manager&#39;).disabled = True
@@ -795,7 +806,7 @@ Wall time: 9.81 s
 </div>
 </div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[20]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[21]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(adata,
@@ -826,16 +837,15 @@ Wall time: 9.81 s
 </div>
 <p>For more details about cosg, please refer to:</p>
 <p><a class="github reference external" href="https://github.com/genecell/COSG">genecell/COSG</a></p>
-<div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[21]:
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[22]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>import cosg
-n_gene=30
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>n_gene=30
 cosg.cosg(adata,
           key_added=&#39;cosg&#39;,
           use_raw=False,
-          layer=&#39;log1p&#39;, ## e.g., if you want to use the log1p layer in adata
+          layer=&#39;log1p&#39;,
           mu=100,
           expressed_pct=0.1,
           remove_lowly_expressed=True,
@@ -844,16 +854,8 @@ cosg.cosg(adata,
 </pre></div>
 </div>
 </div>
-<div class="nboutput nblast docutils container">
-<div class="prompt empty docutils container">
-</div>
-<div class="output_area docutils container">
-<div class="highlight"><pre>
-**finished identifying marker genes by COSG**
-</pre></div></div>
-</div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[22]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[23]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.tl.dendrogram(adata,groupby=&#39;Leiden&#39;,use_rep=&#39;X_svd&#39;)
@@ -890,7 +892,7 @@ Storing dendrogram info using `.uns[&#39;dendrogram_Leiden&#39;]`
 </div>
 </div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[23]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[24]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>marker_gene=pd.DataFrame(adata.uns[&#39;cosg&#39;][&#39;names&#39;])
@@ -920,7 +922,7 @@ sc.pl.umap(adata,
 <p>GDR (marker Gene-guided Dimensionality Reduction) is an alternative dimensionality reduction method by projecting cells into a low-dimensional gene expression space that reflects biological identity in each dimension. Here we will demonstrate how PIASO’s runGDR can be used instead of SVD for dimensionality reduction.</p>
 <p>For more details about GDR and it’s applications, please refer to: <a class="reference external" href="https://www.biorxiv.org/content/10.1101/2024.07.20.604399v1">https://www.biorxiv.org/content/10.1101/2024.07.20.604399v1</a></p>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[24]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[25]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata.obsm[&#39;X_umap_svd&#39;]=adata.obsm[&#39;X_umap&#39;].copy()
@@ -928,7 +930,7 @@ sc.pl.umap(adata,
 </div>
 </div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[25]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[26]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>piaso.tl.runGDR(adata,
@@ -953,12 +955,11 @@ sc.pl.umap(adata,
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-**finished identifying marker genes by COSG**
-The cell embeddings calculated by GDR were saved as `X_gdr` in adata.obsm.
+GDR embeddings saved to adata.obsm[&#39;X_gdr&#39;]
 </pre></div></div>
 </div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[26]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[27]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>%%time
@@ -980,17 +981,17 @@ sc.tl.umap(adata)
 computing neighbors
     finished: added to `.uns[&#39;neighbors&#39;]`
     `.obsp[&#39;distances&#39;]`, distances for each pair of neighbors
-    `.obsp[&#39;connectivities&#39;]`, weighted adjacency matrix (0:00:02)
+    `.obsp[&#39;connectivities&#39;]`, weighted adjacency matrix (0:00:04)
 computing UMAP
     finished: added
     &#39;X_umap&#39;, UMAP coordinates (adata.obsm)
-    &#39;umap&#39;, UMAP parameters (adata.uns) (0:00:28)
-CPU times: user 3min 24s, sys: 423 ms, total: 3min 25s
-Wall time: 30.6 s
+    &#39;umap&#39;, UMAP parameters (adata.uns) (0:00:30)
+CPU times: user 2min 46s, sys: 565 ms, total: 2min 47s
+Wall time: 34.7 s
 </pre></div></div>
 </div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[27]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[28]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(adata,
@@ -1016,11 +1017,10 @@ Wall time: 30.6 s
 <p>Since we have the subclasses of the cells in this dataset, we can use a part of this data as reference to “predict” the cell types of the remaining data.</p>
 <p>Let us do a stratified 80:20 split of the data. The 80% data can be the reference dataset which will be used to train the model in predictCellTypeByGDR, and then predict the subclasses for the remaining 20% data.</p>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[28]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[29]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>from sklearn.model_selection import StratifiedShuffleSplit
-stratified_split = StratifiedShuffleSplit(n_splits=1, test_size=0.2, random_state=10)
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>stratified_split = StratifiedShuffleSplit(n_splits=1, test_size=0.2, random_state=10)
 X = adata.X.copy()
 y = adata.obs[&quot;Subclass&quot;].values
 
@@ -1032,7 +1032,7 @@ for i, (train_index, test_index) in enumerate(stratified_split.split(X, y)):
 </div>
 </div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[29]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[30]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>piaso.tl.predictCellTypeByGDR(
@@ -1061,7 +1061,7 @@ for i, (train_index, test_index) in enumerate(stratified_split.split(X, y)):
 </div>
 <div class="output_area stderr docutils container">
 <div class="highlight"><pre>
-/data1/vallaris/Software/PIASO/piaso/tools/_runGDR.py:279: FutureWarning: Use anndata.concat instead of AnnData.concatenate, AnnData.concatenate is deprecated and will be removed in the future. See the tutorial for concat at: https://anndata.readthedocs.io/en/latest/concatenation.html
+/n/data1/hms/neurobio/fishell/vallaris/.conda/envs/genecell_env/lib/python3.9/site-packages/piaso/tools/_predictCellType.py:137: FutureWarning: Use anndata.concat instead of AnnData.concatenate, AnnData.concatenate is deprecated and will be removed in the future. See the tutorial for concat at: https://anndata.readthedocs.io/en/latest/concatenation.html
   adata_combine=sc.AnnData.concatenate(adata_ref, adata[:,adata_ref.var_names])
 </pre></div></div>
 </div>
@@ -1071,9 +1071,7 @@ for i, (train_index, test_index) in enumerate(stratified_split.split(X, y)):
 <div class="output_area docutils container">
 <div class="highlight"><pre>
 Running GDR for the query dataset and the reference dataset:
-**finished identifying marker genes by COSG**
-**finished identifying marker genes by COSG**
-The cell embeddings calculated by GDR were saved as `X_gdr` in adata.obsm.
+GDR embeddings saved to adata.obsm[&#39;X_gdr&#39;]
 </pre></div></div>
 </div>
 <div class="nboutput docutils container">
@@ -1081,14 +1079,15 @@ The cell embeddings calculated by GDR were saved as `X_gdr` in adata.obsm.
 </div>
 <div class="output_area stderr docutils container">
 <div class="highlight"><pre>
-2025-01-30 13:43:50,479 - harmonypy - INFO - Computing initial centroids with sklearn.KMeans...
-2025-01-30 13:44:03,595 - harmonypy - INFO - sklearn.KMeans initialization complete.
-2025-01-30 13:44:03,692 - harmonypy - INFO - Iteration 1 of 10
-2025-01-30 13:44:08,513 - harmonypy - INFO - Iteration 2 of 10
-2025-01-30 13:44:13,156 - harmonypy - INFO - Iteration 3 of 10
-2025-01-30 13:44:17,661 - harmonypy - INFO - Iteration 4 of 10
-2025-01-30 13:44:19,060 - harmonypy - INFO - Iteration 5 of 10
-2025-01-30 13:44:20,451 - harmonypy - INFO - Converged after 5 iterations
+2025-03-14 10:25:49,364 - harmonypy - INFO - Computing initial centroids with sklearn.KMeans...
+2025-03-14 10:25:55,199 - harmonypy - INFO - sklearn.KMeans initialization complete.
+2025-03-14 10:25:55,505 - harmonypy - INFO - Iteration 1 of 10
+2025-03-14 10:26:02,568 - harmonypy - INFO - Iteration 2 of 10
+2025-03-14 10:26:09,421 - harmonypy - INFO - Iteration 3 of 10
+2025-03-14 10:26:14,227 - harmonypy - INFO - Iteration 4 of 10
+2025-03-14 10:26:16,166 - harmonypy - INFO - Iteration 5 of 10
+2025-03-14 10:26:18,110 - harmonypy - INFO - Iteration 6 of 10
+2025-03-14 10:26:20,048 - harmonypy - INFO - Converged after 6 iterations
 </pre></div></div>
 </div>
 <div class="nboutput nblast docutils container">
@@ -1102,7 +1101,7 @@ All finished. The predicted cell types are saved as `CellTypes_gdr` in adata.obs
 </div>
 <p>We can now visualize the subclasses predicted by the predictCellTypeByGDR method. First, let us make sure the colors of predicted cell types and subclass match in the plots.</p>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[30]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[31]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata_test.obs[&#39;CellTypes_gdr&#39;]=adata_test.obs[&#39;CellTypes_gdr&#39;].astype(&#39;category&#39;)
@@ -1111,7 +1110,7 @@ adata_test.obs[&#39;CellTypes_gdr&#39;]=adata_test.obs[&#39;CellTypes_gdr&#39;].
 </div>
 </div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[31]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[32]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.embedding(adata_test,
@@ -1129,12 +1128,12 @@ adata_test.obs[&#39;CellTypes_gdr&#39;]=adata_test.obs[&#39;CellTypes_gdr&#39;].
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/notebooks_PIASO_tutorial_50_0.png" class="no-scaled-link" src="../_images/notebooks_PIASO_tutorial_50_0.png" style="width: 625px; height: 333px;" />
+<img alt="../_images/notebooks_PIASO_tutorial_50_0.png" class="no-scaled-link" src="../_images/notebooks_PIASO_tutorial_50_0.png" style="width: 626px; height: 333px;" />
 </div>
 </div>
 <p>We can compare these predicted subclasses with the actual subclasses by plotting adata_test with the actual Subclass values.</p>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[32]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[33]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.embedding(adata_test,
@@ -1152,21 +1151,20 @@ adata_test.obs[&#39;CellTypes_gdr&#39;]=adata_test.obs[&#39;CellTypes_gdr&#39;].
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/notebooks_PIASO_tutorial_52_0.png" class="no-scaled-link" src="../_images/notebooks_PIASO_tutorial_52_0.png" style="width: 625px; height: 333px;" />
+<img alt="../_images/notebooks_PIASO_tutorial_52_0.png" class="no-scaled-link" src="../_images/notebooks_PIASO_tutorial_52_0.png" style="width: 626px; height: 333px;" />
 </div>
 </div>
 <p>Since we know the real subclass of the test data, we can test the performance of predictCellTypeByGDR by comparing predicted celltypes and true subclasses.</p>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[33]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[34]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>from sklearn import metrics
-confusion_matrix = metrics.confusion_matrix(y[test_index], adata_test.obs[&#39;CellTypes_gdr&#39;].values)
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>confusion_matrix = metrics.confusion_matrix(y[test_index], adata_test.obs[&#39;CellTypes_gdr&#39;].values)
 </pre></div>
 </div>
 </div>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[34]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[35]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>confusion_matrix_df = pd.DataFrame(confusion_matrix, columns=adata_test.obs[&#39;Subclass&#39;].cat.categories, index=adata_test.obs[&#39;Subclass&#39;].cat.categories)
@@ -1175,7 +1173,7 @@ normalized_cf_matrix_df = (confusion_matrix_df - confusion_matrix_df.mean(axis=0
 </div>
 </div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[35]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[36]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sns.set_style(&quot;whitegrid&quot;, {&#39;axes.grid&#39; : False})
@@ -1194,6 +1192,26 @@ plt.show()
 <div class="output_area docutils container">
 <img alt="../_images/notebooks_PIASO_tutorial_56_0.png" class="no-scaled-link" src="../_images/notebooks_PIASO_tutorial_56_0.png" style="width: 818px; height: 576px;" />
 </div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[37]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>piaso_f1_score=np.round(f1_score(adata_test.obs[&#39;Subclass&#39;], adata_test.obs[&#39;CellTypes_gdr&#39;], average=&#39;micro&#39;), decimals=3)
+print(f&quot;The Micro F1 score for PIASO prediction: {piaso_f1_score}&quot;)
+piaso_f1_score=np.round(f1_score(adata_test.obs[&#39;Subclass&#39;], adata_test.obs[&#39;CellTypes_gdr&#39;], average=&#39;macro&#39;), decimals=3)
+print(f&quot;The Macro F1 score for PIASO prediction: {piaso_f1_score}&quot;)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+The Micro F1 score for PIASO prediction: 0.963
+The Macro F1 score for PIASO prediction: 0.935
+</pre></div></div>
 </div>
 </section>
 </section>

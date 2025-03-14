@@ -7,7 +7,10 @@ Tutorials
    notebooks/PIASO_tutorial.ipynb
    notebooks/GDR_Tutorial.ipynb
    notebooks/GDRPredictCellTypeTutorial.ipynb
+   notebooks/GDR_ATAC_Tutorial.ipynb
    notebooks/rnaSeqPipelineTutorial.ipynb
+   notebooks/rnaSeqPipelineTutorial_E18.ipynb
    notebooks/LeidenLocalTutorial.ipynb
    notebooks/01_showThePlotFunction.ipynb
    notebooks/colorPalettes.ipynb
+   misc_setup
