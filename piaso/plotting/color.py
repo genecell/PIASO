@@ -216,7 +216,41 @@ d_color14=list(np.random.choice(colors_pool2, size=len(colors_pool2), replace=Fa
 
 np.random.seed(1830) 
 d_color15=list(np.random.choice(colors_pool2, size=len(colors_pool2), replace=False,))
-                       
+
+
+## celeste
+d_color16 = ['#1a2c6cff', '#8369c2ff', '#7f7f53ff', '#ccae94ff', '#b0d8feff', '#bcfe7eff', '#845d4dff', '#bebf9fff',
+           '#173c4eff', '#d3adfeff', '#a1197dff', '#69c8fbff', '#ffff80ff', '#ed78b6ff', '#ac6581ff', '#8a457bff',
+           '#ce8e87ff', '#d0338fff', '#fe8a8aff', '#6a42d7ff', '#351ebeff', '#b02121ff', '#78f9feff', '#5ef54fff',
+           '#0e62c0ff', '#009819ff', '#57eedbff', '#c4f888ff','#fcd6cfff', '#5b16b9ff', '#b22cefff', '#cd7bc3ff',
+           '#d7985aff']
+
+## coco
+d_color17 = ['#110453ff', '#822283ff', '#bf7cd1ff', '#465dadff', '#c79093ff', '#70023bff', '#f27371ff', '#a1d1e7ff',
+        '#ef3f22ff', '#fba01dff', '#f5811fff', '#ef509dff', '#2597c7ff', '#057ebaff', '#53a28aff', '#3c2587ff',
+        '#a4a227ff', '#6d4869ff', '#edd767ff', '#bd0e15ff', '#174816ff', '#bbcc83ff', '#a0565eff', '#b0713fff',
+        '#c86581ff', '#67daedff', '#5d626bff', '#f2c420ff', '#b6e3b1ff', '#8c5373ff', '#ad97e1ff', '#ef7eacff']
+
+## stray
+d_color18 = ['#900896ff', '#b354b6ff', '#b3de70ff', '#8ae883ff', '#8e8e2cff', '#31dcc6ff', '#64f7ffff', '#f14ef6ff',
+         '#f1ff30ff', '#cc8d08ff', '#8ca681ff', '#11701cff', '#34ac73ff', '#c51d42ff', '#b04607ff', '#f66e01ff',
+         '#33f167ff', '#1d5dc9ff', '#bff328ff', '#1a1259ff', '#4892a6ff', '#a2dbc9ff', '#b1b3caff', '#154f1dff',
+         '#ffc14eff', '#2e2f9eff', '#653892ff', '#90634cff', '#5e2525ff', '#af2616ff', '#4e508dff', '#733036ff']
+
+## goose
+d_color19 = ['#3d6bd5ff', '#ed2027ff', '#5f94d0ff', '#f7c7baff', '#d8d3bcff', '#cfbd7fff', '#29518eff', '#7d5c53ff',
+         '#44403fff', '#d2a419ff', '#89b55aff', '#af4c66ff', '#6d8188ff', '#6d4467ff', '#7c694eff', '#cc816dff',
+         '#a7cfe8ff', '#415141ff', '#7fb18eff', '#4f6d4fff', '#ff9727ff', '#abaaaaff', '#e1a775ff', '#ac76c4ff',
+         '#fee298ff', '#f3dc59ff', '#af7b25ff', '#e39192ff', '#5bb6a1ff', '#aa549aff', '#7859b6ff', '#c45141ff',
+         '#cdd6abff', '#7c3849ff', '#e05846ff', '#519148ff', '#4b5785ff', '#c5ad37ff', '#b9562cff', '#700000ff']
+
+## fall_guys
+d_color20 = ['#ffd567ff', '#fc9eecff', '#d17cfeff', '#84f8f3ff', '#33cb64ff', '#ef919aff', '#ffe3c6ff', '#f93b71ff',
+             '#5abdf8ff', '#9344e3ff', '#f1bceaff', '#c5eaf6ff', '#b23385ff', '#ca603bff', '#356dc7ff', '#1b48bdff',
+             '#fefea0ff', '#0d9034ff', '#ff8e26ff', '#ffef1dff', '#fd3301ff', '#f968b7ff', '#62059cff', '#7ed9a3ff',
+             '#f9aa7dff', '#3b9f9aff', '#b2e683ff', '#f030dbff', '#abc032ff', '#5cfdacff', '#29d0f3ff', '#03bd82ff',
+             '#8268a3ff', '#181a7fff', '#c21e3aff', '#7a7890ff', '#d9d5f7ff', '#f25f26ff', '#c6bc89ff', '#94a3f5ff']
+
 
 
 ### Continous colors
