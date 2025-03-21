@@ -446,7 +446,7 @@ import cosg
 </pre></div></div>
 </div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[5]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[4]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.set_figure_params(dpi=96,dpi_save=300, color_map=&#39;viridis&#39;,facecolor=&#39;white&#39;)
@@ -471,7 +471,7 @@ scanpy==1.10.3 anndata==0.10.8 umap==0.5.7 numpy==1.26.4 scipy==1.13.0 pandas==2
 <p>We will be using a Multiome RNA dataset obtained from cortex at P57.</p>
 <p>Download the dataset from Google Drive: <a class="reference external" href="https://drive.google.com/file/d/1bEyWNjGvoA9kz3J6jnbXRKgAIytb555W/view?usp=drive_link">https://drive.google.com/file/d/1bEyWNjGvoA9kz3J6jnbXRKgAIytb555W/view?usp=drive_link</a></p>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[6]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[5]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>!/home/vas744/Software/gdrive files download --overwrite --destination /n/scratch/users/v/vas744/Data/Public/PIASO 1bEyWNjGvoA9kz3J6jnbXRKgAIytb555W
@@ -488,7 +488,7 @@ Successfully downloaded AdultCortexMultiomeRNA_integrated_anno.h5ad
 </pre></div></div>
 </div>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[7]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[6]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata_path = os.path.join(&quot;/n/scratch/users/v/vas744/Data/Public/PIASO&quot;, &quot;AdultCortexMultiomeRNA_integrated_anno.h5ad&quot;)
@@ -496,7 +496,7 @@ Successfully downloaded AdultCortexMultiomeRNA_integrated_anno.h5ad
 </div>
 </div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[8]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[7]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata = sc.read(
@@ -507,7 +507,7 @@ adata
 </div>
 </div>
 <div class="nboutput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[8]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[7]:
 </pre></div>
 </div>
 <div class="output_area docutils container">
@@ -521,6 +521,14 @@ AnnData object with n_obs × n_vars = 17412 × 26205
     layers: &#39;log1p&#39;, &#39;raw&#39;
     obsp: &#39;connectivities&#39;, &#39;distances&#39;
 </pre></div></div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[8]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata.X=adata.layers[&#39;log1p&#39;].copy()
+</pre></div>
+</div>
 </div>
 </section>
 <section id="INFOG-normalization">
@@ -544,8 +552,8 @@ piaso.tl.infog(adata,
 The normalized data is saved as `infog` in `adata.layers`.
 The highly variable genes are saved as `highly_variable` in `adata.var`.
 Finished INFOG normalization.
-CPU times: user 3.57 s, sys: 3.85 s, total: 7.42 s
-Wall time: 7.42 s
+CPU times: user 3.05 s, sys: 3.16 s, total: 6.21 s
+Wall time: 6.2 s
 </pre></div></div>
 </div>
 </section>
@@ -583,18 +591,18 @@ sc.pl.umap(adata,
 computing neighbors
     finished: added to `.uns[&#39;neighbors&#39;]`
     `.obsp[&#39;distances&#39;]`, distances for each pair of neighbors
-    `.obsp[&#39;connectivities&#39;]`, weighted adjacency matrix (0:00:37)
+    `.obsp[&#39;connectivities&#39;]`, weighted adjacency matrix (0:00:36)
 computing UMAP
     finished: added
     &#39;X_umap&#39;, UMAP coordinates (adata.obsm)
-    &#39;umap&#39;, UMAP parameters (adata.uns) (0:00:34)
+    &#39;umap&#39;, UMAP parameters (adata.uns) (0:00:27)
 </pre></div></div>
 </div>
 <div class="nboutput nblast docutils container">
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/notebooks_GDR_Tutorial_12_1.png" class="no-scaled-link" src="../_images/notebooks_GDR_Tutorial_12_1.png" style="width: 646px; height: 670px;" />
+<img alt="../_images/notebooks_GDR_Tutorial_13_1.png" class="no-scaled-link" src="../_images/notebooks_GDR_Tutorial_13_1.png" style="width: 646px; height: 670px;" />
 </div>
 </div>
 <p>The UMAP plot clearly shows batch effects in the dataset.</p>
@@ -606,8 +614,7 @@ computing UMAP
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[11]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata.X=adata.layers[&#39;log1p&#39;].copy()
-start_time = time.time()
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>%%time
 piaso.tl.runGDRParallel(adata,
                         batch_key=&#39;Sample&#39;,
                         groupby=None,
@@ -623,12 +630,8 @@ piaso.tl.runGDRParallel(adata,
                         n_svd_dims=50,
                         key_added=&#39;X_gdr&#39;,
                         max_workers=32,
-                        calculate_score_multiBatch=True,
+                        calculate_score_multiBatch=False,
                         verbosity=0)
-end_time = time.time()
-parallel_time = end_time - start_time
-
-print(&quot;Time required to run parallel runGDR: &quot;, parallel_time)
 </pre></div>
 </div>
 </div>
@@ -637,24 +640,33 @@ print(&quot;Time required to run parallel runGDR: &quot;, parallel_time)
 </div>
 <div class="output_area stderr docutils container">
 <div class="highlight"><pre>
-Calculating marker genes in batches: 100%|██████████| 5/5 [00:25&lt;00:00,  5.17s/batch]
-Calculating cell embeddings/scores: 100%|██████████| 5/5 [00:47&lt;00:00,  9.47s/batch]
+Calculating marker genes in batches: 100%|██████████| 5/5 [00:26&lt;00:00,  5.38s/batch]
+Calculating cell embeddings: 100%|██████████| 5/5 [00:59&lt;00:00, 11.81s/batch]
 </pre></div></div>
 </div>
-<div class="nboutput nblast docutils container">
+<div class="nboutput docutils container">
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
 The cell embeddings calculated by GDR were saved as `X_gdr` in adata.obsm.
-Time required to run parallel runGDR:  77.78514885902405
+CPU times: user 2.42 s, sys: 9.12 s, total: 11.5 s
+Wall time: 1min 28s
+</pre></div></div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+
 </pre></div></div>
 </div>
 </section>
 <section id="Visualize-GDR-results-with-UMAPs">
 <h2>Visualize GDR results with UMAPs<a class="headerlink" href="#Visualize-GDR-results-with-UMAPs" title="Link to this heading">#</a></h2>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[13]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[12]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>%%time
@@ -680,13 +692,13 @@ computing neighbors
 computing UMAP
     finished: added
     &#39;X_umap&#39;, UMAP coordinates (adata.obsm)
-    &#39;umap&#39;, UMAP parameters (adata.uns) (0:00:20)
-CPU times: user 40.7 s, sys: 185 ms, total: 40.9 s
-Wall time: 25.8 s
+    &#39;umap&#39;, UMAP parameters (adata.uns) (0:00:25)
+CPU times: user 2min 16s, sys: 232 ms, total: 2min 17s
+Wall time: 30.6 s
 </pre></div></div>
 </div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[14]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[13]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(adata,
@@ -703,7 +715,7 @@ Wall time: 25.8 s
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/notebooks_GDR_Tutorial_18_0.png" class="no-scaled-link" src="../_images/notebooks_GDR_Tutorial_18_0.png" style="width: 646px; height: 670px;" />
+<img alt="../_images/notebooks_GDR_Tutorial_19_0.png" class="no-scaled-link" src="../_images/notebooks_GDR_Tutorial_19_0.png" style="width: 646px; height: 670px;" />
 </div>
 </div>
 <p>GDR effectively integrates batches and separates cell types using only dimensionality reduction, without additional integration methods.</p>

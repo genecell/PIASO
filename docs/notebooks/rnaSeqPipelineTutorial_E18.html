@@ -406,12 +406,7 @@
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[1]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>import sys
-path = &#39;/home/vas744/Analysis/Python/Packages/PIASO&#39;
-sys.path.append(path)
-path = &#39;/home/vas744/Analysis/Python/Packages/COSG&#39;
-sys.path.append(path)
-import piaso
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>import piaso
 import cosg
 </pre></div>
 </div>
@@ -467,7 +462,8 @@ scanpy==1.10.3 anndata==0.10.8 umap==0.5.7 numpy==1.26.4 scipy==1.13.0 pandas==2
 <section id="Load-the-data">
 <h2>Load the data<a class="headerlink" href="#Load-the-data" title="Link to this heading">#</a></h2>
 <p>This dataset was obtained from a mouse at E18 and includes various samples derived from different sequencing technologies, tissue types, and cell vs. nuclei preparations.</p>
-<p>Provide the og 10x genomics website link here</p>
+<p>The data was obtained from 10x Genomics:
+<a class="reference external" href="https://www.10xgenomics.com/datasets?configure%5BhitsPerPage%5D=50&amp;configure%5BmaxValuesPerFacet%5D=1000&amp;refinementList%5Bproduct.name%5D%5B0%5D=Universal%203%27%20Gene%20Expression&amp;refinementList%5Bproduct.name%5D%5B1%5D=Flex%20Gene%20Expression&amp;refinementList%5Bchemistry.version%5D%5B0%5D=3&amp;refinementList%5Bchemistry.version%5D%5B1%5D=3.1&amp;refinementList%5Bchemistry.version%5D%5B2%5D=4&amp;refinementList%5Bspecies%5D%5B0%5D=Mouse&amp;refinementList%5BanatomicalEntities%5D%5B0%5D=Brain&amp;refinementList%5BanatomicalEntities%5D%5B1%5D=cortex&amp;refinementList%5BanatomicalEntities%5D%5B2%5D=hippocampus">https://www.10xgenomics.com/datasets?configure%5BhitsPerPage%5D=50&amp;configure%5BmaxValuesPerFacet%5D=1000&amp;refinementList%5Bproduct.name%5D%5B0%5D=Universal%203%27%20Gene%20Expression&amp;refinementList%5Bproduct.name%5D%5B1%5D=Flex%20Gene%20Expression&amp;refinementList%5Bchemistry.version%5D%5B0%5D=3&amp;refinementList%5Bchemistry.version%5D%5B1%5D=3.1&amp;refinementList%5Bchemistry.version%5D%5B2%5D=4&amp;refinementList%5Bspecies%5D%5B0%5D=Mouse&amp;refinementList%5BanatomicalEntities%5D%5B0%5D=Brain&amp;refinementList%5BanatomicalEntities%5D%5B1%5D=cortex&amp;refinementList%5BanatomicalEntities%5D%5B2%5D=hippocampus</a></p>
 <div class="nbinput docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[4]:
 </pre></div>
@@ -488,11 +484,11 @@ Downloaded 3 files in 1 directories with a total size of 129.2 MB
 </div>
 <p>For this tutorial, we will use only three samples from this dataset. The selection includes one sample from cells, one from nuclei, and one from a different version of 10x (GEM-X-v4), providing a diverse range of sample types within a limited dataset.</p>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[5]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[4]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>data_path=&#39;/n/scratch/users/v/vas744/Data/Public/PIASO/multiple_samples/&#39;
-time_points = [entry.name for entry in os.scandir(data_path) if entry.is_dir() if entry.is_dir()]
+time_points = [entry.name for entry in os.scandir(data_path) if entry.is_dir()]
 print(time_points)
 
 for time_point in time_points:
@@ -506,14 +502,13 @@ for time_point in time_points:
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-[&#39;E18&#39;, &#39;E18_h5_files&#39;]
+[&#39;E18&#39;]
 E18 [&#39;E18_v3.1_cell&#39;, &#39;E18_v3.1_nuclei&#39;, &#39;E18_v4_cell&#39;]
-E18_h5_files []
 </pre></div></div>
 </div>
 <p>We will use this function to load multiple .h5 files into adata objects, creating a list of adata objects.</p>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[6]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[5]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>def load_multiple_anndata(
@@ -534,18 +529,9 @@ E18_h5_files []
 
                 else:
                     adata = sc.read_10x_mtx(data_path+&#39;/&#39;+sample, cache=True)
-                if adata.n_vars &lt; 30000:
-                    continue
-                print(adata.var.columns)
                 adata.var_names_make_unique()
                 adata.obs_names_make_unique()
                 adata.obs[key_added]=sample
-                adata.obs[&#39;Timepoint&#39;]=time_point
-                adata.obs[&#39;Filename&#39;]=file_name[:-3]
-                if &quot;Nuclei&quot;.lower() in file_name.lower():
-                    adata.obs[&#39;Cells/Nuclei&#39;] = &quot;nuclei&quot;
-                else:
-                    adata.obs[&#39;Cells/Nuclei&#39;] = &quot;cells&quot;
                 anndata_list.append(adata)
                 print(&#39;Sample loaded: &#39;, sample)
             except Exception as e:
@@ -556,7 +542,7 @@ E18_h5_files []
 </div>
 </div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[7]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[6]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata_list=load_multiple_anndata(data_path=data_path, time_points=time_points, key_added=&#39;Sample&#39;)
@@ -569,7 +555,7 @@ E18_h5_files []
 <div class="output_area docutils container">
 <div class="highlight"><pre>
 reading /n/scratch/users/v/vas744/Data/Public/PIASO/multiple_samples/E18/E18_v3.1_cell/neuron_10k_v3_filtered_feature_bc_matrix.h5
- (0:00:01)
+ (0:00:02)
 </pre></div></div>
 </div>
 <div class="nboutput docutils container">
@@ -587,7 +573,6 @@ reading /n/scratch/users/v/vas744/Data/Public/PIASO/multiple_samples/E18/E18_v3.
 <div class="output_area docutils container">
 <div class="highlight"><pre>
 Loading the h5 file
-Index([&#39;gene_ids&#39;, &#39;feature_types&#39;, &#39;genome&#39;], dtype=&#39;object&#39;)
 Sample loaded:  E18_v3.1_cell
 reading /n/scratch/users/v/vas744/Data/Public/PIASO/multiple_samples/E18/E18_v3.1_nuclei/SC3_v3_NextGem_DI_Nuclei_5K_SC3_v3_NextGem_DI_Nuclei_5K_count_sample_feature_bc_matrix.h5
 </pre></div></div>
@@ -624,7 +609,6 @@ reading /n/scratch/users/v/vas744/Data/Public/PIASO/multiple_samples/E18/E18_v3.
 <div class="output_area docutils container">
 <div class="highlight"><pre>
 Loading the h5 file
-Index([&#39;gene_ids&#39;, &#39;feature_types&#39;, &#39;genome&#39;], dtype=&#39;object&#39;)
 Sample loaded:  E18_v3.1_nuclei
 reading /n/scratch/users/v/vas744/Data/Public/PIASO/multiple_samples/E18/E18_v4_cell/10k_Mouse_Neurons_3p_gemx_10k_Mouse_Neurons_3p_gemx_count_sample_filtered_feature_bc_matrix.h5
 </pre></div></div>
@@ -661,7 +645,6 @@ reading /n/scratch/users/v/vas744/Data/Public/PIASO/multiple_samples/E18/E18_v4_
 <div class="output_area docutils container">
 <div class="highlight"><pre>
 Loading the h5 file
-Index([&#39;gene_ids&#39;, &#39;feature_types&#39;, &#39;genome&#39;], dtype=&#39;object&#39;)
 Sample loaded:  E18_v4_cell
 </pre></div></div>
 </div>
@@ -676,7 +659,7 @@ Sample loaded:  E18_v4_cell
 </div>
 <p>Concatenate the adata objects in the list to create a single adata object that contains information from all the samples and time points.</p>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[8]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[7]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata=ad.concat(adata_list, join=&#39;outer&#39;,index_unique=&quot;-&quot;)
@@ -684,7 +667,7 @@ Sample loaded:  E18_v4_cell
 </div>
 </div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[9]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[8]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata
@@ -692,17 +675,17 @@ Sample loaded:  E18_v4_cell
 </div>
 </div>
 <div class="nboutput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[9]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[8]:
 </pre></div>
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
 AnnData object with n_obs × n_vars = 30257 × 37089
-    obs: &#39;Sample&#39;, &#39;Timepoint&#39;, &#39;Filename&#39;, &#39;Cells/Nuclei&#39;
+    obs: &#39;Sample&#39;
 </pre></div></div>
 </div>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[10]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[9]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata.layers[&#39;raw&#39;]=adata.X.copy()
@@ -710,7 +693,7 @@ AnnData object with n_obs × n_vars = 30257 × 37089
 </div>
 </div>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[11]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[10]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata.var_names_make_unique()
@@ -719,7 +702,7 @@ AnnData object with n_obs × n_vars = 30257 × 37089
 </div>
 <p>Next, we filter out cells with fewer than 200 detected genes.</p>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[12]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[11]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pp.filter_cells(adata, min_genes=200)
@@ -736,7 +719,7 @@ filtered out 386 cells that have less than 200 genes expressed
 </div>
 <p>We identify mitochondrial and ribosomal protein genes and compute their proportion in each cell’s total read count. A high proportion of these reads often indicates low-quality cells.</p>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[13]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[12]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata.var[&#39;mt&#39;] = adata.var_names.str.startswith(&#39;mt-&#39;)  # annotate the group of mitochondrial genes as &#39;mt&#39;
@@ -745,7 +728,7 @@ sc.pp.calculate_qc_metrics(adata, qc_vars=[&#39;mt&#39;], percent_top=None, log1
 </div>
 </div>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[14]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[13]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>ribo_cells = adata.var_names.str.startswith(&#39;Rps&#39;,&#39;Rpl&#39;)
@@ -754,18 +737,10 @@ adata.obs[&#39;pct_counts_ribo&#39;] = np.ravel(100*np.sum(adata[:, ribo_cells].
 </div>
 </div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[15]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[14]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span># sc.pl.violin(adata,
-#              [&#39;n_genes_by_counts&#39;, &#39;total_counts&#39;, &#39;pct_counts_mt&#39;,&#39;pct_counts_ribo&#39;],
-#              groupby=&#39;Sample&#39;,
-#              rotation=90,
-#              jitter=0.35,
-#              multi_panel=True,
-#              size = 0.75)
-
-piaso.pl.plot_features_violin(adata,
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>piaso.pl.plot_features_violin(adata,
                               [&#39;n_genes_by_counts&#39;, &#39;total_counts&#39;, &#39;pct_counts_mt&#39;,&#39;pct_counts_ribo&#39;],
                               width_single=4,
                               groupby=&#39;Sample&#39;)
@@ -784,7 +759,7 @@ piaso.pl.plot_features_violin(adata,
 <h2>Doublet prediction<a class="headerlink" href="#Doublet-prediction" title="Link to this heading">#</a></h2>
 <p>Next, we compute the Scrublet score to identify and predict potential doublets.</p>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[16]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[15]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>experiments=np.unique(adata.obs[&#39;Sample&#39;])
@@ -794,7 +769,7 @@ adata.obs[&#39;predicted_doublets&#39;]=np.repeat(False,adata.n_obs)
 </div>
 </div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[17]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[16]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>import scrublet as scr
@@ -828,7 +803,7 @@ Estimated detectable doublet fraction = 28.0%
 Overall doublet rate:
         Expected   = 10.0%
         Estimated  = 8.1%
-Elapsed time: 31.4 seconds
+Elapsed time: 32.3 seconds
 E18_v3.1_nuclei
 </pre></div></div>
 </div>
@@ -837,12 +812,12 @@ E18_v3.1_nuclei
 </div>
 <div class="output_area stderr docutils container">
 <div class="highlight"><pre>
-/tmp/ipykernel_26528/2312138584.py:10: SettingWithCopyWarning:
+/tmp/ipykernel_17593/2312138584.py:10: SettingWithCopyWarning:
 A value is trying to be set on a copy of a slice from a DataFrame
 
 See the caveats in the documentation: https://pandas.pydata.org/pandas-docs/stable/user_guide/indexing.html#returning-a-view-versus-a-copy
   adata.obs[&#39;predicted_doublets&#39;][adatai.obs_names]=predicted_doublets
-/tmp/ipykernel_26528/2312138584.py:12: SettingWithCopyWarning:
+/tmp/ipykernel_17593/2312138584.py:12: SettingWithCopyWarning:
 A value is trying to be set on a copy of a slice from a DataFrame
 
 See the caveats in the documentation: https://pandas.pydata.org/pandas-docs/stable/user_guide/indexing.html#returning-a-view-versus-a-copy
@@ -864,7 +839,7 @@ Estimated detectable doublet fraction = 0.5%
 Overall doublet rate:
         Expected   = 10.0%
         Estimated  = 3.3%
-Elapsed time: 16.7 seconds
+Elapsed time: 17.2 seconds
 E18_v4_cell
 </pre></div></div>
 </div>
@@ -873,7 +848,7 @@ E18_v4_cell
 </div>
 <div class="output_area stderr docutils container">
 <div class="highlight"><pre>
-/tmp/ipykernel_26528/2312138584.py:10: SettingWithCopyWarning:
+/tmp/ipykernel_17593/2312138584.py:10: SettingWithCopyWarning:
 A value is trying to be set on a copy of a slice from a DataFrame
 
 See the caveats in the documentation: https://pandas.pydata.org/pandas-docs/stable/user_guide/indexing.html#returning-a-view-versus-a-copy
@@ -895,7 +870,7 @@ Estimated detectable doublet fraction = 15.3%
 Overall doublet rate:
         Expected   = 10.0%
         Estimated  = 5.7%
-Elapsed time: 64.3 seconds
+Elapsed time: 65.7 seconds
 </pre></div></div>
 </div>
 <div class="nboutput nblast docutils container">
@@ -903,7 +878,7 @@ Elapsed time: 64.3 seconds
 </div>
 <div class="output_area stderr docutils container">
 <div class="highlight"><pre>
-/tmp/ipykernel_26528/2312138584.py:10: SettingWithCopyWarning:
+/tmp/ipykernel_17593/2312138584.py:10: SettingWithCopyWarning:
 A value is trying to be set on a copy of a slice from a DataFrame
 
 See the caveats in the documentation: https://pandas.pydata.org/pandas-docs/stable/user_guide/indexing.html#returning-a-view-versus-a-copy
@@ -911,7 +886,7 @@ See the caveats in the documentation: https://pandas.pydata.org/pandas-docs/stab
 </pre></div></div>
 </div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[18]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[17]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>piaso.pl.plot_features_violin(adata,
@@ -930,7 +905,7 @@ See the caveats in the documentation: https://pandas.pydata.org/pandas-docs/stab
 </div>
 </div>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[19]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[18]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>tmp=np.repeat(False, adata.n_obs)
@@ -940,7 +915,7 @@ adata.obs[&#39;predicted_doublets&#39;]=tmp
 </div>
 </div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[20]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[19]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>print(f&quot;# of cells with scrublet score &gt;= 0.2: {np.sum(adata.obs[&#39;scrublet_score&#39;]&gt;=0.2)} \n# of predicted doublets: {np.sum(adata.obs[&#39;predicted_doublets&#39;])}&quot;)
@@ -960,7 +935,7 @@ adata.obs[&#39;predicted_doublets&#39;]=tmp
 <section id="Normalization">
 <h2>Normalization<a class="headerlink" href="#Normalization" title="Link to this heading">#</a></h2>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[21]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[20]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pp.normalize_total(adata, target_sum=1e4)
@@ -984,7 +959,7 @@ normalizing counts per cell
 <h2>INFOG normalization<a class="headerlink" href="#INFOG-normalization" title="Link to this heading">#</a></h2>
 <p>We use PIASO’s infog to normalize the data and identify a highly variable set of genes.</p>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[22]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[21]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>%%time
@@ -1002,15 +977,15 @@ piaso.tl.infog(adata,
 The normalized data is saved as `infog` in `adata.layers`.
 The highly variable genes are saved as `highly_variable` in `adata.var`.
 Finished INFOG normalization.
-CPU times: user 18.7 s, sys: 9.36 s, total: 28 s
-Wall time: 28 s
+CPU times: user 19 s, sys: 8.06 s, total: 27.1 s
+Wall time: 27.1 s
 </pre></div></div>
 </div>
 </section>
-<section id="SVD-Dimensionality-reduction-and-visualization">
-<h2>SVD Dimensionality reduction and visualization<a class="headerlink" href="#SVD-Dimensionality-reduction-and-visualization" title="Link to this heading">#</a></h2>
+<section id="SVD-dimensionality-reduction-and-visualization">
+<h2>SVD dimensionality reduction and visualization<a class="headerlink" href="#SVD-dimensionality-reduction-and-visualization" title="Link to this heading">#</a></h2>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[23]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[22]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>piaso.tl.runSVD(adata,
@@ -1023,7 +998,7 @@ Wall time: 28 s
 </div>
 </div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[24]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[23]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>%%time
@@ -1050,18 +1025,18 @@ computing neighbors
 computing UMAP
     finished: added
     &#39;X_umap&#39;, UMAP coordinates (adata.obsm)
-    &#39;umap&#39;, UMAP parameters (adata.uns) (0:00:39)
-CPU times: user 2min 49s, sys: 1.25 s, total: 2min 51s
-Wall time: 1min 19s
+    &#39;umap&#39;, UMAP parameters (adata.uns) (0:00:36)
+CPU times: user 1min 30s, sys: 685 ms, total: 1min 30s
+Wall time: 1min 16s
 </pre></div></div>
 </div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[25]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[24]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(adata,
            color=[&#39;n_genes_by_counts&#39;, &#39;total_counts&#39;,&#39;pct_counts_mt&#39;,&#39;pct_counts_ribo&#39;, &#39;scrublet_score&#39;],
-           cmap=&#39;Spectral_r&#39;,
+           cmap=piaso.pl.color.c_color1,
            palette=piaso.pl.color.d_color1,
            ncols=3,
            size=10,
@@ -1082,8 +1057,10 @@ Wall time: 1min 19s
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>piaso.pl.plot_embeddings_split(adata,
                                color=&#39;scrublet_score&#39;,
+                               cmap=piaso.pl.color.c_color1,
                                splitby=&#39;Sample&#39;,
-                               ncol=3,)
+                               ncol=3,
+                               frameon=False)
 </pre></div>
 </div>
 </div>
@@ -1091,7 +1068,7 @@ Wall time: 1min 19s
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/notebooks_rnaSeqPipelineTutorial_E18_37_0.png" class="no-scaled-link" src="../_images/notebooks_rnaSeqPipelineTutorial_E18_37_0.png" style="width: 1000px; height: 306px;" />
+<img alt="../_images/notebooks_rnaSeqPipelineTutorial_E18_37_0.png" class="no-scaled-link" src="../_images/notebooks_rnaSeqPipelineTutorial_E18_37_0.png" style="width: 981px; height: 287px;" />
 </div>
 </div>
 </section>
@@ -1114,8 +1091,8 @@ sc.tl.leiden(adata,resolution=0.5,key_added=&#39;Leiden&#39;)
 running Leiden clustering
     finished: found 24 clusters and added
     &#39;Leiden&#39;, the cluster labels (adata.obs, categorical) (0:00:03)
-CPU times: user 3.61 s, sys: 104 ms, total: 3.71 s
-Wall time: 3.7 s
+CPU times: user 3.85 s, sys: 114 ms, total: 3.96 s
+Wall time: 3.96 s
 </pre></div></div>
 </div>
 <div class="nbinput docutils container">
@@ -1191,8 +1168,8 @@ cosg.cosg(adata,
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-CPU times: user 6.94 s, sys: 3.24 s, total: 10.2 s
-Wall time: 10.2 s
+CPU times: user 6.57 s, sys: 2.75 s, total: 9.32 s
+Wall time: 9.32 s
 </pre></div></div>
 </div>
 <p>We can use a dendrogram dot plot to visualize the expression of the top three marker genes of each Leiden cluster.</p>
@@ -1450,7 +1427,7 @@ WARNING: Length of palette colors is smaller than the number of categories (pale
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#Doublet-prediction">Doublet prediction</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#Normalization">Normalization</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#INFOG-normalization">INFOG normalization</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#SVD-Dimensionality-reduction-and-visualization">SVD Dimensionality reduction and visualization</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#SVD-dimensionality-reduction-and-visualization">SVD dimensionality reduction and visualization</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#Leiden-clustering">Leiden clustering</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#Identify-marker-genes-with-COSG">Identify marker genes with COSG</a></li>
 </ul>

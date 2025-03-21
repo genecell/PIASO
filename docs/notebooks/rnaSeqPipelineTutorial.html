@@ -533,14 +533,6 @@ AnnData object with n_obs × n_vars = 11357 × 33696
 </pre></div></div>
 </div>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[7]:
-</pre></div>
-</div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata.layers[&#39;raw&#39;]=adata.X.copy()
-</pre></div>
-</div>
-</div>
-<div class="nbinput nblast docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[8]:
 </pre></div>
 </div>
@@ -603,7 +595,7 @@ adata.obs[&#39;pct_counts_ribo&#39;] = np.ravel(100*np.sum(adata[:, ribo_cells].
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/notebooks_rnaSeqPipelineTutorial_18_0.png" class="no-scaled-link" src="../_images/notebooks_rnaSeqPipelineTutorial_18_0.png" style="width: 1187px; height: 415px;" />
+<img alt="../_images/notebooks_rnaSeqPipelineTutorial_17_0.png" class="no-scaled-link" src="../_images/notebooks_rnaSeqPipelineTutorial_17_0.png" style="width: 1187px; height: 415px;" />
 </div>
 </div>
 </section>
@@ -691,7 +683,7 @@ See the caveats in the documentation: https://pandas.pydata.org/pandas-docs/stab
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/notebooks_rnaSeqPipelineTutorial_22_0.png" class="no-scaled-link" src="../_images/notebooks_rnaSeqPipelineTutorial_22_0.png" style="width: 251px; height: 373px;" />
+<img alt="../_images/notebooks_rnaSeqPipelineTutorial_21_0.png" class="no-scaled-link" src="../_images/notebooks_rnaSeqPipelineTutorial_21_0.png" style="width: 251px; height: 373px;" />
 </div>
 </div>
 <div class="nbinput nblast docutils container">
@@ -728,7 +720,9 @@ adata.obs[&#39;predicted_doublets&#39;]=tmp
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[19]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pp.normalize_total(adata, target_sum=1e4)
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata.layers[&#39;raw&#39;]=adata.X.copy()
+
+sc.pp.normalize_total(adata, target_sum=1e4)
 sc.pp.log1p(adata)
 
 adata.layers[&#39;log1p&#39;]=adata.X.copy()
@@ -838,7 +832,7 @@ Wall time: 51.2 s
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/notebooks_rnaSeqPipelineTutorial_32_0.png" class="no-scaled-link" src="../_images/notebooks_rnaSeqPipelineTutorial_32_0.png" style="width: 950px; height: 567px;" />
+<img alt="../_images/notebooks_rnaSeqPipelineTutorial_31_0.png" class="no-scaled-link" src="../_images/notebooks_rnaSeqPipelineTutorial_31_0.png" style="width: 950px; height: 567px;" />
 </div>
 </div>
 </section>
@@ -893,7 +887,7 @@ WARNING: Length of palette colors is smaller than the number of categories (pale
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/notebooks_rnaSeqPipelineTutorial_35_1.png" class="no-scaled-link" src="../_images/notebooks_rnaSeqPipelineTutorial_35_1.png" style="width: 265px; height: 277px;" />
+<img alt="../_images/notebooks_rnaSeqPipelineTutorial_34_1.png" class="no-scaled-link" src="../_images/notebooks_rnaSeqPipelineTutorial_34_1.png" style="width: 265px; height: 277px;" />
 </div>
 </div>
 <div class="nbinput docutils container">
@@ -910,7 +904,7 @@ WARNING: Length of palette colors is smaller than the number of categories (pale
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/notebooks_rnaSeqPipelineTutorial_36_0.png" class="no-scaled-link" src="../_images/notebooks_rnaSeqPipelineTutorial_36_0.png" style="width: 968px; height: 667px;" />
+<img alt="../_images/notebooks_rnaSeqPipelineTutorial_35_0.png" class="no-scaled-link" src="../_images/notebooks_rnaSeqPipelineTutorial_35_0.png" style="width: 968px; height: 667px;" />
 </div>
 </div>
 <section id="Identify-marker-genes-with-COSG">
@@ -976,7 +970,7 @@ Storing dendrogram info using `.uns[&#39;dendrogram_Leiden&#39;]`
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/notebooks_rnaSeqPipelineTutorial_40_1.png" class="no-scaled-link" src="../_images/notebooks_rnaSeqPipelineTutorial_40_1.png" style="width: 2407px; height: 910px;" />
+<img alt="../_images/notebooks_rnaSeqPipelineTutorial_39_1.png" class="no-scaled-link" src="../_images/notebooks_rnaSeqPipelineTutorial_39_1.png" style="width: 2407px; height: 910px;" />
 </div>
 </div>
 <p>Another way to visualize the expression of the top three marker genes from each Leiden cluster is by using COSG’s plotMarkerDendrogram method to create a circular dendrogram.</p>
@@ -1013,7 +1007,7 @@ Storing dendrogram info using `.uns[&#39;dendrogram_Leiden&#39;]`
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/notebooks_rnaSeqPipelineTutorial_42_0.png" class="no-scaled-link" src="../_images/notebooks_rnaSeqPipelineTutorial_42_0.png" style="width: 752px; height: 616px;" />
+<img alt="../_images/notebooks_rnaSeqPipelineTutorial_41_0.png" class="no-scaled-link" src="../_images/notebooks_rnaSeqPipelineTutorial_41_0.png" style="width: 752px; height: 616px;" />
 </div>
 </div>
 </section>
@@ -1082,7 +1076,7 @@ array([&#39;ENSMUSG00000120124&#39;, &#39;Nxph3&#39;, &#39;A630023P12Rik&#39;, &
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/notebooks_rnaSeqPipelineTutorial_47_0.png" class="no-scaled-link" src="../_images/notebooks_rnaSeqPipelineTutorial_47_0.png" style="width: 1010px; height: 1163px;" />
+<img alt="../_images/notebooks_rnaSeqPipelineTutorial_46_0.png" class="no-scaled-link" src="../_images/notebooks_rnaSeqPipelineTutorial_46_0.png" style="width: 1010px; height: 1163px;" />
 </div>
 </div>
 <p>We can visualize the expression of the top 12 genes from cluster 8 on UMAPs to assess whether their expression is specific to the cluster 8 region. This involves comparing the location of cluster 8 on the Leiden cluster UMAP with the gene expression UMAPs. In a high-quality cluster, marker gene expression should be predominantly localized to the cluster 8 area.</p>
@@ -1108,7 +1102,7 @@ array([&#39;ENSMUSG00000120124&#39;, &#39;Nxph3&#39;, &#39;A630023P12Rik&#39;, &
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/notebooks_rnaSeqPipelineTutorial_49_0.png" class="no-scaled-link" src="../_images/notebooks_rnaSeqPipelineTutorial_49_0.png" style="width: 954px; height: 1124px;" />
+<img alt="../_images/notebooks_rnaSeqPipelineTutorial_48_0.png" class="no-scaled-link" src="../_images/notebooks_rnaSeqPipelineTutorial_48_0.png" style="width: 954px; height: 1124px;" />
 </div>
 </div>
 <div class="nbinput docutils container">
@@ -1140,7 +1134,7 @@ WARNING: Length of palette colors is smaller than the number of categories (pale
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/notebooks_rnaSeqPipelineTutorial_50_1.png" class="no-scaled-link" src="../_images/notebooks_rnaSeqPipelineTutorial_50_1.png" style="width: 265px; height: 277px;" />
+<img alt="../_images/notebooks_rnaSeqPipelineTutorial_49_1.png" class="no-scaled-link" src="../_images/notebooks_rnaSeqPipelineTutorial_49_1.png" style="width: 265px; height: 277px;" />
 </div>
 </div>
 <p>This pipeline is still in development. The next steps include using a reference dataset to annotate cell types with PIASO’s predictCellTypesByGDR, followed by multiple iterations of low-quality cluster removal and re-clustering until well-defined clusters are obtained.</p>
