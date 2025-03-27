@@ -408,9 +408,18 @@ def smoothCellTypePrediction(
                     try:
                         most_common = stats.mode(neighbor_types, keepdims=False)
                         majority_type = most_common.mode
-                    except TypeError:
-                        most_common = stats.mode(neighbor_types)
-                        majority_type = most_common[0][0]
+                        
+                    except (TypeError, AttributeError):
+                        # Alternative using numpy's unique function
+                        unique_values, counts = np.unique(neighbor_types, return_counts=True)
+                        majority_type = unique_values[np.argmax(counts)]
+                        
+                    # unique_values, counts = np.unique(neighbor_types, return_counts=True)
+                    # majority_type = unique_values[np.argmax(counts)]
+                        
+                    # except TypeError:
+                    #     most_common = stats.mode(neighbor_types)
+                    #     majority_type = most_common[0][0]
                     
                     # Store results
                     smoothed_predictions[i] = majority_type

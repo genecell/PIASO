@@ -190,7 +190,7 @@ def runSVDLazy(
                                 batch_key=batch_key
                                )
         
-        
+    
     ### Use the runSVD function
     runSVD(
         adata,

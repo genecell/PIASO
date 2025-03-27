@@ -1182,11 +1182,27 @@ def _runCOSGParallel_single_batch(
                     key_added='X_svd',
                     random_state=random_seed
                 )
-            ### Because in runSVDLazy, it will reset the sc.settings.verbosity, so we need to set the verbosity again here
-            sc.settings.verbosity = 0  # Suppress messages
+
+            # ### Because in runSVDLazy, it will reset the sc.settings.verbosity, so we need to set the verbosity again here
+            # sc.settings.verbosity = 0  # Suppress messages
+            
+
+            
+            
+            # try:
+            #     sc.pp.neighbors(adata, use_rep='X_svd', n_neighbors=15, random_state=10, knn=True, method="umap")
+            # except Exception as e:
+            #     print(f"Detailed error: {e}")
+            #     # Or for even more details:
+            #     import traceback
+            #     traceback.print_exc()
 
             # Run clustering
             sc.pp.neighbors(adata, use_rep='X_svd', n_neighbors=15, random_state=10, knn=True, method="umap")
+            # sc.pp.neighbors(adata, use_rep='X_svd')
+            
+
+            
             sc.tl.leiden(adata, resolution=resolution, key_added='gdr_local')
             groupby_i = 'gdr_local'
 
