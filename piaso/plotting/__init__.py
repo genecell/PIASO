@@ -5,6 +5,9 @@ from . import color
 from ._plotLigandReceptor import plotLigandReceptorInteraction
 from ._plotLigandReceptorLollipop import plotLigandReceptorLollipop
 
+
+from ._plotCellMetaInfo import plotConfusionMatrix
+
 ### Explicitly import
 from .color import createCustomCmapFromHex
 

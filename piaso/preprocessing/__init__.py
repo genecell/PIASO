@@ -1,1 +1,3 @@
 from ._dataFrame_processing import table, getCrossCategories
+
+from ._spatialPreprocessing import rotateSpatialCoordinates
