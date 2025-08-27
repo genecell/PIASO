@@ -741,7 +741,7 @@ def stitchSpace(
     >>> # Precompute PCA if not done
     >>> sc.tl.pca(adata) 
     >>> # Run correction using log1p layer for COSG, increased verbosity
-    >>> stitchSpaceModule.stitchSpace(
+    >>> piaso.tl.stitchSpace(
     ...     adata, 
     ...     batch_key='batch', 
     ...     use_rep='X_pca', 
