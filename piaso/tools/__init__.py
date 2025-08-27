@@ -8,3 +8,4 @@ from ._normalization import infog, score
 
 from ._predictCellType import predictCellTypeByGDR, smoothCellTypePrediction, predictCellTypeByMarker
 
+from ._integration import stitchSpace
