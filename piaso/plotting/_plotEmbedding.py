@@ -154,6 +154,448 @@ def _create_global_legend(
     
 ### Plot embeddings side by side
 import matplotlib.pyplot as plt
+# def plot_embeddings_split(adata,
+#                           color,
+#                           splitby,
+#                           ncol:int=None,
+#                           dpi:int=80,
+#                           col_size:int=5,
+#                           row_size:int=5,
+#                           vmax:float=None,
+#                           vmin:float=None,
+#                           show_figure:bool=True,
+#                           save:bool=None,
+#                           layer:str=None,
+#                           basis:str='X_umap',
+#                           fix_coordinate_ratio:bool=True, ### Fix the coordinate ratio
+#                           show_axis_ticks:bool=False, ### Whether to show the axis ticks and tick labels
+#                           margin_ratio:float=0.05, ### Set the margin ratio for both x-axis and y-axis, relative to the x-axis intervals and y-axis intervals, respectively
+                          
+#                           legend_fontsize:int=10,
+#                           legend_fontoutline:int=2,
+#                           legend_loc:str='right margin',
+#                           legend_marker_size: float=1.6,
+#                           x_min=None,
+#                           x_max=None,
+#                           y_min=None,
+#                           y_max=None,
+                          
+#                           **kwargs):
+#     """
+#     Plot cell embeddings side by side based on a categorical variable.
+
+#     The plots are split by a specified categorical variable, with each unique category producing a separate subplot.
+#     Data points in each subplot are colored according to the `color` variable.
+
+#     Parameters
+#     ----------
+#     adata : AnnData
+#         An AnnData object.
+#     color : str
+#         Used to specify a gene name to plot, or a key in `adata.obs` used to assign colors to the cells in the embedding plot.
+#     splitby : str
+#         Key in `adata.obs` used to split the dataset into multiple panels. Each unique value under this key
+#         will result in a separate subplot.
+#     ncol : int or None, optional (default: None)
+#         If specified, defines the number of columns per row. If None, the number of columns is computed 
+#         as the ceiling of n divided by the integer square root of n.
+#     dpi : int, optional (default: 80)
+#         Dots per inch (DPI) setting for the figure.
+#     col_size : int, optional (default=5)
+#         Width (in inches) of each subplot column.
+#     row_size : int, optional (default=5)
+#         Height (in inches) of each subplot row.
+#     vmax : float or None, optional (default=None)
+#         Maximum value for the color scale. If not provided, the upper limit is determined automatically.
+#     vmin : float or None, optional (default=None)
+#         Minimum value for the color scale. If not provided, the lower limit is determined automatically.
+#     show_figure : bool, optional (default=True)
+#         Whether to display the figure after plotting.
+#     save : str or None, optional (default=None)
+#         File path to save the resulting figure. If None, the figure will not be saved.
+#     layer : str or None, optional (default=None)
+#         If specified, the name of the layer in `adata.layers` from which to obtain the gene expression values.
+#     basis : str, optional (default='X_umap')
+#         Key in `adata.obsm` that contains the embedding coordinates (e.g., `X_umap` or `X_pca`).
+#     fix_coordinate_ratio : bool, optional (default=True)
+#         If True, the aspect ratio of each subplot is fixed so that the x- and y-axes are scaled equally.
+#     show_axis_ticks : bool, optional (default=False)
+#         Whether to display axis ticks and tick labels on the plots.
+#     margin_ratio : float, optional (default=0.05)
+#         Margin ratio for both the x-axis and y-axis limits, relative to the range of the data. This provides
+#         additional spacing around the plotted points.
+#     legend_fontsize: int, optional (default=9)
+#         Font size in pt.
+#     legend_fontoutline: int, optional (default=2)
+#         Line width of the legend font outline in pt. 
+#     legend_loc: str, optional (default='right margin')
+#         Location of legend, defaults to 'right margin'.
+#     legend_marker_size: float, optional (default=1.5)
+#         Scaling factor for legend markers (dot size).
+#     x_min : float or None, optional (default=None)
+#         Minimum limit for the x-axis. If None, the limit is computed automatically based on the data.
+#     x_max : float or None, optional (default=None)
+#         Maximum limit for the x-axis. If None, the limit is computed automatically based on the data.
+#     y_min : float or None, optional (default=None)
+#         Minimum limit for the y-axis. If None, the limit is computed automatically based on the data.
+#     y_max : float or None, optional (default=None)
+#         Maximum limit for the y-axis. If None, the limit is computed automatically based on the data.
+#     **kwargs : dict
+#         Additional keyword arguments passed to the `scanpy.pl.embedding` function.
+
+#     Returns
+#     -------
+#     None.
+
+#     Examples
+#     --------
+#     >>> import scanpy as sc
+#     >>> import piaso
+#     >>> adata = sc.datasets.pbmc3k()  # Load an example dataset
+#     >>> # Plot embeddings colored by a gene expression value and split by clusters
+#     >>> piaso.pl.plot_embeddings_split(adata, color='CDK9', splitby='louvain', col_size=6, row_size=6)
+#     >>> # Save the figure to a file
+#     >>> piaso.pl.plot_embeddings_split(adata, color='CDK9', splitby='louvain', save='./CST3_embeddingsSplit.pdf')
+#     """
+
+    
+#     from mpl_toolkits.axes_grid1 import make_axes_locatable
+#     #Adapted from https://stackoverflow.com/questions/29516157/set-equal-aspect-in-plot-with-colorbar
+#     def adjustColorbar(mappable):
+#         ax = mappable.axes
+#         fig = ax.figure
+#         divider = make_axes_locatable(ax)
+#         cax = divider.append_axes("right", size="5%", pad=0.05)
+#         return fig.colorbar(mappable, cax=cax)
+
+    
+
+#     ### Create the unique variables
+#     variables=adata.obs[splitby].cat.categories
+#     ### Build the layout
+#     fig, axs, nrow, ncol = _build_subplots(len(variables), ncol=ncol, dpi=dpi, col_size=col_size, row_size=row_size)
+    
+    
+#     # plt.subplots_adjust(bottom=0.1, right=0.8, top=0.9, wspace=0.2)
+
+    
+#     if type(axs) != np.ndarray:
+#         axs = [axs]
+#     else:
+#         axs = axs.ravel()
+    
+    
+#     ### in obs
+#     if np.isin(color, adata.obs.columns):
+        
+        
+#         emd_df=pd.DataFrame(adata.obsm[basis].copy())
+          
+#         if all(v is not None for v in [x_min, y_min, x_max, y_max]):
+            
+#             xy_min=np.array([x_min, y_min])
+#             xy_max=np.array([x_max, y_max])
+
+#         else:    
+        
+#             xy_min=emd_df.min(axis=0).values
+#             xy_max=emd_df.max(axis=0).values
+
+#         xy_margin=(xy_max-xy_min)*margin_ratio
+
+#         for ax in axs:
+#             ax.set_xlim(xy_min[0]-xy_margin[0], xy_max[0]+xy_margin[0])
+#             ax.set_ylim(xy_min[1]-xy_margin[1], xy_max[1]+xy_margin[1])
+        
+        
+#         ### 240706, add the np.int_, to check whether it's int or not, because int could also be continous
+#         if isinstance(adata.obs[color].iloc[0], np.floating) or isinstance(adata.obs[color].iloc[0], np.int_):
+#             ## is continous
+#             if vmax is None:
+#                 expr_max=adata.obs[color].max()
+#             else:
+#                 expr_max=vmax
+                
+#             if vmin is None:
+#                 expr_min=adata.obs[color].min()
+#             else:
+#                 expr_min=vmin
+            
+            
+#             for i in range(len(axs)):
+#                 if i<len(variables):
+#                     # Create an explicit copy here
+#                     adata_sub = adata[adata.obs[splitby]==variables[i]].copy()
+#                     if basis=='X_umap':
+#                         fig_tmp=sc.pl.umap(
+#                            adata_sub,
+#                            color=color,
+#                            vmax=expr_max,
+#                            vmin=expr_min,
+#                            title=color+' in '+variables[i],
+#                            legend_fontsize=legend_fontsize,
+#                            legend_fontoutline=legend_fontoutline,
+#                            ncols=4,
+#                            return_fig=False,
+#                            colorbar_loc=None,
+#                            show=False,ax=axs[i],  **kwargs
+#                            )
+#                     else:
+#                         fig_tmp=sc.pl.embedding(
+#                             adata_sub,
+#                             basis=basis,
+#                             color=color,
+#                             vmax=expr_max,
+#                             vmin=expr_min,
+#                             title=color+' in '+variables[i],
+#                             legend_fontsize=legend_fontsize,
+#                             legend_fontoutline=legend_fontoutline,
+#                             ncols=4,
+#                             return_fig=False,
+#                             colorbar_loc=None,
+#                             show=False, ax=axs[i],  **kwargs
+#                         )
+                        
+                        
+#                     ### Fix the coordinates ratio
+#                     if fix_coordinate_ratio:
+#                         axs[i].set_aspect('equal')
+#                         ### Set the color bar range
+#                         axs[i].collections[0].set_clim(vmin=expr_min, vmax=expr_max)
+                        
+#                         ### Refer to https://stackoverflow.com/questions/48131232/matplotlib-get-colorbar-mappable-from-an-axis
+#                         adjustColorbar(axs[i].collections[0])
+#                     else:
+#                         axs[i].set_aspect('auto')
+#                         ### Set the color bar range
+#                         axs[i].collections[0].set_clim(vmin=expr_min, vmax=expr_max)
+                        
+#                         ### Refer to https://stackoverflow.com/questions/48131232/matplotlib-get-colorbar-mappable-from-an-axis
+#                         adjustColorbar(axs[i].collections[0])
+                    
+                    
+                    
+#                 else:
+#                     axs[i].set_visible(False)  
+#         else:
+#             ### Categorical variable
+            
+#             for i in range(len(axs)):
+                
+                    
+#                 if i<len(variables):
+
+#                     # Create an explicit copy here
+#                     adata_sub = adata[adata.obs[splitby]==variables[i]].copy()
+                    
+#                     ### Showing the legend on data:
+#                     if legend_loc=='on data':
+                    
+#                         if basis=='X_umap':
+#                             sc.pl.umap(
+#                                 adata_sub,
+#                                 color=color,
+#                                 title=color+' in '+variables[i],
+#                                 legend_fontsize=legend_fontsize,
+#                                 legend_fontoutline=legend_fontoutline,
+#                                 ncols=4,
+#                                 show=False, ax=axs[i],
+#                                 legend_loc=legend_loc, 
+#                                 **kwargs
+#                             )
+
+#                         else:
+#                             sc.pl.embedding(
+#                                 adata_sub,
+#                                 basis=basis,
+#                                 color=color,
+#                                 title=color+' in '+variables[i],
+#                                 legend_fontsize=legend_fontsize,
+#                                 legend_fontoutline=legend_fontoutline,
+#                                 ncols=4,
+#                                 show=False, ax=axs[i],
+#                                 legend_loc=legend_loc, 
+#                                 **kwargs
+#                             )
+
+#                         ### Fix the coordinates ratio
+#                         if fix_coordinate_ratio:
+#                             axs[i].set_aspect('equal')
+                    
+#                     ### if the legend_loc is not on data:
+#                     else:
+#                         if basis=='X_umap':
+#                             sc.pl.umap(
+#                                 adata_sub,
+#                                 color=color,
+#                                 title=color+' in '+variables[i],
+#                                 legend_fontsize=legend_fontsize,
+#                                 legend_fontoutline=legend_fontoutline,
+#                                 ncols=4,
+#                                 show=False, ax=axs[i],
+#                                 legend_loc=legend_loc, ## Not showing the legends except for the last subplot
+#                                 **kwargs
+#                             )
+
+#                         else:
+#                             sc.pl.embedding(
+#                                 adata_sub,
+#                                 basis=basis,
+#                                 color=color,
+#                                 title=color+' in '+variables[i],
+#                                 legend_fontsize=legend_fontsize,
+#                                 legend_fontoutline=legend_fontoutline,
+#                                 ncols=4,
+#                                 show=False, ax=axs[i],
+#                                 legend_loc=legend_loc, ## Not showing the legends except for the last subplot
+#                                 **kwargs
+#                             )
+
+
+#                         ### Fix the coordinates ratio
+#                         if fix_coordinate_ratio:
+#                             axs[i].set_aspect('equal')
+                        
+#                 else:
+#                     axs[i].set_visible(False) 
+                    
+
+                   
+#             if legend_loc=='right margin':
+#                 #### Do not show legends inside subplots
+#                 for i in range(len(axs)):
+#                     ### Add try-except blocks around axs[i].legend().set_visible(False) to avoid crashes if no legend exists
+#                     try:
+#                         if axs[i].get_visible():  # Only process visible axes, this is very important, because some subplots will be empty
+#                             axs[i].legend().set_visible(False)
+#                     except AttributeError:
+#                         pass
+                    
+            
+
+#             ### End of the for loop: for i in range(len(axs)):
+#             ### Create a right margin
+#             if legend_loc=='right margin':
+#                 _create_global_legend(fig, axs, legend_loc="center left", bbox_to_anchor=(1.02, 0.5),
+#                                       frameon=False,
+#                                       marker_size=legend_marker_size,
+#                                       fontsize=legend_fontsize,
+#                                       max_rows_per_col=18)
+                
+#     ### for gene
+#     else:
+    
+              
+#         ### Simplify the sparse matrix check:
+#         gene_df = pd.DataFrame(np.ravel(adata.layers[layer][:, adata.var_names == color].todense() if layer else adata.X[:, adata.var_names == color].todense() if sparse.issparse(adata.X) else adata.X[:, adata.var_names == color]))
+
+        
+#         if vmax is None:
+#             expr_max=gene_df.max().values[0]
+#         else:
+#             expr_max=vmax
+            
+#         if vmin is None:
+#             expr_min=gene_df.min().values[0]
+#         else:
+#             expr_min=vmin
+
+#         emd_df=pd.DataFrame(adata.obsm[basis].copy())
+        
+#         if all(v is not None for v in [x_min, y_min, x_max, y_max]):
+            
+#             xy_min=np.array([x_min, y_min])
+#             xy_max=np.array([x_max, y_max])
+
+#         else:    
+        
+#             xy_min=emd_df.min(axis=0).values
+#             xy_max=emd_df.max(axis=0).values
+        
+      
+
+#         xy_margin=(xy_max-xy_min)*0.05
+
+#         for ax in axs:
+#             ax.set_xlim(xy_min[0]-xy_margin[0], xy_max[0]+xy_margin[0])
+#             ax.set_ylim(xy_min[1]-xy_margin[1], xy_max[1]+xy_margin[1])
+
+
+#         for i in range(len(axs)):
+#             if i<len(variables):
+#                 ## Create an explicit copy here
+#                 adata_sub = adata[adata.obs[splitby]==variables[i]].copy()
+                
+#                 if basis=='X_umap':
+#                     fig_tmp=sc.pl.umap(adata_sub,
+#                        color=color,
+#                        vmax=expr_max,
+#                         vmin=expr_min,
+#                        layer=layer,
+#                        title=color+' in\n'+variables[i],
+#                                show=False,ax=axs[i], 
+                        
+#                         return_fig=False,
+#                         colorbar_loc=None,
+#                                **kwargs
+#                        )
+#                 else:
+#                     fig_tmp=sc.pl.embedding(
+#                         adata_sub,
+#                         basis=basis,
+#                         color=color,
+#                         vmax=expr_max,
+#                         vmin=expr_min,
+#                         layer=layer,
+#                         title=color+' in\n'+variables[i],
+#                                show=False,ax=axs[i], 
+#                         return_fig=False,
+#                         colorbar_loc=None,
+#                                **kwargs)
+                
+                
+#                 ### Fix the coordinates ratio
+#                 if fix_coordinate_ratio:
+#                     axs[i].set_aspect('equal')
+#                     ### Set the color bar range
+#                     axs[i].collections[0].set_clim(vmin=expr_min, vmax=expr_max)
+#                     ### Refer to https://stackoverflow.com/questions/48131232/matplotlib-get-colorbar-mappable-from-an-axis
+#                     adjustColorbar(axs[i].collections[0])
+#                 else:
+#                     axs[i].set_aspect('auto')
+#                     ### Set the color bar range
+#                     axs[i].collections[0].set_clim(vmin=expr_min, vmax=expr_max)
+#                     ### Refer to https://stackoverflow.com/questions/48131232/matplotlib-get-colorbar-mappable-from-an-axis
+#                     adjustColorbar(axs[i].collections[0])
+            
+#             else:
+#                 axs[i].set_visible(False)  
+    
+            
+#     ### Show the axis ticks
+#     if show_axis_ticks:
+#         for ax in axs:
+#             ax.grid(False)
+#             ax.set_xticks(np.arange(xy_min[0]-xy_margin[0], xy_max[0]+xy_margin[0], (xy_max[0]-xy_min[0])/4))
+#             ax.set_yticks(np.arange(xy_min[1]-xy_margin[1], xy_max[1]+xy_margin[1], (xy_max[1]-xy_min[1])/4))
+    
+
+        
+#     ### Whether to show the figure or not
+#     if show_figure:
+#         plt.show()  # Explicitly display the figure
+
+#     ### Save the figure
+#     if save:
+#         fig.savefig(save, bbox_inches='tight')  # Save the figure to file
+#         print("Figure saved to: ", save)
+#         plt.close(fig)  # Close the figure to prevent display
+#     elif not show_figure:
+#         plt.close(fig)  # Close the figure if not showing or saving
+        
+
+
+
 def plot_embeddings_split(adata,
                           color,
                           splitby,
@@ -167,10 +609,9 @@ def plot_embeddings_split(adata,
                           save:bool=None,
                           layer:str=None,
                           basis:str='X_umap',
-                          fix_coordinate_ratio:bool=True, ### Fix the coordinate ratio
-                          show_axis_ticks:bool=False, ### Whether to show the axis ticks and tick labels
-                          margin_ratio:float=0.05, ### Set the margin ratio for both x-axis and y-axis, relative to the x-axis intervals and y-axis intervals, respectively
-                          
+                          fix_coordinate_ratio:bool=True, 
+                          show_axis_ticks:bool=False, 
+                          margin_ratio:float=0.05, 
                           legend_fontsize:int=10,
                           legend_fontoutline:int=2,
                           legend_loc:str='right margin',
@@ -179,7 +620,6 @@ def plot_embeddings_split(adata,
                           x_max=None,
                           y_min=None,
                           y_max=None,
-                          
                           **kwargs):
     """
     Plot cell embeddings side by side based on a categorical variable.
@@ -258,9 +698,10 @@ def plot_embeddings_split(adata,
     >>> piaso.pl.plot_embeddings_split(adata, color='CDK9', splitby='louvain', save='./CST3_embeddingsSplit.pdf')
     """
 
-    
+
+    # --- Internal Helper: Adjust Colorbar Aspect Ratio ---
     from mpl_toolkits.axes_grid1 import make_axes_locatable
-    #Adapted from https://stackoverflow.com/questions/29516157/set-equal-aspect-in-plot-with-colorbar
+    ### Adapted from https://stackoverflow.com/questions/29516157/set-equal-aspect-in-plot-with-colorbar
     def adjustColorbar(mappable):
         ax = mappable.axes
         fig = ax.figure
@@ -268,323 +709,200 @@ def plot_embeddings_split(adata,
         cax = divider.append_axes("right", size="5%", pad=0.05)
         return fig.colorbar(mappable, cax=cax)
 
-    
+    # --- 1. Setup Layout ---
 
-    ### Create the unique variables
-    variables=adata.obs[splitby].cat.categories
-    ### Build the layout
+    # Robust 'splitby' Variable Extraction & Safety Checks
+    if splitby not in adata.obs.columns:
+         raise ValueError(f"The splitby key '{splitby}' was not found in adata.obs.")
+
+    # Check if explicitly categorical
+    if isinstance(adata.obs[splitby].dtype, pd.CategoricalDtype):
+        variables = adata.obs[splitby].cat.categories
+    else:
+        # --- GUARDRAILS FOR NON-CATEGORICAL COLUMNS ---
+        col_data = adata.obs[splitby]
+        
+        # Reject Float (Continuous)
+        if pd.api.types.is_float_dtype(col_data):
+            raise ValueError(f"The column '{splitby}' is float (continuous). "
+                             "Cannot split plots by a continuous variable.")
+            
+        # Check Integer Cardinality
+        # If it is integer, we must check if it's actually a cluster label (few values) 
+        # or a count (many values).
+        if pd.api.types.is_integer_dtype(col_data):
+            unique_vals = col_data.unique()
+            n_unique = len(unique_vals)
+            
+            # Threshold: If > 50 subplots, assume it's a mistake unless explicitly cast to category
+            if n_unique > 50:
+                raise ValueError(f"The integer column '{splitby}' has {n_unique} unique values. "
+                                 "Splitting by this variable would generate too many subplots (looks like continuous data). "
+                                 f"If you really intend to create {n_unique} plots, please convert it explicitly:\n"
+                                 f"adata.obs['{splitby}'] = adata.obs['{splitby}'].astype('category')")
+            
+            variables = np.sort(unique_vals)
+            print(f"Note: '{splitby}' is integer type. Treating as {n_unique} discrete categories.")
+            
+        # Handle Strings/Objects
+        else:
+            variables = col_data.unique()
+            variables = variables[~pd.isnull(variables)] # Remove NaNs
+            try:
+                variables = np.sort(variables)
+            except:
+                pass # Sort failed (mixed types), keep order
+                
+            if len(variables) > 50:
+                 print(f"Warning: Variable '{splitby}' will generate {len(variables)} subplots. This may be slow.")
+    
     fig, axs, nrow, ncol = _build_subplots(len(variables), ncol=ncol, dpi=dpi, col_size=col_size, row_size=row_size)
-    
-    
-    # plt.subplots_adjust(bottom=0.1, right=0.8, top=0.9, wspace=0.2)
-
     
     if type(axs) != np.ndarray:
         axs = [axs]
     else:
         axs = axs.ravel()
     
+    # --- 2. Pre-calculate Limits (Efficiency) ---
+    emd_df = pd.DataFrame(adata.obsm[basis]) 
     
-    ### in obs
-    if np.isin(color, adata.obs.columns):
-        
-        
-        emd_df=pd.DataFrame(adata.obsm[basis].copy())
-          
-        if all(v is not None for v in [x_min, y_min, x_max, y_max]):
-            
-            xy_min=np.array([x_min, y_min])
-            xy_max=np.array([x_max, y_max])
+    if all(v is not None for v in [x_min, y_min, x_max, y_max]):
+        xy_min = np.array([x_min, y_min])
+        xy_max = np.array([x_max, y_max])
+    else:     
+        xy_min = emd_df.min(axis=0).values
+        xy_max = emd_df.max(axis=0).values
 
-        else:    
-        
-            xy_min=emd_df.min(axis=0).values
-            xy_max=emd_df.max(axis=0).values
+    xy_margin = (xy_max - xy_min) * margin_ratio
 
-        xy_margin=(xy_max-xy_min)*margin_ratio
+    for ax in axs:
+        ax.set_xlim(xy_min[0] - xy_margin[0], xy_max[0] + xy_margin[0])
+        ax.set_ylim(xy_min[1] - xy_margin[1], xy_max[1] + xy_margin[1])
 
-        for ax in axs:
-            ax.set_xlim(xy_min[0]-xy_margin[0], xy_max[0]+xy_margin[0])
-            ax.set_ylim(xy_min[1]-xy_margin[1], xy_max[1]+xy_margin[1])
-        
-        
-        ### 240706, add the np.int_, to check whether it's int or not, because int could also be continous
-        if isinstance(adata.obs[color].iloc[0], np.floating) or isinstance(adata.obs[color].iloc[0], np.int_):
-            ## is continous
-            if vmax is None:
-                expr_max=adata.obs[color].max()
-            else:
-                expr_max=vmax
-                
-            if vmin is None:
-                expr_min=adata.obs[color].min()
-            else:
-                expr_min=vmin
-            
-            
-            for i in range(len(axs)):
-                if i<len(variables):
-                    if basis=='X_umap':
-                        fig_tmp=sc.pl.umap(adata[adata.obs[splitby]==variables[i]],
-                           color=color,
-                           vmax=expr_max,
-                           vmin=expr_min,
-                           title=color+' in '+variables[i],
-                           legend_fontsize=legend_fontsize,
-                           legend_fontoutline=legend_fontoutline,
-                           ncols=4,
-                           return_fig=False,
-                           colorbar_loc=None,
-                           show=False,ax=axs[i],  **kwargs
-                           )
-                    else:
-                        fig_tmp=sc.pl.embedding(
-                            adata[adata.obs[splitby]==variables[i]],
-                            basis=basis,
-                            color=color,
-                            vmax=expr_max,
-                            vmin=expr_min,
-                            title=color+' in '+variables[i],
-                            legend_fontsize=legend_fontsize,
-                            legend_fontoutline=legend_fontoutline,
-                            ncols=4,
-                            return_fig=False,
-                            colorbar_loc=None,
-                            show=False, ax=axs[i],  **kwargs
-                        )
-                        
-                        
-                    ### Fix the coordinates ratio
-                    if fix_coordinate_ratio:
-                        axs[i].set_aspect('equal')
-                        ### Set the color bar range
-                        axs[i].collections[0].set_clim(vmin=expr_min, vmax=expr_max)
-                        
-                        ### Refer to https://stackoverflow.com/questions/48131232/matplotlib-get-colorbar-mappable-from-an-axis
-                        adjustColorbar(axs[i].collections[0])
-                    else:
-                        axs[i].set_aspect('auto')
-                        ### Set the color bar range
-                        axs[i].collections[0].set_clim(vmin=expr_min, vmax=expr_max)
-                        
-                        ### Refer to https://stackoverflow.com/questions/48131232/matplotlib-get-colorbar-mappable-from-an-axis
-                        adjustColorbar(axs[i].collections[0])
-                    
-                    
-                    
-                else:
-                    axs[i].set_visible(False)  
-        else:
-            ### Categorical variable
-            
-            for i in range(len(axs)):
-                ### Showing the legend on data:
-                if legend_loc=='on data':
-                    
-                    if i<len(variables):
-                        if basis=='X_umap':
-                            sc.pl.umap(
-                                adata[adata.obs[splitby]==variables[i]],
-                                color=color,
-                                title=color+' in '+variables[i],
-                                legend_fontsize=legend_fontsize,
-                                legend_fontoutline=legend_fontoutline,
-                                ncols=4,
-                                show=False, ax=axs[i],
-                                legend_loc=legend_loc, 
-                                **kwargs
-                            )
-
-                        else:
-                            sc.pl.embedding(
-                                adata[adata.obs[splitby]==variables[i]],
-                                basis=basis,
-                                color=color,
-                                title=color+' in '+variables[i],
-                                legend_fontsize=legend_fontsize,
-                                legend_fontoutline=legend_fontoutline,
-                                ncols=4,
-                                show=False, ax=axs[i],
-                                legend_loc=legend_loc, 
-                                **kwargs
-                            )
-                            
-                        ### Fix the coordinates ratio
-                        if fix_coordinate_ratio:
-                            axs[i].set_aspect('equal')
-                    else:
-                        axs[i].set_visible(False) 
-                    
-                ### if the legend_loc is not on data:    
-                else:
-                    if i<len(variables):
-                    # if i<(len(variables)-1):
-                        if basis=='X_umap':
-                            sc.pl.umap(
-                                adata[adata.obs[splitby]==variables[i]],
-                                color=color,
-                                title=color+' in '+variables[i],
-                                legend_fontsize=legend_fontsize,
-                                legend_fontoutline=legend_fontoutline,
-                                ncols=4,
-                                show=False, ax=axs[i],
-                                legend_loc=legend_loc, ## Not showing the legends except for the last subplot
-                                **kwargs
-                            )
-
-                        else:
-                            sc.pl.embedding(
-                                adata[adata.obs[splitby]==variables[i]],
-                                basis=basis,
-                                color=color,
-                                title=color+' in '+variables[i],
-                                legend_fontsize=legend_fontsize,
-                                legend_fontoutline=legend_fontoutline,
-                                ncols=4,
-                                show=False, ax=axs[i],
-                                legend_loc=legend_loc, ## Not showing the legends except for the last subplot
-                                **kwargs
-                            )
-
-
-                        ### Fix the coordinates ratio
-                        if fix_coordinate_ratio:
-                            axs[i].set_aspect('equal')
-                   
-
-                    else:
-                        axs[i].set_visible(False)
-                        
-                   
-            if legend_loc=='right margin':
-                #### Do not show legends inside subplots
-                for i in range(len(axs)):
-                    ### Add try-except blocks around axs[i].legend().set_visible(False) to avoid crashes if no legend exists
-                    try:
-                        if axs[i].get_visible():  # Only process visible axes, this is very important, because some subplots will be empty
-                            axs[i].legend().set_visible(False)
-                    except AttributeError:
-                        pass
-                    
-            
-
-            ### End of the for loop: for i in range(len(axs)):
-            ### Create a right margin
-            if legend_loc=='right margin':
-                _create_global_legend(fig, axs, legend_loc="center left", bbox_to_anchor=(1.02, 0.5),
-                                      frameon=False,
-                                      marker_size=legend_marker_size,
-                                      fontsize=legend_fontsize,
-                                      max_rows_per_col=18)
-                
-    ### for gene
+    # --- 3. Pre-fetch Data (Efficiency) ---
+    is_obs = np.isin(color, adata.obs.columns)
+    
+    if is_obs:
+        full_color_data = adata.obs[color].values
+        is_numeric = isinstance(adata.obs[color].iloc[0], (np.floating, float, np.integer, int, np.int_))
     else:
-    
-              
-        ### Simplify the sparse matrix check:
-        gene_df = pd.DataFrame(np.ravel(adata.layers[layer][:, adata.var_names == color].todense() if layer else adata.X[:, adata.var_names == color].todense() if sparse.issparse(adata.X) else adata.X[:, adata.var_names == color]))
+        full_color_data = adata.obs_vector(color, layer=layer)
+        is_numeric = True 
 
-        
-        if vmax is None:
-            expr_max=gene_df.max().values[0]
-        else:
-            expr_max=vmax
+    expr_max, expr_min = None, None
+    if is_numeric:
+        expr_max = vmax if vmax is not None else np.nanmax(full_color_data)
+        expr_min = vmin if vmin is not None else np.nanmin(full_color_data)
+
+    # --- 4. Main Plotting Loop ---
+    for i in range(len(axs)):
+        if i < len(variables):
+            category = variables[i]
             
-        if vmin is None:
-            expr_min=gene_df.min().values[0]
-        else:
-            expr_min=vmin
-
-        emd_df=pd.DataFrame(adata.obsm[basis].copy())
-        
-        if all(v is not None for v in [x_min, y_min, x_max, y_max]):
+            # Create mask and convert to numpy array immediately
+            mask = (adata.obs[splitby] == category)
+            mask_values = mask.values 
             
-            xy_min=np.array([x_min, y_min])
-            xy_max=np.array([x_max, y_max])
+            if np.sum(mask_values) == 0: 
+                axs[i].set_visible(False)
+                continue
 
-        else:    
-        
-            xy_min=emd_df.min(axis=0).values
-            xy_max=emd_df.max(axis=0).values
-        
-      
-
-        xy_margin=(xy_max-xy_min)*0.05
-
-        for ax in axs:
-            ax.set_xlim(xy_min[0]-xy_margin[0], xy_max[0]+xy_margin[0])
-            ax.set_ylim(xy_min[1]-xy_margin[1], xy_max[1]+xy_margin[1])
+            # Lightweight Proxy AnnData
+            adata_sub = sc.AnnData(obs=adata.obs.iloc[mask_values].copy())
+            
+            # Copy coordinates
+            adata_sub.obsm[basis] = adata.obsm[basis][mask_values]
+            
+            # Inject color data
+            adata_sub.obs[color] = full_color_data[mask_values]
 
 
-        for i in range(len(axs)):
-            if i<len(variables):
-                if basis=='X_umap':
-                    fig_tmp=sc.pl.umap(adata[adata.obs[splitby]==variables[i]],
-                       color=color,
-                       vmax=expr_max,
-                        vmin=expr_min,
-                       layer=layer,
-                       title=color+' in '+variables[i],
-                               show=False,ax=axs[i], 
-                        
-                        return_fig=False,
-                        colorbar_loc=None,
-                               **kwargs
-                       )
-                else:
-                    fig_tmp=sc.pl.embedding(
-                        adata[adata.obs[splitby]==variables[i]],
-                        basis=basis,
-                        color=color,
-                        vmax=expr_max,
-                        vmin=expr_min,
-                        layer=layer,
-                        title=color+' in '+variables[i],
-                               show=False,ax=axs[i], 
-                        return_fig=False,
-                        colorbar_loc=None,
-                               **kwargs)
-                
-                
-                ### Fix the coordinates ratio
-                if fix_coordinate_ratio:
-                    axs[i].set_aspect('equal')
-                    ### Set the color bar range
-                    axs[i].collections[0].set_clim(vmin=expr_min, vmax=expr_max)
-                    ### Refer to https://stackoverflow.com/questions/48131232/matplotlib-get-colorbar-mappable-from-an-axis
-                    adjustColorbar(axs[i].collections[0])
-                else:
-                    axs[i].set_aspect('auto')
-                    ### Set the color bar range
-                    axs[i].collections[0].set_clim(vmin=expr_min, vmax=expr_max)
-                    ### Refer to https://stackoverflow.com/questions/48131232/matplotlib-get-colorbar-mappable-from-an-axis
-                    adjustColorbar(axs[i].collections[0])
-                
-         
+            # If the color is categorical and a palette exists in the original object,
+            # copy it to the proxy object's .uns.
+            if not is_numeric:
+                palette_key = f'{color}_colors'
+                if palette_key in adata.uns:
+                    adata_sub.uns[palette_key] = adata.uns[palette_key]
 
-                        
+            plot_kwargs = dict(
+                basis=basis,
+                color=color, 
+                title=f"{color} in\n{category}", 
+                legend_fontsize=legend_fontsize,
+                legend_fontoutline=legend_fontoutline,
+                ncols=4,
+                show=False,
+                ax=axs[i],
+                return_fig=False,
+                colorbar_loc=None,
+                **kwargs
+            )
+
+            if is_numeric:
+                plot_kwargs['vmax'] = expr_max
+                plot_kwargs['vmin'] = expr_min
+
+            if not is_numeric: 
+                if legend_loc == 'on data':
+                    plot_kwargs['legend_loc'] = 'on data'
+                elif legend_loc != 'right margin':
+                     plot_kwargs['legend_loc'] = legend_loc
+
+            # --- Single Plotting Call ---
+            sc.pl.embedding(adata_sub, **plot_kwargs)
+
+            # --- Post-Plot Adjustments ---
+            if fix_coordinate_ratio:
+                axs[i].set_aspect('equal')
             else:
-                axs[i].set_visible(False)  
-    
-            
-    ### Show the axis ticks
+                axs[i].set_aspect('auto')
+
+            if is_numeric:
+                if axs[i].collections:
+                    mappable = axs[i].collections[0]
+                    mappable.set_clim(vmin=expr_min, vmax=expr_max)
+                    adjustColorbar(mappable)
+        else:
+            axs[i].set_visible(False)
+
+    # --- 5. Global Legend ---
+    if not is_numeric and legend_loc == 'right margin':
+        for ax in axs:
+            try:
+                if ax.get_visible():
+                    ax.legend().set_visible(False)
+            except:
+                pass
+        
+        _create_global_legend(fig, axs, legend_loc="center left", bbox_to_anchor=(1.02, 0.5),
+                              frameon=False, marker_size=legend_marker_size,
+                              fontsize=legend_fontsize, max_rows_per_col=18)
+
+    # --- 6. Final Polish ---
     if show_axis_ticks:
         for ax in axs:
             ax.grid(False)
             ax.set_xticks(np.arange(xy_min[0]-xy_margin[0], xy_max[0]+xy_margin[0], (xy_max[0]-xy_min[0])/4))
             ax.set_yticks(np.arange(xy_min[1]-xy_margin[1], xy_max[1]+xy_margin[1], (xy_max[1]-xy_min[1])/4))
-    
 
-        
-    ### Whether to show the figure or not
     if show_figure:
-        plt.show()  # Explicitly display the figure
+        plt.show() 
 
-    ### Save the figure
     if save:
-        fig.savefig(save, bbox_inches='tight')  # Save the figure to file
+        fig.savefig(save, bbox_inches='tight') 
         print("Figure saved to: ", save)
-        plt.close(fig)  # Close the figure to prevent display
+        plt.close(fig) 
     elif not show_figure:
-        plt.close(fig)  # Close the figure if not showing or saving
+        plt.close(fig)
+
         
+from functools import wraps
+# Create the alias
+@wraps(plot_embeddings_split)
+def plotEmbeddingsSplit(*args, **kwargs):
+    """
+    Alias for :func:`plot_embeddings_split`.
+    
+    Please refer to the main function for full documentation.
+    """
+    return plot_embeddings_split(*args, **kwargs)
