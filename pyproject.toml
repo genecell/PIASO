@@ -61,5 +61,15 @@ dev = [
     "pre-commit", # static checking
 ]
 
+[tool.hatch.build]
+exclude = [
+  "docs",
+  "docs/",
+  ".github",
+  ".git",
+  "*.pdf", 
+  "*.html"
+]
+
 [tool.hatch.build.targets.wheel]
 packages = [ "piaso" ]
