@@ -4,7 +4,7 @@ requires = [ "hatchling"]
 
 [project]
 name = "piaso-tools"
-version = "1.0.1"
+version = "1.0.2"
 description = "Precise Integrative Analysis of Single-cell Omics."
 requires-python = ">=3.9"
 license = "BSD-3-clause"
