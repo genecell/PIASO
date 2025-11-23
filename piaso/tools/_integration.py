@@ -1,3 +1,14 @@
+# import faulthandler
+# faulthandler.enable()
+
+# import os
+# # Force thread count to 1 to prevent C-library collisions
+# os.environ['OMP_NUM_THREADS'] = '1'
+# os.environ['MKL_NUM_THREADS'] = '1'
+# os.environ['OPENBLAS_NUM_THREADS'] = '1'
+
+
+
 import numpy as np
 import pandas as pd
 import scanpy as sc
@@ -14,6 +25,26 @@ try:
     import cosg
 except ImportError:
     cosg = None # Set to None if not available
+    
+# # Import and version check for BBKNN
+# try:
+#     import bbknn
+#     import bbknn.matrix
+#     import pkg_resources
+
+#     # Get BBKNN version
+#     bbknn_version = pkg_resources.get_distribution("bbknn").version
+#     is_old_version = pkg_resources.parse_version(bbknn_version) <= pkg_resources.parse_version('1.5.1')
+
+
+#     print(f"Successfully imported BBKNN version {bbknn_version}")
+#     print(f"Using parameters for version {'<= 1.5.1' if is_old_version else '> 1.5.1'}")
+
+# except ImportError as e:
+#     print(f"Error importing BBKNN: {e}")
+#     print("BBKNN is required for this function. Please install it with 'pip install bbknn'.")
+
+    
 
 # Helper Function for Jaccard Index
 def calculate_jaccard(set1: set, set2: set) -> float:
@@ -157,11 +188,33 @@ def _build_marker_filtered_graph_dual(
             if verbosity > 0: 
                 print(f"Using parameters for version <= 1.5.1: approx=True, use_annoy=True")
         else:
+            computation_param = 'annoy'  # Default
             # For versions > 1.5.1 (e.g., 1.6.0+), use 'computation' parameter
             if hasattr(locals(), 'bbknn_computation') and bbknn_computation is not None:
                 computation_param = bbknn_computation
-            else:
-                computation_param = 'annoy'  # Default
+            
+            if computation_param == 'annoy':
+                try:
+                    import pkg_resources
+                    annoy_version = pkg_resources.get_distribution("annoy").version
+
+                    # Check if version is >= 1.17.0
+                    if pkg_resources.parse_version(annoy_version) >= pkg_resources.parse_version('1.17.0'):
+                        error_msg = (
+                            f"\n\nCRITICAL ERROR: Incompatible Annoy version detected ({annoy_version}).\n"
+                            "Annoy versions >= 1.17.0 are known to cause Segmentation Faults (Core Dumps) with BBKNN.\n"
+                            "--------------------------------------------------------\n"
+                            "PLEASE RUN THE FOLLOWING COMMAND TO FIX THIS:\n"
+                            "pip install annoy==1.16.3\n"
+                            "--------------------------------------------------------\n"
+                            "(Remember to restart your kernel after installing!)\n"
+                        )
+                        raise ImportError(error_msg)
+
+                except pkg_resources.DistributionNotFound:
+                    # If annoy isn't installed, BBKNN will raise its own error later, so we can skip
+                    pass
+                
 
             params_to_use = {
                 **base_params,
@@ -491,131 +544,215 @@ def _build_marker_filtered_graph_dual(
         print(f"debug: Number of compatible inter-batch cluster pairs: {n_compatible_pairs}") 
 
     # Step 6: Filter Cell-Cell Graph using Vectorized Lookup
-    if verbosity > 0: print("Pruning the initial graph using vectorized lookup...")
-    n_edges_before = connectivities.nnz
-
-    # Convert labels to arrays once
-    batch_labels_arr = adata.obs[batch_key].astype(str).values
-    bc_labels_arr = adata.obs[cluster_key_added].astype(str).values
-
-    # Create mapping for batch-cluster labels to indices
+    if verbosity > 0: print("Pruning graph using vectorized lookup ...")
+    
+    # 1. Map Batch-Cluster Labels to Integers
+    # Sorted list ensures deterministic index mapping
     unique_bc_labels = sorted(list(all_valid_batch_clusters))
     bc_to_int = {label: i for i, label in enumerate(unique_bc_labels)}
     n_unique_bc = len(unique_bc_labels)
-
+    
     if n_unique_bc == 0:
-        warnings.warn("No valid batch-clusters found for building compatibility matrix.")
-        connectivities_pruned = sp.csr_matrix(connectivities.shape, dtype=connectivities.dtype)
-    else:
-        # Build compatibility matrix more efficiently
-        compatibility_matrix = np.zeros((n_unique_bc, n_unique_bc), dtype=bool)
+        # Fallback if no clusters exist
+        return sp.csr_matrix(connectivities.shape), allow_connection_combined, local_marker_genes, global_marker_genes
 
-        # Batch process compatible pairs
-        compatible_pairs = [(bc1, bc2) for (bc1, bc2), is_compatible 
-                            in allow_connection_combined.items() 
-                            if is_compatible]
+    # 2. Build Dense Boolean Compatibility Matrix (Small: N_clusters x N_clusters)
+    compatibility_matrix = np.zeros((n_unique_bc, n_unique_bc), dtype=bool)
+    
+    # Fill matrix from the dictionary we built in Step 5
+    # We only iterate over compatible pairs found, which is fast
+    for (bc1, bc2), is_allowed in allow_connection_combined.items():
+        if is_allowed and bc1 in bc_to_int and bc2 in bc_to_int:
+            idx1, idx2 = bc_to_int[bc1], bc_to_int[bc2]
+            compatibility_matrix[idx1, idx2] = True
+    
+    # 3. Create Cell-to-Cluster Integer Mapping Array
+    # Initialize with -1 (cells with no valid cluster)
+    cell_bc_indices = np.full(n_cells, -1, dtype=int)
+    
+    # Get the current labels from adata
+    obs_bc_labels = adata.obs[cluster_key_added].astype(str).values
+    
+    # Vectorized mapping: 
+    # Ideally we use pandas codes, but since we have custom strings, we map carefully.
+    # This loop runs once per cluster (e.g. 50 times), not per cell (50k times).
+    for label, idx in bc_to_int.items():
+        # boolean mask for cells belonging to this cluster
+        mask = (obs_bc_labels == label)
+        cell_bc_indices[mask] = idx
 
-        for bc1, bc2 in compatible_pairs:
-            idx1 = bc_to_int.get(str(bc1))
-            idx2 = bc_to_int.get(str(bc2))
-            if idx1 is not None and idx2 is not None:
-                compatibility_matrix[idx1, idx2] = True
-
-        # Ensure symmetry in one vectorized operation
-        compatibility_matrix = compatibility_matrix | compatibility_matrix.T
-
-        # Process in CSR format for memory efficiency
-        connectivities_csr = connectivities.tocsr()
-        invalid_bc_index = -1
-
-        # Prepare arrays for building new CSR matrix
-        data = []
-        indices = []
-        indptr = [0]
-
-        # Fast batch lookup arrays
-        batch_lookup = {batch: i for i, batch in enumerate(np.unique(batch_labels_arr))}
-        batch_indices = np.array([batch_lookup[b] for b in batch_labels_arr])
-
-        # Pre-compute batch-cluster indices for all cells
-        all_bc_indices = np.array([bc_to_int.get(str(label), invalid_bc_index) 
-                                  for label in bc_labels_arr])
-
-        # Process row by row to avoid materializing huge arrays
-        for i in range(connectivities_csr.shape[0]):
-            row_start, row_end = connectivities_csr.indptr[i], connectivities_csr.indptr[i+1]
-            if row_start == row_end:  # Empty row
-                indptr.append(len(indices))
-                continue
-
-            # Get batch and cluster info for source cell
-            source_batch_idx = batch_indices[i]
-            source_bc_idx = all_bc_indices[i]
-
-            # Get target cells and values
-            target_indices = connectivities_csr.indices[row_start:row_end]
-            target_data = connectivities_csr.data[row_start:row_end]
-
-            # Get batch indices for targets
-            target_batch_indices = batch_indices[target_indices]
-
-            # Keep intra-batch connections
-            intra_batch_mask = target_batch_indices == source_batch_idx
-
-            # Check inter-batch connections
-            if not intra_batch_mask.all() and source_bc_idx != invalid_bc_index:
-                inter_batch_mask = ~intra_batch_mask
-                inter_batch_targets = target_indices[inter_batch_mask]
-                inter_batch_data = target_data[inter_batch_mask]
-
-                # Get cluster indices for inter-batch targets
-                target_bc_indices = all_bc_indices[inter_batch_targets]
-
-                # Check which edges to keep
-                valid_targets = target_bc_indices != invalid_bc_index
-                if np.any(valid_targets):
-                    keep_inter = np.zeros(len(inter_batch_targets), dtype=bool)
-                    valid_indices = np.where(valid_targets)[0]
-
-                    # Vectorized lookup in compatibility matrix
-                    src_idx_array = np.full(len(valid_indices), source_bc_idx)
-                    tgt_idx_array = target_bc_indices[valid_indices]
-                    keep_inter[valid_indices] = compatibility_matrix[src_idx_array, tgt_idx_array]
-
-                    # Add the valid inter-batch connections
-                    valid_inter_indices = inter_batch_targets[keep_inter]
-                    valid_inter_data = inter_batch_data[keep_inter]
-
-                    indices.extend(valid_inter_indices)
-                    data.extend(valid_inter_data)
-
-            # Add all intra-batch connections
-            if np.any(intra_batch_mask):
-                intra_indices = target_indices[intra_batch_mask]
-                intra_data = target_data[intra_batch_mask]
-                indices.extend(intra_indices)
-                data.extend(intra_data)
-
-            indptr.append(len(indices))
-
-        # Create pruned CSR matrix directly
-        connectivities_pruned = sp.csr_matrix(
-            (data, indices, indptr),
-            shape=connectivities.shape
-        )
-        connectivities_pruned.eliminate_zeros()
-
-    # Diagnostic Info
-    n_edges_after = connectivities_pruned.nnz
+    # 4. Process Graph in Coordinate Format (COO)
+    # COO format allows direct access to all row (source) and col (target) indices
+    coo = connectivities.tocoo()
+    
+    # Get cluster indices for every edge's source and target
+    src_bc_idxs = cell_bc_indices[coo.row]
+    tgt_bc_idxs = cell_bc_indices[coo.col]
+    
+    # 5. Identify Valid Edges (Marker Compatible)
+    # First, ignore edges where either cell has no valid cluster (-1)
+    valid_cluster_mask = (src_bc_idxs != -1) & (tgt_bc_idxs != -1)
+    
+    # Initialize keep mask
+    marker_keep_mask = np.zeros(coo.nnz, dtype=bool)
+    
+    # Perform the vectorized lookup in the compatibility matrix
+    # This is the magic step: numpy handles the indexing for millions of edges instantly
+    if np.any(valid_cluster_mask):
+        marker_keep_mask[valid_cluster_mask] = compatibility_matrix[
+            src_bc_idxs[valid_cluster_mask], 
+            tgt_bc_idxs[valid_cluster_mask]
+        ]
+        
+    # 6. Identify Intra-Batch Edges (Always Keep)
+    # Get integer codes for batches to speed up comparison
+    batch_codes = adata.obs[batch_key].astype('category').cat.codes.values
+    intra_batch_mask = (batch_codes[coo.row] == batch_codes[coo.col])
+    
+    # 7. Combine Logic: Keep if (Intra-Batch) OR (Inter-Batch AND Compatible)
+    final_edge_mask = intra_batch_mask | marker_keep_mask
+    
+    # 8. Rebuild CSR Matrix
+    # We only pass the data and indices that passed the mask
+    connectivities_pruned = sp.csr_matrix(
+        (coo.data[final_edge_mask], (coo.row[final_edge_mask], coo.col[final_edge_mask])),
+        shape=connectivities.shape
+    )
+    
     if verbosity > 0:
-        pruned_count = n_edges_before - n_edges_after
-        pruned_percent = (pruned_count / n_edges_before * 100) if n_edges_before > 0 else 0
-        print(f"Pruned {pruned_count} edges ({pruned_percent:.1f}%) based on marker compatibility.")
+        n_before = connectivities.nnz
+        n_after = connectivities_pruned.nnz
+        print(f"Graph pruned: {n_before} -> {n_after} edges (Removed {n_before - n_after}).")
+
+    return connectivities_pruned, allow_connection_combined, local_marker_genes, global_marker_genes
+    
+    
+#     # Step 6: Filter Cell-Cell Graph using Vectorized Lookup
+#     if verbosity > 0: print("Pruning the initial graph using vectorized lookup...")
+#     n_edges_before = connectivities.nnz
+
+#     # Convert labels to arrays once
+#     batch_labels_arr = adata.obs[batch_key].astype(str).values
+#     bc_labels_arr = adata.obs[cluster_key_added].astype(str).values
+
+#     # Create mapping for batch-cluster labels to indices
+#     unique_bc_labels = sorted(list(all_valid_batch_clusters))
+#     bc_to_int = {label: i for i, label in enumerate(unique_bc_labels)}
+#     n_unique_bc = len(unique_bc_labels)
+
+#     if n_unique_bc == 0:
+#         warnings.warn("No valid batch-clusters found for building compatibility matrix.")
+#         connectivities_pruned = sp.csr_matrix(connectivities.shape, dtype=connectivities.dtype)
+#     else:
+#         # Build compatibility matrix more efficiently
+#         compatibility_matrix = np.zeros((n_unique_bc, n_unique_bc), dtype=bool)
+
+#         # Batch process compatible pairs
+#         compatible_pairs = [(bc1, bc2) for (bc1, bc2), is_compatible 
+#                             in allow_connection_combined.items() 
+#                             if is_compatible]
+
+#         for bc1, bc2 in compatible_pairs:
+#             idx1 = bc_to_int.get(str(bc1))
+#             idx2 = bc_to_int.get(str(bc2))
+#             if idx1 is not None and idx2 is not None:
+#                 compatibility_matrix[idx1, idx2] = True
+
+#         # Ensure symmetry in one vectorized operation
+#         compatibility_matrix = compatibility_matrix | compatibility_matrix.T
+
+#         # Process in CSR format for memory efficiency
+#         connectivities_csr = connectivities.tocsr()
+#         invalid_bc_index = -1
+
+#         # Prepare arrays for building new CSR matrix
+#         data = []
+#         indices = []
+#         indptr = [0]
+
+#         # Fast batch lookup arrays
+#         batch_lookup = {batch: i for i, batch in enumerate(np.unique(batch_labels_arr))}
+#         batch_indices = np.array([batch_lookup[b] for b in batch_labels_arr])
+
+#         # Pre-compute batch-cluster indices for all cells
+#         all_bc_indices = np.array([bc_to_int.get(str(label), invalid_bc_index) 
+#                                   for label in bc_labels_arr])
+
+#         # Process row by row to avoid materializing huge arrays
+#         for i in range(connectivities_csr.shape[0]):
+#             row_start, row_end = connectivities_csr.indptr[i], connectivities_csr.indptr[i+1]
+#             if row_start == row_end:  # Empty row
+#                 indptr.append(len(indices))
+#                 continue
+
+#             # Get batch and cluster info for source cell
+#             source_batch_idx = batch_indices[i]
+#             source_bc_idx = all_bc_indices[i]
+
+#             # Get target cells and values
+#             target_indices = connectivities_csr.indices[row_start:row_end]
+#             target_data = connectivities_csr.data[row_start:row_end]
+
+#             # Get batch indices for targets
+#             target_batch_indices = batch_indices[target_indices]
+
+#             # Keep intra-batch connections
+#             intra_batch_mask = target_batch_indices == source_batch_idx
+
+#             # Check inter-batch connections
+#             if not intra_batch_mask.all() and source_bc_idx != invalid_bc_index:
+#                 inter_batch_mask = ~intra_batch_mask
+#                 inter_batch_targets = target_indices[inter_batch_mask]
+#                 inter_batch_data = target_data[inter_batch_mask]
+
+#                 # Get cluster indices for inter-batch targets
+#                 target_bc_indices = all_bc_indices[inter_batch_targets]
+
+#                 # Check which edges to keep
+#                 valid_targets = target_bc_indices != invalid_bc_index
+#                 if np.any(valid_targets):
+#                     keep_inter = np.zeros(len(inter_batch_targets), dtype=bool)
+#                     valid_indices = np.where(valid_targets)[0]
+
+#                     # Vectorized lookup in compatibility matrix
+#                     src_idx_array = np.full(len(valid_indices), source_bc_idx)
+#                     tgt_idx_array = target_bc_indices[valid_indices]
+#                     keep_inter[valid_indices] = compatibility_matrix[src_idx_array, tgt_idx_array]
+
+#                     # Add the valid inter-batch connections
+#                     valid_inter_indices = inter_batch_targets[keep_inter]
+#                     valid_inter_data = inter_batch_data[keep_inter]
+
+#                     indices.extend(valid_inter_indices)
+#                     data.extend(valid_inter_data)
+
+#             # Add all intra-batch connections
+#             if np.any(intra_batch_mask):
+#                 intra_indices = target_indices[intra_batch_mask]
+#                 intra_data = target_data[intra_batch_mask]
+#                 indices.extend(intra_indices)
+#                 data.extend(intra_data)
+
+#             indptr.append(len(indices))
+
+#         # Create pruned CSR matrix directly
+#         connectivities_pruned = sp.csr_matrix(
+#             (data, indices, indptr),
+#             shape=connectivities.shape
+#         )
+#         connectivities_pruned.eliminate_zeros()
+
+#     # Diagnostic Info
+#     n_edges_after = connectivities_pruned.nnz
+#     if verbosity > 0:
+#         pruned_count = n_edges_before - n_edges_after
+#         pruned_percent = (pruned_count / n_edges_before * 100) if n_edges_before > 0 else 0
+#         print(f"Pruned {pruned_count} edges ({pruned_percent:.1f}%) based on marker compatibility.")
         
     
-    if verbosity > 0: print("Graph pruning finished.")
-    # Return all results needed by the main function
-    return connectivities_pruned, allow_connection_combined, local_marker_genes, global_marker_genes 
+#     if verbosity > 0: print("Graph pruning finished.")
+#     # Return all results needed by the main function
+#     return connectivities_pruned, allow_connection_combined, local_marker_genes, global_marker_genes 
 
 
 # --- Main Function Combining Filtering and Single-Step Correction ---
@@ -768,15 +905,24 @@ def stitchSpace(
     if filter_bbknn_neighbors_within_batch <= 0:
         raise ValueError("filter_bbknn_neighbors_within_batch must be greater than 0")
         
+    X_emb = adata.obsm[use_rep]
+    # Check for NaNs
+    if np.isnan(X_emb).any():
+        raise ValueError(f"Your representation '{use_rep}' contains NaN values. This causes BBKNN to segfault.")
+    # Check for Infinite values
+    if np.isinf(X_emb).any():
+        raise ValueError(f"Your representation '{use_rep}' contains Infinite values. This causes BBKNN to segfault.")
+    if verbosity > 0: print(f"Data integrity check passed for {use_rep}.")
+        
     adata_original = adata # Keep reference to original if copy=False
     if copy:
         adata = adata.copy()
         
     # Determine the key for storing cluster labels
     if filter_cluster_key_added is None:
-         # Create a default key if none provided
-         filter_cluster_key_added = f"{batch_key}@leiden@res{filter_leiden_resolution}" # Use @ delimiter
-         if verbosity > 0: print(f"Cluster labels will be stored in adata.obs['{filter_cluster_key_added}']")
+        # Create a default key if none provided
+        filter_cluster_key_added = f"{batch_key}@leiden@res{filter_leiden_resolution}" # Use @ delimiter
+        if verbosity > 0: print(f"Cluster labels will be stored in adata.obs['{filter_cluster_key_added}']")
          
     # Determine the key for storing the pruned graph structure
     if filter_pruned_graph_key is None:
@@ -785,7 +931,7 @@ def stitchSpace(
 
 
     # Stage 1: Build the marker-filtered graph
-    if verbosity > 0: print(f"Stage 1: Building Marker-Filtered Graph (Use Global Markers: {filter_use_global_markers})")
+    if verbosity > 0: print(f"Stage 1: Building Marker-Filtered Graph (Use Global Markers: {filter_use_global_markers})", flush=True)
     # Pass the adata object to be modified with cluster labels
     pruned_connectivities, hypergraph_compatibility, local_markers, global_markers = _build_marker_filtered_graph_dual(
         adata=adata, 

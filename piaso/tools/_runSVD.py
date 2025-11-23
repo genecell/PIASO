@@ -12,6 +12,7 @@ def runSVD(
     n_components: int = 50, 
     random_state: Optional[int] = 10, 
     scale_data: bool = False,
+    n_iter: int = 7,
     key_added: str = 'X_svd',
     layer: Optional[str] = None,
     verbosity: int = 0
@@ -32,6 +33,8 @@ def runSVD(
         A random seed to ensure reproducibility.
     scale_data : bool, optional, default=False
         If True, standardizes the input data before performing SVD.
+    n_iter : int, optional, default=7
+        Number of iterations for randomized SVD solver. The default is larger than the default in randomized_svd to handle sparse matrices that may have large slowly decaying spectrum. Also larger than the `n_iter` default value (5) in the TruncatedSVD function.
     key_added : str, optional, default='X_svd'
         The key under which the resulting cell embeddings are stored in `adata.obsm`.
     layer : str, optional, default=None
@@ -74,7 +77,7 @@ def runSVD(
     if scale_data:
         expr = StandardScaler(with_mean=False).fit_transform(expr)
     
-    transformer = TruncatedSVD(n_components=n_components, random_state=random_state)
+    transformer = TruncatedSVD(n_components=n_components, random_state=random_state, n_iter = n_iter)
     adata.obsm[key_added] = transformer.fit_transform(expr)
     
     if verbosity>0:
@@ -101,6 +104,7 @@ def runSVDLazy(
     batch_key: Optional[str] = None,
     random_state: Optional[int] = 1927, 
     scale_data: bool = False,
+    n_iter: int = 7,
     infog_trim: bool = True,
     key_added: str = 'X_svd',
     layer: Optional[str] = None,
@@ -136,6 +140,8 @@ def runSVDLazy(
         A random seed to ensure reproducibility.
     scale_data : bool, optional, default=False
         If True, standardizes the input data before performing SVD.
+    n_iter : int, optional, default=7
+        Number of iterations for randomized SVD solver. The default is larger than the default in randomized_svd to handle sparse matrices that may have large slowly decaying spectrum. Also larger than the `n_iter` default value (5) in the TruncatedSVD function.
     infog_trim : bool, optional, default=True
         Used for the `trim` parameter in `piaso.tl.infog` function, effective only when `layer` set to `infog`.
     key_added : str, optional, default='X_svd'
@@ -198,6 +204,7 @@ def runSVDLazy(
         n_components=n_components, 
         random_state=random_state, 
         scale_data=scale_data,
+        n_iter=n_iter,
         key_added=key_added,
         layer=layer,
         verbosity=verbosity

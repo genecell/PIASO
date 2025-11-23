@@ -165,7 +165,7 @@ def leiden_local(
                 use_rep='X_pca_harmony'
                 
             elif dr_method=='X_svd_full_harmony':
-                rrunSVD(
+                runSVD(
                     adata_i, 
                     use_highly_variable=False, 
                     n_components=n_components, 
@@ -243,7 +243,7 @@ def leiden_local(
                 use_rep='X_pca_harmony'
                 
             elif dr_method=='X_svd_full_harmony':
-                rrunSVD(
+                runSVD(
                     adata_i, 
                     use_highly_variable=False, 
                     n_components=n_components, 
@@ -315,7 +315,7 @@ def leiden_local(
                 use_rep='X_pca_harmony'
                 
             elif dr_method=='X_svd_full_harmony':
-                rrunSVD(
+                runSVD(
                     adata_i, 
                     use_highly_variable=False, 
                     n_components=n_components, 
