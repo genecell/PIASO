@@ -9,26 +9,7 @@
 
 ### Documentation
 
-[PIASO documentation](https://genecell.github.io/PIASO/) 
-
-#### Current available functionalities
-
-1. perform dimensionality reduction with GDR
-2. integration of scRNA-seq datasets with GDR
-3. integration of scRNA-seq data and MERFISH/Xenium data with GDR
-4. normalization of scRNA-seq data with INFOG
-5. selection of highly-variable genes in scRNAseq data with INFOG
-6. a novel gene set scoring method
-7. run clustering on selected cluster(s)
-8. side-by-side cell embedding plots, e.g., split by Conditions
-9. stacked violin plots for multiple features, including genes and cell metrics
-
-#### Coming functionalities
-
-1. preprocessing of scATAC-seq datasets
-2. integration of scRNA-seq and scATAC-seq datasets (not relying on gene activities)
-3. inference of cell type-specific gene regulatory networks
-4. and others
+[PIASO documentation](https:///piaso.org) 
 
 ### Installation
 
