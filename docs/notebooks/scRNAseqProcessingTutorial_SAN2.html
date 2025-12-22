@@ -1,0 +1,2919 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Pre-processing CellRanger outputs (single sample, human PBMCs) &#8212; PIASO 0.1.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../_static/styles/theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+<link href="../_static/styles/pydata-sphinx-theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=362ab14a" />
+    <link rel="stylesheet" type="text/css" href="../_static/nbsphinx-code-cells.css?v=2aa19091" />
+    <link rel="stylesheet" type="text/css" href="../_static/custom.css?v=0330b353" />
+  
+  <!-- So that users can add custom icons -->
+  <script src="../_static/scripts/fontawesome.js?digest=8878045cc6db502f8baf"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf" />
+<link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf" />
+
+    <script src="../_static/documentation_options.js?v=01f34227"></script>
+    <script src="../_static/doctools.js?v=9a2dae69"></script>
+    <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+    <script>window.MathJax = {"tex": {"inlineMath": [["$", "$"], ["\\(", "\\)"]], "processEscapes": true}, "options": {"ignoreHtmlClass": "tex2jax_ignore|mathjax_ignore|document", "processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+    <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'notebooks/scRNAseqProcessingTutorial_SAN2';</script>
+    <script src="../_static/sidebar_toggle.js?v=3b053ec6"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Pre-processing CellRanger outputs (single sample, mouse brain)" href="rnaSeqPipelineTutorial_mouse.html" />
+    <link rel="prev" title="GDR: marker Gene-guided Dimensionality Reduction" href="GDR_Tutorial.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="" />
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class=" navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../_static/PIASO_logo.png" class="logo__image only-light" alt="PIASO 0.1.0 documentation - Home"/>
+    <img src="../_static/PIASO_logo.png" class="logo__image only-dark pst-js-only" alt="PIASO 0.1.0 documentation - Home"/>
+  
+  
+</a></div>
+    
+  </div>
+  
+  <div class=" navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../installation.html">
+    Installation
+  </a>
+</li>
+
+
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="../tutorials.html">
+    Tutorials
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../modules.html">
+    API
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../references.html">
+    References
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../releaseNotes.html">
+    Release notes
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/genecell/PIASO" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+    </div>
+  
+
+  
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../installation.html">
+    Installation
+  </a>
+</li>
+
+
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="../tutorials.html">
+    Tutorials
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../modules.html">
+    API
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../references.html">
+    References
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../releaseNotes.html">
+    Release notes
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/genecell/PIASO" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+<h3><a href="../index.html">Table of Contents</a></h3>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../tutorials.html">Tutorials</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../modules.html">API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../references.html">References</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../releaseNotes.html">Release notes</a></li>
+</ul>
+</div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
+  </div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../tutorials.html" class="nav-link">Tutorials</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Pre-processing CellRanger outputs (single sample, human PBMCs)</span></li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section id="Pre-processing-CellRanger-outputs-(single-sample,-human-PBMCs)">
+<h1>Pre-processing CellRanger outputs (single sample, human PBMCs)<a class="headerlink" href="#Pre-processing-CellRanger-outputs-(single-sample,-human-PBMCs)" title="Link to this heading">#</a></h1>
+<p>This notebook demonstrates the pipeline for processing scRNA-seq data, covering metric computation, normalization, clustering, cell type prediction, and the identification/removal of doublets and low-quality clusters. The final output is pre-processed, annotated scRNA-seq data.</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[1]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>import piaso
+import cosg
+import numpy as np
+import pandas as pd
+import scanpy as sc
+import logging
+from sklearn.preprocessing import StandardScaler
+import warnings
+
+from matplotlib import rcParams
+sc.settings.set_figure_params(scanpy=True, dpi=80, dpi_save=300, frameon=True, vector_friendly=False, fontsize=14)
+import matplotlib as mpl
+mpl.rcParams[&#39;pdf.fonttype&#39;] = 42
+mpl.rcParams[&#39;ps.fonttype&#39;] = 42
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+/n/data1/hms/neurobio/fishell/vallaris/.conda/envs/piaso_env/lib/python3.10/site-packages/tqdm/auto.py:21: TqdmWarning: IProgress not found. Please update jupyter and ipywidgets. See https://ipywidgets.readthedocs.io/en/stable/user_install.html
+  from .autonotebook import tqdm as notebook_tqdm
+</pre></div></div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[2]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>data_dir = &quot;/n/scratch/users/v/vas744/Data/Public/PBMCMultiomeRop2023&quot;
+save_dir = &quot;/n/scratch/users/v/vas744/Results/single-cell/Methods/DataProcessing/PBMCMultiomeRop2023&quot;
+prefix = &quot;HumanPBMCs_Multiome_RNA&quot;
+</pre></div>
+</div>
+</div>
+<section id="Download-the-data">
+<h2>Download the data<a class="headerlink" href="#Download-the-data" title="Link to this heading">#</a></h2>
+<p>Human PBMC snMultiome data (SAN2) from: De Rop, F.V., Hulselmans, G., Flerin, C. et al. Systematic benchmarking of single-cell ATAC-sequencing protocols. Nat Biotechnol 42, 916–926 (2024). <a class="reference external" href="https://doi.org/10.1038/s41587-023-01881-x">https://doi.org/10.1038/s41587-023-01881-x</a></p>
+<p>Also available via <a class="reference external" href="https://drive.google.com/file/d/1g1V-VTy2qHK7PJIbW-t9hRFzHCqFCe4T/view?usp=drive_link">https://drive.google.com/file/d/1g1V-VTy2qHK7PJIbW-t9hRFzHCqFCe4T/view?usp=drive_link</a></p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[3]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span># !/home/vas744/Software/gdrive files download --destination /n/scratch/users/v/vas744/Data/Public/PBMCMultiomeRop2023 1g1V-VTy2qHK7PJIbW-t9hRFzHCqFCe4T
+</pre></div>
+</div>
+</div>
+</section>
+<section id="Load-the-data">
+<h2>Load the data<a class="headerlink" href="#Load-the-data" title="Link to this heading">#</a></h2>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[4]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>data_path = data_dir + &quot;/filtered_feature_bc_matrix.h5&quot;
+adata=sc.read_10x_h5(data_path)
+adata
+</pre></div>
+</div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+/n/data1/hms/neurobio/fishell/vallaris/.conda/envs/piaso_env/lib/python3.10/site-packages/anndata/_core/anndata.py:1758: UserWarning: Variable names are not unique. To make them unique, call `.var_names_make_unique`.
+  utils.warn_names_duplicates(&#34;var&#34;)
+/n/data1/hms/neurobio/fishell/vallaris/.conda/envs/piaso_env/lib/python3.10/site-packages/anndata/_core/anndata.py:1758: UserWarning: Variable names are not unique. To make them unique, call `.var_names_make_unique`.
+  utils.warn_names_duplicates(&#34;var&#34;)
+</pre></div></div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[4]:
+</pre></div>
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+AnnData object with n_obs × n_vars = 4360 × 36601
+    var: &#39;gene_ids&#39;, &#39;feature_types&#39;, &#39;genome&#39;, &#39;interval&#39;
+</pre></div></div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[5]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata.var_names_make_unique()
+</pre></div>
+</div>
+</div>
+<p>This dataset contains a single sample, but we will add a Sample column to adata.obs and assign a sample name to facilitate downstream analysis.</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[6]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata.obs[&#39;Sample&#39;]=&quot;HumamPBMCs&quot;
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[7]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata.X.data
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[7]:
+</pre></div>
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+array([ 2.,  1.,  1., ..., 43., 18., 56.], shape=(6669764,), dtype=float32)
+</pre></div></div>
+</div>
+<p>Create the ‘raw’ counts layer based on the counts data from the adata object.</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[8]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata.layers[&#39;raw&#39;] = adata.X
+adata
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[8]:
+</pre></div>
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+AnnData object with n_obs × n_vars = 4360 × 36601
+    obs: &#39;Sample&#39;
+    var: &#39;gene_ids&#39;, &#39;feature_types&#39;, &#39;genome&#39;, &#39;interval&#39;
+    layers: &#39;raw&#39;
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[9]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata.var
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[9]:
+</pre></div>
+</div>
+<div class="output_area rendered_html docutils container">
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>gene_ids</th>
+      <th>feature_types</th>
+      <th>genome</th>
+      <th>interval</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>MIR1302-2HG</th>
+      <td>ENSG00000243485</td>
+      <td>Gene Expression</td>
+      <td>GRCh38</td>
+      <td>chr1:29553-30267</td>
+    </tr>
+    <tr>
+      <th>FAM138A</th>
+      <td>ENSG00000237613</td>
+      <td>Gene Expression</td>
+      <td>GRCh38</td>
+      <td>chr1:36080-36081</td>
+    </tr>
+    <tr>
+      <th>OR4F5</th>
+      <td>ENSG00000186092</td>
+      <td>Gene Expression</td>
+      <td>GRCh38</td>
+      <td>chr1:65418-69055</td>
+    </tr>
+    <tr>
+      <th>AL627309.1</th>
+      <td>ENSG00000238009</td>
+      <td>Gene Expression</td>
+      <td>GRCh38</td>
+      <td>chr1:120931-133723</td>
+    </tr>
+    <tr>
+      <th>AL627309.3</th>
+      <td>ENSG00000239945</td>
+      <td>Gene Expression</td>
+      <td>GRCh38</td>
+      <td>chr1:91104-91105</td>
+    </tr>
+    <tr>
+      <th>...</th>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+    </tr>
+    <tr>
+      <th>AC141272.1</th>
+      <td>ENSG00000277836</td>
+      <td>Gene Expression</td>
+      <td>GRCh38</td>
+      <td>KI270728.1:1270983-1270984</td>
+    </tr>
+    <tr>
+      <th>AC023491.2</th>
+      <td>ENSG00000278633</td>
+      <td>Gene Expression</td>
+      <td>GRCh38</td>
+      <td>KI270731.1:13000-13001</td>
+    </tr>
+    <tr>
+      <th>AC007325.1</th>
+      <td>ENSG00000276017</td>
+      <td>Gene Expression</td>
+      <td>GRCh38</td>
+      <td>KI270734.1:72410-72411</td>
+    </tr>
+    <tr>
+      <th>AC007325.4</th>
+      <td>ENSG00000278817</td>
+      <td>Gene Expression</td>
+      <td>GRCh38</td>
+      <td>KI270734.1:131493-131494</td>
+    </tr>
+    <tr>
+      <th>AC007325.2</th>
+      <td>ENSG00000277196</td>
+      <td>Gene Expression</td>
+      <td>GRCh38</td>
+      <td>KI270734.1:161749-161852</td>
+    </tr>
+  </tbody>
+</table>
+<p>36601 rows × 4 columns</p>
+</div></div>
+</div>
+</section>
+<section id="Quality-Control">
+<h2>Quality Control<a class="headerlink" href="#Quality-Control" title="Link to this heading">#</a></h2>
+<section id="Filter-cells">
+<h3>Filter cells<a class="headerlink" href="#Filter-cells" title="Link to this heading">#</a></h3>
+<p>Filter out cells with fewer than 200 detected genes.</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[10]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pp.filter_cells(adata, min_genes=200)
+</pre></div>
+</div>
+</div>
+</section>
+<section id="Calculate-cell-quality-metrics">
+<h3>Calculate cell quality metrics<a class="headerlink" href="#Calculate-cell-quality-metrics" title="Link to this heading">#</a></h3>
+<p>We identify mitochondrial and ribosomal protein genes and compute their proportion in each cell’s total read count. A high proportion of these reads often indicates low-quality cells. Note: In human data, the gene names have uppercase letters (MT-, RPS-, RPL-). For mouse data, these gene names will start with Mt-, Rps-, Rpl-</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[11]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata.var[&#39;mt&#39;] = adata.var_names.str.startswith(&#39;MT-&#39;)
+sc.pp.calculate_qc_metrics(adata, qc_vars=[&#39;mt&#39;], percent_top=None, log1p=False, inplace=True)
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[12]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata.var[&#39;ribo&#39;] = adata.var_names.str.startswith(&#39;RPS&#39;,&#39;RPL&#39;)
+sc.pp.calculate_qc_metrics(adata, qc_vars=[&#39;ribo&#39;], percent_top=None, log1p=False, inplace=True)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+/tmp/ipykernel_2039358/3834852883.py:1: FutureWarning: Allowing a non-bool &#39;na&#39; in obj.str.startswith is deprecated and will raise in a future version.
+  adata.var[&#39;ribo&#39;] = adata.var_names.str.startswith(&#39;RPS&#39;,&#39;RPL&#39;)
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[13]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>piaso.pl.plot_features_violin(adata,
+                              [&#39;n_genes_by_counts&#39;, &#39;total_counts&#39;, &#39;pct_counts_mt&#39;,&#39;pct_counts_ribo&#39;],
+                              width_single=2.0)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_22_0.png" class="no-scaled-link" src="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_22_0.png" style="width: 217px; height: 581px;" />
+</div>
+</div>
+</section>
+<section id="Doublet-prediction">
+<h3>Doublet prediction<a class="headerlink" href="#Doublet-prediction" title="Link to this heading">#</a></h3>
+<p>Next, we compute the scrublet score to identify and predict potential doublets.</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[14]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>experiments=np.unique(adata.obs[&#39;Sample&#39;])
+adata.obs[&#39;scrublet_score&#39;]=np.repeat(0,adata.n_obs)
+adata.obs[&#39;predicted_doublets&#39;]=np.repeat(False,adata.n_obs)
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[15]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>import scrublet as scr
+
+for experiment in experiments:
+    print(experiment)
+    adatai=adata[adata.obs[&#39;Sample&#39;]==experiment]
+
+    scrub = scr.Scrublet(adatai.X.todense(),random_state=10)
+    doublet_scores, predicted_doublets = scrub.scrub_doublets()
+
+    adata.obs[&#39;predicted_doublets&#39;][adatai.obs_names]=predicted_doublets
+
+    adata.obs[&#39;scrublet_score&#39;][adatai.obs_names]=doublet_scores
+</pre></div>
+</div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+HumamPBMCs
+Preprocessing...
+Simulating doublets...
+Embedding transcriptomes using PCA...
+Calculating doublet scores...
+Automatically set threshold at doublet score = 0.14
+Detected doublet rate = 17.0%
+Estimated detectable doublet fraction = 79.6%
+Overall doublet rate:
+        Expected   = 10.0%
+        Estimated  = 21.4%
+Elapsed time: 6.7 seconds
+</pre></div></div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+/tmp/ipykernel_2039358/3464195482.py:10: FutureWarning: ChainedAssignmentError: behaviour will change in pandas 3.0!
+You are setting values through chained assignment. Currently this works in certain cases, but when using Copy-on-Write (which will become the default behaviour in pandas 3.0) this will never work to update the original DataFrame or Series, because the intermediate object on which we are setting values will behave as a copy.
+A typical example is when you are setting values in a column of a DataFrame, like:
+
+df[&#34;col&#34;][row_indexer] = value
+
+Use `df.loc[row_indexer, &#34;col&#34;] = values` instead, to perform the assignment in a single step and ensure this keeps updating the original `df`.
+
+See the caveats in the documentation: https://pandas.pydata.org/pandas-docs/stable/user_guide/indexing.html#returning-a-view-versus-a-copy
+
+  adata.obs[&#39;predicted_doublets&#39;][adatai.obs_names]=predicted_doublets
+/tmp/ipykernel_2039358/3464195482.py:10: SettingWithCopyWarning:
+A value is trying to be set on a copy of a slice from a DataFrame
+
+See the caveats in the documentation: https://pandas.pydata.org/pandas-docs/stable/user_guide/indexing.html#returning-a-view-versus-a-copy
+  adata.obs[&#39;predicted_doublets&#39;][adatai.obs_names]=predicted_doublets
+/tmp/ipykernel_2039358/3464195482.py:12: FutureWarning: ChainedAssignmentError: behaviour will change in pandas 3.0!
+You are setting values through chained assignment. Currently this works in certain cases, but when using Copy-on-Write (which will become the default behaviour in pandas 3.0) this will never work to update the original DataFrame or Series, because the intermediate object on which we are setting values will behave as a copy.
+A typical example is when you are setting values in a column of a DataFrame, like:
+
+df[&#34;col&#34;][row_indexer] = value
+
+Use `df.loc[row_indexer, &#34;col&#34;] = values` instead, to perform the assignment in a single step and ensure this keeps updating the original `df`.
+
+See the caveats in the documentation: https://pandas.pydata.org/pandas-docs/stable/user_guide/indexing.html#returning-a-view-versus-a-copy
+
+  adata.obs[&#39;scrublet_score&#39;][adatai.obs_names]=doublet_scores
+/tmp/ipykernel_2039358/3464195482.py:12: SettingWithCopyWarning:
+A value is trying to be set on a copy of a slice from a DataFrame
+
+See the caveats in the documentation: https://pandas.pydata.org/pandas-docs/stable/user_guide/indexing.html#returning-a-view-versus-a-copy
+  adata.obs[&#39;scrublet_score&#39;][adatai.obs_names]=doublet_scores
+/tmp/ipykernel_2039358/3464195482.py:12: FutureWarning: Setting an item of incompatible dtype is deprecated and will raise an error in a future version of pandas. Value &#39;[0.07518797 0.29180328 0.03955842 ... 0.13812155 0.07239264 0.06466513]&#39; has dtype incompatible with int64, please explicitly cast to a compatible dtype first.
+  adata.obs[&#39;scrublet_score&#39;][adatai.obs_names]=doublet_scores
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[16]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>piaso.pl.plot_features_violin(adata,
+                              [&#39;scrublet_score&#39;],
+                              groupby=&#39;Sample&#39;,
+                              width_single=2)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_26_0.png" class="no-scaled-link" src="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_26_0.png" style="width: 189px; height: 270px;" />
+</div>
+</div>
+<p>Remove doublets based on a scrublet score threshold.</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[17]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata = adata[adata.obs[&#39;scrublet_score&#39;]&lt;0.3].copy()
+adata
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[17]:
+</pre></div>
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+AnnData object with n_obs × n_vars = 4026 × 36601
+    obs: &#39;Sample&#39;, &#39;n_genes&#39;, &#39;n_genes_by_counts&#39;, &#39;total_counts&#39;, &#39;total_counts_mt&#39;, &#39;pct_counts_mt&#39;, &#39;total_counts_ribo&#39;, &#39;pct_counts_ribo&#39;, &#39;scrublet_score&#39;, &#39;predicted_doublets&#39;
+    var: &#39;gene_ids&#39;, &#39;feature_types&#39;, &#39;genome&#39;, &#39;interval&#39;, &#39;mt&#39;, &#39;n_cells_by_counts&#39;, &#39;mean_counts&#39;, &#39;pct_dropout_by_counts&#39;, &#39;total_counts&#39;, &#39;ribo&#39;
+    uns: &#39;Sample_colors&#39;
+    layers: &#39;raw&#39;
+</pre></div></div>
+</div>
+</section>
+<section id="INFOG-Normalization">
+<h3>INFOG Normalization<a class="headerlink" href="#INFOG-Normalization" title="Link to this heading">#</a></h3>
+<p>We use PIASO’s INFOG to normalize the data and identify a highly variable set of genes.</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[18]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>%%time
+piaso.tl.infog(adata,
+               copy=False,
+               inplace=False,
+               n_top_genes=3000,
+               key_added=&#39;infog&#39;,
+               key_added_highly_variable_gene=&#39;highly_variable&#39;,
+               layer=&#39;raw&#39;)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+The normalized data is saved as `infog` in `adata.layers`.
+The highly variable genes are saved as `highly_variable` in `adata.var`.
+Finished INFOG normalization.
+CPU times: user 361 ms, sys: 67.9 ms, total: 429 ms
+Wall time: 429 ms
+</pre></div></div>
+</div>
+</section>
+<section id="Dimensionality-reduction">
+<h3>Dimensionality reduction<a class="headerlink" href="#Dimensionality-reduction" title="Link to this heading">#</a></h3>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[19]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>%%time
+piaso.tl.runSVD(adata,
+                use_highly_variable=True,
+                n_components=30,
+                random_state=10,
+                key_added=&#39;X_svd&#39;,
+                layer=&#39;infog&#39;)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+CPU times: user 2.71 s, sys: 342 μs, total: 2.71 s
+Wall time: 438 ms
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[20]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>%%time
+sc.pp.neighbors(adata,
+                use_rep=&#39;X_svd&#39;,
+                n_neighbors=15,
+                random_state=10,
+                knn=True,
+                method=&quot;umap&quot;)
+
+sc.tl.umap(adata)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+CPU times: user 25.8 s, sys: 285 ms, total: 26.1 s
+Wall time: 23.7 s
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[21]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(adata,
+           color=[&#39;n_genes_by_counts&#39;, &#39;total_counts&#39;,&#39;pct_counts_mt&#39;,&#39;pct_counts_ribo&#39;, &#39;scrublet_score&#39;],
+           cmap=&#39;Spectral_r&#39;,
+           palette=piaso.pl.color.d_color1,
+           ncols=2,
+           size=10,
+           frameon=False)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_34_0.png" class="no-scaled-link" src="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_34_0.png" style="width: 666px; height: 837px;" />
+</div>
+</div>
+</section>
+<section id="Save-the-data">
+<h3>Save the data<a class="headerlink" href="#Save-the-data" title="Link to this heading">#</a></h3>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[22]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>save_dir+&#39;/&#39;+prefix+&#39;_raw_QC.h5ad&#39;
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[22]:
+</pre></div>
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+&#39;/n/scratch/users/v/vas744/Results/single-cell/Methods/DataProcessing/PBMCMultiomeRop2023/HumanPBMCs_Multiome_RNA_raw_QC.h5ad&#39;
+</pre></div></div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[23]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata.write(save_dir+&#39;/&#39;+prefix+&#39;_raw_QC.h5ad&#39;)
+</pre></div>
+</div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[24]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span># adata = sc.read(save_dir+&#39;/&#39;+prefix+&#39;_raw_QC.h5ad&#39;)
+</pre></div>
+</div>
+</div>
+</section>
+<section id="Filtering-cells-based-on-gene-counts">
+<h3>Filtering cells based on gene counts<a class="headerlink" href="#Filtering-cells-based-on-gene-counts" title="Link to this heading">#</a></h3>
+<p>Outlier cells of these thresholds are likely low quality cells, so we filter them out before further downstream analysis.</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[25]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata=adata[adata.obs[&#39;n_genes_by_counts&#39;]&gt;500].copy()
+</pre></div>
+</div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[26]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata=adata[adata.obs[&#39;n_genes_by_counts&#39;]&lt;10000].copy()
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[27]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(adata,
+           color=[&#39;n_genes_by_counts&#39;, &#39;total_counts&#39;,&#39;pct_counts_mt&#39;,&#39;pct_counts_ribo&#39;, &#39;scrublet_score&#39;],
+           cmap=&#39;Spectral_r&#39;,
+           palette=piaso.pl.color.d_color1,
+           ncols=2,
+           size=10,
+           frameon=False)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_42_0.png" class="no-scaled-link" src="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_42_0.png" style="width: 666px; height: 837px;" />
+</div>
+</div>
+</section>
+</section>
+<section id="Annotation">
+<h2>Annotation<a class="headerlink" href="#Annotation" title="Link to this heading">#</a></h2>
+<p>We used the precomputed Human PBMC marker gene sets from the <code class="docutils literal notranslate"><span class="pre">AllenHumanImmuneHealthAtlas_L2</span></code> study in <a class="reference external" href="https://piaso.org/piasomarkerdb/">PIASOmarkerDB</a>. The original dataset comes from <a class="reference external" href="https://www.nature.com/articles/s41586-025-09686-5">https://www.nature.com/articles/s41586-025-09686-5</a>.</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[28]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>marker_gene_df = pd.read_csv(&quot;/n/scratch/users/v/vas744/Data/Public/10x_Human_PBMC/PIASOmarkerDB_AllenHumanImmuneHealthAtlas_L2_251219.csv&quot;)
+marker_gene_df
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[28]:
+</pre></div>
+</div>
+<div class="output_area rendered_html docutils container">
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>Cell_Type</th>
+      <th>Gene</th>
+      <th>Specificity_Score</th>
+      <th>Study_Publication</th>
+      <th>Species</th>
+      <th>Tissue</th>
+      <th>Condition</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>Platelet</td>
+      <td>GP9</td>
+      <td>16.455748</td>
+      <td>AllenHumanImmuneHealthAtlas_L2</td>
+      <td>Human</td>
+      <td>blood</td>
+      <td>normal</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>Erythrocyte</td>
+      <td>ALAS2</td>
+      <td>16.422475</td>
+      <td>AllenHumanImmuneHealthAtlas_L2</td>
+      <td>Human</td>
+      <td>blood</td>
+      <td>normal</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>Platelet</td>
+      <td>CMTM5</td>
+      <td>16.400534</td>
+      <td>AllenHumanImmuneHealthAtlas_L2</td>
+      <td>Human</td>
+      <td>blood</td>
+      <td>normal</td>
+    </tr>
+    <tr>
+      <th>3</th>
+      <td>Platelet</td>
+      <td>TMEM40</td>
+      <td>16.373334</td>
+      <td>AllenHumanImmuneHealthAtlas_L2</td>
+      <td>Human</td>
+      <td>blood</td>
+      <td>normal</td>
+    </tr>
+    <tr>
+      <th>4</th>
+      <td>Erythrocyte</td>
+      <td>AHSP</td>
+      <td>16.338337</td>
+      <td>AllenHumanImmuneHealthAtlas_L2</td>
+      <td>Human</td>
+      <td>blood</td>
+      <td>normal</td>
+    </tr>
+    <tr>
+      <th>...</th>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+    </tr>
+    <tr>
+      <th>1445</th>
+      <td>Memory CD4 T cell</td>
+      <td>FXYD7</td>
+      <td>1.783520</td>
+      <td>AllenHumanImmuneHealthAtlas_L2</td>
+      <td>Human</td>
+      <td>blood</td>
+      <td>normal</td>
+    </tr>
+    <tr>
+      <th>1446</th>
+      <td>Memory CD4 T cell</td>
+      <td>CRIP1</td>
+      <td>1.779265</td>
+      <td>AllenHumanImmuneHealthAtlas_L2</td>
+      <td>Human</td>
+      <td>blood</td>
+      <td>normal</td>
+    </tr>
+    <tr>
+      <th>1447</th>
+      <td>Memory CD4 T cell</td>
+      <td>CCDC167</td>
+      <td>1.775660</td>
+      <td>AllenHumanImmuneHealthAtlas_L2</td>
+      <td>Human</td>
+      <td>blood</td>
+      <td>normal</td>
+    </tr>
+    <tr>
+      <th>1448</th>
+      <td>Memory CD4 T cell</td>
+      <td>CD6</td>
+      <td>1.775110</td>
+      <td>AllenHumanImmuneHealthAtlas_L2</td>
+      <td>Human</td>
+      <td>blood</td>
+      <td>normal</td>
+    </tr>
+    <tr>
+      <th>1449</th>
+      <td>Memory CD4 T cell</td>
+      <td>TMEM238</td>
+      <td>1.769377</td>
+      <td>AllenHumanImmuneHealthAtlas_L2</td>
+      <td>Human</td>
+      <td>blood</td>
+      <td>normal</td>
+    </tr>
+  </tbody>
+</table>
+<p>1450 rows × 7 columns</p>
+</div></div>
+</div>
+<section id="Preprocessing-cell-type-specific-marker-gene-sets">
+<h3>Preprocessing cell type-specific marker gene sets<a class="headerlink" href="#Preprocessing-cell-type-specific-marker-gene-sets" title="Link to this heading">#</a></h3>
+<p>PIASO’s predictCellTypeByMarker expects the marker_gene_list in DataFrame or dict format. So here, we will create a dictionary with each cell type and their respective marker gene lists.</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[29]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>marker_gene_dict = {}
+cell_types = np.unique(marker_gene_df[&#39;Cell_Type&#39;])
+for cell_type in cell_types:
+    marker_gene_dict[cell_type] = list(marker_gene_df[marker_gene_df[&#39;Cell_Type&#39;]==cell_type][&#39;Gene&#39;])
+</pre></div>
+</div>
+</div>
+</section>
+<section id="1.-INFOG-Normalization">
+<h3>1. INFOG Normalization<a class="headerlink" href="#1.-INFOG-Normalization" title="Link to this heading">#</a></h3>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[30]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>%%time
+piaso.tl.infog(adata,
+               copy=False,
+               inplace=False,
+               n_top_genes=3000,
+               key_added=&#39;infog&#39;,
+               key_added_highly_variable_gene=&#39;highly_variable&#39;,
+               layer=&#39;raw&#39;)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+The normalized data is saved as `infog` in `adata.layers`.
+The highly variable genes are saved as `highly_variable` in `adata.var`.
+Finished INFOG normalization.
+CPU times: user 355 ms, sys: 43.8 ms, total: 399 ms
+Wall time: 400 ms
+</pre></div></div>
+</div>
+</section>
+<section id="id2">
+<h3>Dimensionality reduction<a class="headerlink" href="#id2" title="Link to this heading">#</a></h3>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[31]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>%%time
+piaso.tl.runSVD(adata,
+                use_highly_variable=True,
+                n_components=30,
+                random_state=10,
+                key_added=&#39;X_svd&#39;,
+                layer=&#39;infog&#39;)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+CPU times: user 2.6 s, sys: 1.61 ms, total: 2.6 s
+Wall time: 452 ms
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[32]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>%%time
+sc.pp.neighbors(adata,
+                use_rep=&#39;X_svd&#39;,
+                n_neighbors=15,
+                random_state=10,
+                knn=True,
+                method=&quot;umap&quot;)
+
+sc.tl.umap(adata)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+CPU times: user 18 s, sys: 25.9 ms, total: 18.1 s
+Wall time: 14.4 s
+</pre></div></div>
+</div>
+</section>
+<section id="Predict-cell-types-based-on-marker-gene-sets">
+<h3>Predict cell types based on marker gene sets<a class="headerlink" href="#Predict-cell-types-based-on-marker-gene-sets" title="Link to this heading">#</a></h3>
+<p>Here, we use the <code class="docutils literal notranslate"><span class="pre">use_score</span> <span class="pre">=</span> <span class="pre">False</span></code> to make the predictions based on p-values, but you can also use the gene set scores with <code class="docutils literal notranslate"><span class="pre">use_score</span> <span class="pre">=</span> <span class="pre">True</span></code>.</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[33]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>%%time
+piaso.tl.predictCellTypeByMarker(adata,
+                                 marker_gene_set=marker_gene_dict,
+                                 score_method=&#39;piaso&#39;,
+                                 use_rep=&#39;X_svd&#39;,
+                                 use_score=False,
+                                 smooth_prediction=True,
+                                 inplace=True)
+</pre></div>
+</div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Calculating gene set scores using piaso method...
+</pre></div></div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+Scoring gene sets: 100%|██████████| 29/29 [00:18&lt;00:00,  1.59set/s]
+</pre></div></div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Predicting cell types based on marker gene p-values...
+Smoothing cell type predictions...
+Smoothing cell type predictions from &#39;CellTypes_predicted_raw&#39; using 7-nearest neighbors
+Smoothed predictions stored in adata.obs[&#39;CellTypes_predicted_smoothed&#39;]
+Confidence scores stored in adata.obs[&#39;CellTypes_predicted_smoothed_confidence&#39;]
+Modified 934 cell labels (23.42% of total)
+Cell type prediction completed. Results saved to:
+  - adata.obs[&#39;CellTypes_predicted&#39;]: predicted cell types
+  - adata.obsm[&#39;CellTypes_predicted_score&#39;]: full score matrix
+  - adata.obsm[&#39;CellTypes_predicted_nlog10pvals&#39;]: full -log10(p-value) matrix
+  - adata.obs[&#39;CellTypes_predicted_nlog10pvals&#39;]: maximum -log10(p-values)
+  - adata.obs[&#39;CellTypes_predicted_raw&#39;]: original unsmoothed predictions
+  - adata.obs[&#39;CellTypes_predicted_confidence_smoothed&#39;]: smoothing confidence scores
+CPU times: user 4.05 s, sys: 141 ms, total: 4.19 s
+Wall time: 23.1 s
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[34]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(adata,
+           color=[&#39;CellTypes_predicted&#39;],
+           palette=piaso.pl.color.d_color20,
+           legend_fontsize=8,
+           legend_fontoutline=1,
+           # legend_loc=&#39;on data&#39;,
+           ncols=1,
+           size=10,
+           frameon=False)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_56_0.png" class="no-scaled-link" src="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_56_0.png" style="width: 478px; height: 277px;" />
+</div>
+</div>
+</section>
+<section id="Clustering">
+<h3>Clustering<a class="headerlink" href="#Clustering" title="Link to this heading">#</a></h3>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[35]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>%%time
+sc.tl.leiden(adata,resolution=2.5,key_added=&#39;Leiden&#39;)
+</pre></div>
+</div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+&lt;timed eval&gt;:1: FutureWarning: In the future, the default backend for leiden will be igraph instead of leidenalg.
+
+ To achieve the future defaults please pass: flavor=&#34;igraph&#34; and n_iterations=2.  directed must also be False to work with igraph&#39;s implementation.
+</pre></div></div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+CPU times: user 1.71 s, sys: 15 ms, total: 1.73 s
+Wall time: 1.73 s
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[36]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(adata,
+           color=[&#39;CellTypes_predicted&#39;,&#39;Leiden&#39;],
+           palette=piaso.pl.color.d_color20,
+           legend_fontsize=12,
+           legend_fontoutline=2,
+           # legend_loc=&#39;on data&#39;,
+           ncols=1,
+           size=10,
+           frameon=False)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_59_0.png" class="no-scaled-link" src="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_59_0.png" style="width: 614px; height: 575px;" />
+</div>
+</div>
+</section>
+<section id="Identify-marker-genes-with-COSG">
+<h3>Identify marker genes with COSG<a class="headerlink" href="#Identify-marker-genes-with-COSG" title="Link to this heading">#</a></h3>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[37]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>%%time
+n_gene=30
+cosg.cosg(adata,
+          key_added=&#39;cosg&#39;,
+          use_raw=False,
+          layer=&#39;infog&#39;,
+          mu=100,
+          expressed_pct=0.1,
+          remove_lowly_expressed=True,
+          n_genes_user=n_gene,
+          groupby=&#39;Leiden&#39;)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+CPU times: user 571 ms, sys: 69.8 ms, total: 640 ms
+Wall time: 641 ms
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[38]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.tl.dendrogram(adata,groupby=&#39;Leiden&#39;,use_rep=&#39;X_svd&#39;)
+df_tmp=pd.DataFrame(adata.uns[&#39;cosg&#39;][&#39;names&#39;][:3,]).T
+df_tmp=df_tmp.reindex(adata.uns[&#39;dendrogram_&#39;+&#39;Leiden&#39;][&#39;categories_ordered&#39;])
+marker_genes_list={idx: list(row.values) for idx, row in df_tmp.iterrows()}
+marker_genes_list = {k: v for k, v in marker_genes_list.items() if not any(isinstance(x, float) for x in v)}
+
+sc.pl.dotplot(adata,
+              marker_genes_list,
+              groupby=&#39;Leiden&#39;,
+              layer=&#39;infog&#39;,
+              dendrogram=True,
+              swap_axes=False,
+              standard_scale=&#39;var&#39;,
+              cmap=&#39;Spectral_r&#39;)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_62_0.png" class="no-scaled-link" src="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_62_0.png" style="width: 2130px; height: 752px;" />
+</div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[39]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>marker_gene=pd.DataFrame(adata.uns[&#39;cosg&#39;][&#39;names&#39;])
+</pre></div>
+</div>
+</div>
+</section>
+<section id="Removal-of-low-quality-cells">
+<h3>Removal of low-quality cells<a class="headerlink" href="#Removal-of-low-quality-cells" title="Link to this heading">#</a></h3>
+<p>Here, we identify and remove some low quality clusters based on cell quality metrics and marker gene sets.</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[40]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>piaso.pl.plot_features_violin(adata,
+                              [&#39;n_genes_by_counts&#39;, &#39;total_counts&#39;, &#39;pct_counts_mt&#39;,&#39;pct_counts_ribo&#39;, &#39;scrublet_score&#39;],
+                              groupby=&#39;Leiden&#39;)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_65_0.png" class="no-scaled-link" src="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_65_0.png" style="width: 959px; height: 667px;" />
+</div>
+</div>
+<section id="Remove-low-quality-cells">
+<h4>Remove low quality cells<a class="headerlink" href="#Remove-low-quality-cells" title="Link to this heading">#</a></h4>
+<p>Some of the cells seems to have higher percentage of mitochondrial and ribosomal gene expression, indicating that they are low quality.</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[41]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata = adata[adata.obs[&#39;pct_counts_mt&#39;]&lt;20].copy()
+</pre></div>
+</div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[42]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata = adata[adata.obs[&#39;pct_counts_ribo&#39;]&lt;5].copy()
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[43]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(adata,
+           color=[&#39;n_genes_by_counts&#39;, &#39;total_counts&#39;,&#39;pct_counts_mt&#39;,&#39;pct_counts_ribo&#39;, &#39;scrublet_score&#39;],
+           cmap=&#39;Spectral_r&#39;,
+           palette=piaso.pl.color.d_color1,
+           ncols=2,
+           size=10,
+           frameon=False)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_69_0.png" class="no-scaled-link" src="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_69_0.png" style="width: 666px; height: 837px;" />
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[44]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(adata,
+           color=[&#39;Leiden&#39;],
+           palette=piaso.pl.color.d_color20,
+           legend_fontsize=12,
+           legend_fontoutline=2,
+           # legend_loc=&#39;on data&#39;,
+           ncols=1,
+           size=10,
+           frameon=False)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_70_0.png" class="no-scaled-link" src="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_70_0.png" style="width: 363px; height: 288px;" />
+</div>
+</div>
+</section>
+<section id="Checking-potential-low-quality-clusters">
+<h4>Checking potential low quality clusters<a class="headerlink" href="#Checking-potential-low-quality-clusters" title="Link to this heading">#</a></h4>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[45]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>cluster_check = &#39;12&#39;
+marker_gene[cluster_check].values
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[45]:
+</pre></div>
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+array([&#39;FP236383.3&#39;, &#39;SIGLEC9&#39;, &#39;MTRNR2L8&#39;, &#39;SIRPA&#39;, &#39;GABARAPL1&#39;,
+       &#39;MT-ND1&#39;, &#39;FAM157C&#39;, &#39;SMIM13&#39;, &#39;ADAMTSL4-AS1&#39;, &#39;OLR1&#39;, &#39;EPB41L3&#39;,
+       &#39;ATG16L2&#39;, &#39;CSF3R&#39;, &#39;ADAM15&#39;, &#39;NAMPT&#39;, &#39;CCL3L1&#39;, &#39;NACC2&#39;, &#39;S100A9&#39;,
+       &#39;S100A12&#39;, &#39;YBX3&#39;, &#39;TYMP&#39;, &#39;STAB1&#39;, &#39;PLAUR&#39;, &#39;CD14&#39;, &#39;PTPRE&#39;,
+       &#39;KDM6B&#39;, &#39;ACSS2&#39;, &#39;NR4A3&#39;, &#39;FRMD4B&#39;, &#39;NEAT1&#39;], dtype=object)
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[46]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(adata,
+           color=[&#39;FP236383.3&#39;, &#39;SIGLEC9&#39;, &#39;MTRNR2L8&#39;, &#39;SIRPA&#39;, &#39;GABARAPL1&#39;,
+                  &#39;MT-ND1&#39;, &#39;FAM157C&#39;, &#39;SMIM13&#39;, &#39;ADAMTSL4-AS1&#39;, &#39;OLR1&#39;, &#39;EPB41L3&#39;],
+           cmap=piaso.pl.color.c_color1,
+           palette=piaso.pl.color.d_color1,
+           ncols=3,
+           size=10,
+           frameon=False)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_73_0.png" class="no-scaled-link" src="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_73_0.png" style="width: 959px; height: 1124px;" />
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[47]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.dotplot(adata,
+              marker_gene[cluster_check].values[:30],
+              groupby=&#39;Leiden&#39;,
+              dendrogram=False,
+              swap_axes=True,
+              standard_scale=&#39;var&#39;,
+              cmap=&#39;Spectral_r&#39;)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_74_0.png" class="no-scaled-link" src="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_74_0.png" style="width: 869px; height: 737px;" />
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[48]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(adata,
+           color=[&#39;Leiden&#39;],
+           groups=[&#39;12&#39;,&#39;13&#39;,&#39;23&#39;,&#39;25&#39;],
+           palette=piaso.pl.color.d_color20,
+           legend_fontsize=12,
+           legend_fontoutline=2,
+           # legend_loc=&#39;on data&#39;,
+           ncols=1,
+           size=10,
+           frameon=False)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_75_0.png" class="no-scaled-link" src="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_75_0.png" style="width: 313px; height: 277px;" />
+</div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[49]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata=adata[~adata.obs[&#39;Leiden&#39;].isin([&#39;12&#39;,&#39;13&#39;,&#39;23&#39;,&#39;25&#39;])].copy()
+</pre></div>
+</div>
+</div>
+</section>
+</section>
+<section id="2.-INFOG-Normalization">
+<h3>2. INFOG Normalization<a class="headerlink" href="#2.-INFOG-Normalization" title="Link to this heading">#</a></h3>
+<p>It is important to re-run INFOG normalization and dimensionality reduction after filtering out cells, to accurately capture the current cell population.</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[50]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>%%time
+piaso.tl.infog(adata,
+               copy=False,
+               inplace=False,
+               n_top_genes=3000,
+               key_added=&#39;infog&#39;,
+               key_added_highly_variable_gene=&#39;highly_variable&#39;,
+               layer=&#39;raw&#39;)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+The normalized data is saved as `infog` in `adata.layers`.
+The highly variable genes are saved as `highly_variable` in `adata.var`.
+Finished INFOG normalization.
+CPU times: user 321 ms, sys: 54.8 ms, total: 376 ms
+Wall time: 375 ms
+</pre></div></div>
+</div>
+</section>
+<section id="id4">
+<h3>Dimensionality reduction<a class="headerlink" href="#id4" title="Link to this heading">#</a></h3>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[51]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>%%time
+piaso.tl.runSVD(adata,
+                use_highly_variable=True,
+                n_components=30,
+                random_state=10,
+                key_added=&#39;X_svd&#39;,
+                layer=&#39;infog&#39;)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+CPU times: user 2.11 s, sys: 1.75 ms, total: 2.11 s
+Wall time: 366 ms
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[52]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>%%time
+sc.pp.neighbors(adata,
+                use_rep=&#39;X_svd&#39;,
+                n_neighbors=15,
+                random_state=10,
+                knn=True,
+                method=&quot;umap&quot;)
+
+sc.tl.umap(adata)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+CPU times: user 16.4 s, sys: 4.84 ms, total: 16.4 s
+Wall time: 13.2 s
+</pre></div></div>
+</div>
+</section>
+<section id="id5">
+<h3>Predict cell types based on marker gene sets<a class="headerlink" href="#id5" title="Link to this heading">#</a></h3>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[53]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>%%time
+piaso.tl.predictCellTypeByMarker(adata,
+                                 marker_gene_set=marker_gene_dict,
+                                 score_method=&#39;piaso&#39;,
+                                 use_rep=&#39;X_svd&#39;,
+                                 use_score=False,
+                                 key_added = &#39;CellTypes_predicted&#39;,
+                                 smooth_prediction=True,
+                                 inplace=True)
+</pre></div>
+</div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Calculating gene set scores using piaso method...
+</pre></div></div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+Scoring gene sets: 100%|██████████| 29/29 [00:21&lt;00:00,  1.33set/s]
+</pre></div></div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Predicting cell types based on marker gene p-values...
+Smoothing cell type predictions...
+Smoothing cell type predictions from &#39;CellTypes_predicted_raw&#39; using 7-nearest neighbors
+Smoothed predictions stored in adata.obs[&#39;CellTypes_predicted_smoothed&#39;]
+Confidence scores stored in adata.obs[&#39;CellTypes_predicted_smoothed_confidence&#39;]
+Modified 766 cell labels (22.07% of total)
+Cell type prediction completed. Results saved to:
+  - adata.obs[&#39;CellTypes_predicted&#39;]: predicted cell types
+  - adata.obsm[&#39;CellTypes_predicted_score&#39;]: full score matrix
+  - adata.obsm[&#39;CellTypes_predicted_nlog10pvals&#39;]: full -log10(p-value) matrix
+  - adata.obs[&#39;CellTypes_predicted_nlog10pvals&#39;]: maximum -log10(p-values)
+  - adata.obs[&#39;CellTypes_predicted_raw&#39;]: original unsmoothed predictions
+  - adata.obs[&#39;CellTypes_predicted_confidence_smoothed&#39;]: smoothing confidence scores
+CPU times: user 3.62 s, sys: 138 ms, total: 3.75 s
+Wall time: 26.1 s
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[54]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(adata,
+           color=[&#39;CellTypes_predicted&#39;],
+           palette=piaso.pl.color.d_color20,
+           legend_fontsize=8,
+           legend_fontoutline=1,
+           # legend_loc=&#39;on data&#39;,
+           ncols=1,
+           size=10,
+           frameon=False)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_84_0.png" class="no-scaled-link" src="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_84_0.png" style="width: 478px; height: 277px;" />
+</div>
+</div>
+</section>
+<section id="id6">
+<h3>Identify marker genes with COSG<a class="headerlink" href="#id6" title="Link to this heading">#</a></h3>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[55]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>%%time
+n_gene=30
+cosg.cosg(adata,
+          key_added=&#39;cosg&#39;,
+          use_raw=False,
+          layer=&#39;infog&#39;,
+          mu=100,
+          expressed_pct=0.1,
+          remove_lowly_expressed=True,
+          n_genes_user=n_gene,
+          groupby=&#39;CellTypes_predicted&#39;)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+CPU times: user 471 ms, sys: 5.97 ms, total: 477 ms
+Wall time: 477 ms
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[56]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>marker_gene=pd.DataFrame(adata.uns[&#39;cosg&#39;][&#39;names&#39;])
+marker_gene
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[56]:
+</pre></div>
+</div>
+<div class="output_area rendered_html docutils container">
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>ASDC</th>
+      <th>CD8aa</th>
+      <th>CD14 monocyte</th>
+      <th>CD16 monocyte</th>
+      <th>CD56bright NK cell</th>
+      <th>CD56dim NK cell</th>
+      <th>DN T cell</th>
+      <th>Effector B cell</th>
+      <th>Erythrocyte</th>
+      <th>Intermediate monocyte</th>
+      <th>...</th>
+      <th>Naive B cell</th>
+      <th>Naive CD4 T cell</th>
+      <th>Naive CD8 T cell</th>
+      <th>Plasma cell</th>
+      <th>Proliferating NK cell</th>
+      <th>Transitional B cell</th>
+      <th>Treg</th>
+      <th>cDC1</th>
+      <th>cDC2</th>
+      <th>gdT</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>AC097375.1</td>
+      <td>PDGFB</td>
+      <td>DYSF</td>
+      <td>AC104809.2</td>
+      <td>SPTSSB</td>
+      <td>BNC2</td>
+      <td>LINC01726</td>
+      <td>SOX5</td>
+      <td>IGLV5-52</td>
+      <td>SASH1</td>
+      <td>...</td>
+      <td>AL139020.1</td>
+      <td>ANKRD55</td>
+      <td>LINC02446</td>
+      <td>IGHA1</td>
+      <td>AC130456.5</td>
+      <td>LINC01266</td>
+      <td>AC022929.2</td>
+      <td>AC092828.1</td>
+      <td>FCER1A</td>
+      <td>TRDC</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>LINC01478</td>
+      <td>STX1A</td>
+      <td>CRISPLD2</td>
+      <td>CDKN1C</td>
+      <td>LINC01023</td>
+      <td>MYOM2</td>
+      <td>TRBJ1-2</td>
+      <td>FCRL5</td>
+      <td>TRBV5-5</td>
+      <td>PID1</td>
+      <td>...</td>
+      <td>COL19A1</td>
+      <td>AL109930.1</td>
+      <td>NELL2</td>
+      <td>IGHJ5</td>
+      <td>AC104073.4</td>
+      <td>JAM2</td>
+      <td>LINC02694</td>
+      <td>AL355312.4</td>
+      <td>ENHO</td>
+      <td>TRGC1</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>EPHB1</td>
+      <td>BICRA-AS1</td>
+      <td>LIN7A</td>
+      <td>LINC02085</td>
+      <td>CABLES1</td>
+      <td>GRIK4</td>
+      <td>LINC02252</td>
+      <td>CNFN</td>
+      <td>SLC24A5</td>
+      <td>SRC</td>
+      <td>...</td>
+      <td>SLC38A11</td>
+      <td>FHIT</td>
+      <td>CD8B</td>
+      <td>MIXL1</td>
+      <td>LINC02537</td>
+      <td>MME</td>
+      <td>FOXP3</td>
+      <td>TKTL2</td>
+      <td>MRC1</td>
+      <td>TRGV9</td>
+    </tr>
+    <tr>
+      <th>3</th>
+      <td>LRRC26</td>
+      <td>SLC35C1</td>
+      <td>VCAN</td>
+      <td>LYPD2</td>
+      <td>TNFRSF11A</td>
+      <td>SPON2</td>
+      <td>OOSP1</td>
+      <td>WSCD2</td>
+      <td>LONRF2</td>
+      <td>CPVL</td>
+      <td>...</td>
+      <td>IGHD</td>
+      <td>TSHZ2</td>
+      <td>NRCAM</td>
+      <td>JCHAIN</td>
+      <td>ACRV1</td>
+      <td>PYCR3</td>
+      <td>FANK1</td>
+      <td>HOXA10</td>
+      <td>CD1C</td>
+      <td>KLRC1</td>
+    </tr>
+    <tr>
+      <th>4</th>
+      <td>AC018643.1</td>
+      <td>MLST8</td>
+      <td>PADI4</td>
+      <td>GPR20</td>
+      <td>XCL1</td>
+      <td>LINGO2</td>
+      <td>LINC01169</td>
+      <td>TLCD4</td>
+      <td>CR382287.2</td>
+      <td>AC009093.2</td>
+      <td>...</td>
+      <td>LIX1-AS1</td>
+      <td>KANK1</td>
+      <td>GLIS3</td>
+      <td>SDC1</td>
+      <td>AC022517.1</td>
+      <td>LINC00494</td>
+      <td>AC013652.1</td>
+      <td>TACSTD2</td>
+      <td>CLEC10A</td>
+      <td>PTMS</td>
+    </tr>
+    <tr>
+      <th>5</th>
+      <td>CUX2</td>
+      <td>ZSCAN26</td>
+      <td>NLRP12</td>
+      <td>AC020651.2</td>
+      <td>AC002429.2</td>
+      <td>MIR181A2HG</td>
+      <td>AC016727.3</td>
+      <td>UQCRHL</td>
+      <td>LINC00664</td>
+      <td>EPB41L3</td>
+      <td>...</td>
+      <td>AKAP6</td>
+      <td>LEF1</td>
+      <td>AL590006.1</td>
+      <td>IGHV3-15</td>
+      <td>AC007179.1</td>
+      <td>NEIL1</td>
+      <td>HACD1</td>
+      <td>AC109347.1</td>
+      <td>PKIB</td>
+      <td>IL12RB2</td>
+    </tr>
+    <tr>
+      <th>6</th>
+      <td>AC023590.1</td>
+      <td>MAMLD1</td>
+      <td>WLS</td>
+      <td>PPP1R17</td>
+      <td>PPP1R9A</td>
+      <td>CD160</td>
+      <td>AC023154.1</td>
+      <td>SIGLEC6</td>
+      <td>RND2</td>
+      <td>IGF2BP2</td>
+      <td>...</td>
+      <td>PCDH9</td>
+      <td>PLCL1</td>
+      <td>CA6</td>
+      <td>VPREB1</td>
+      <td>LINC02289</td>
+      <td>AC103831.1</td>
+      <td>DUSP4</td>
+      <td>ZBTB46-AS1</td>
+      <td>LRP1B</td>
+      <td>CCL5</td>
+    </tr>
+    <tr>
+      <th>7</th>
+      <td>KCNK1</td>
+      <td>AGMAT</td>
+      <td>CXCL8</td>
+      <td>CKB</td>
+      <td>ZMAT4</td>
+      <td>FGFBP2</td>
+      <td>AC026765.3</td>
+      <td>PTCHD1-AS</td>
+      <td>AC023669.2</td>
+      <td>RTN1</td>
+      <td>...</td>
+      <td>LINC00926</td>
+      <td>AK5</td>
+      <td>LRRN3</td>
+      <td>IGKV3-15</td>
+      <td>AC005703.7</td>
+      <td>AL365272.1</td>
+      <td>RTKN2</td>
+      <td>ARHGEF3-AS1</td>
+      <td>NCKAP5</td>
+      <td>AC010175.1</td>
+    </tr>
+    <tr>
+      <th>8</th>
+      <td>AC104819.3</td>
+      <td>MRPS2</td>
+      <td>FCAR</td>
+      <td>HES4</td>
+      <td>SERPINE1</td>
+      <td>LDB2</td>
+      <td>SLC14A2</td>
+      <td>CLECL1</td>
+      <td>AC011477.9</td>
+      <td>PSAP</td>
+      <td>...</td>
+      <td>LIX1</td>
+      <td>EDAR</td>
+      <td>PDE3B</td>
+      <td>IGHV3-30</td>
+      <td>SNHG18</td>
+      <td>TIMP3</td>
+      <td>CDHR3</td>
+      <td>AC069410.1</td>
+      <td>CD1E</td>
+      <td>S100B</td>
+    </tr>
+    <tr>
+      <th>9</th>
+      <td>AP000146.1</td>
+      <td>AL137779.1</td>
+      <td>LUCAT1</td>
+      <td>LYNX1</td>
+      <td>AL590807.1</td>
+      <td>LINC01505</td>
+      <td>AC092683.2</td>
+      <td>WNT16</td>
+      <td>AL133343.2</td>
+      <td>IFI30</td>
+      <td>...</td>
+      <td>ABCB4</td>
+      <td>FAM153A</td>
+      <td>THEMIS</td>
+      <td>MZB1</td>
+      <td>Z92544.2</td>
+      <td>STIL</td>
+      <td>WEE1</td>
+      <td>AL356056.1</td>
+      <td>ST18</td>
+      <td>LINC00612</td>
+    </tr>
+    <tr>
+      <th>10</th>
+      <td>AC097375.2</td>
+      <td>PPP2R1B</td>
+      <td>AL163541.1</td>
+      <td>CROCC2</td>
+      <td>RAMP1</td>
+      <td>IGFBP7</td>
+      <td>C17orf98</td>
+      <td>SLCO4A1</td>
+      <td>AC067838.1</td>
+      <td>PTGIR</td>
+      <td>...</td>
+      <td>FCER2</td>
+      <td>LEF1-AS1</td>
+      <td>CACHD1</td>
+      <td>ITGA8</td>
+      <td>NADK2-AS1</td>
+      <td>TCL6</td>
+      <td>EVC2</td>
+      <td>AC141586.3</td>
+      <td>HTR7</td>
+      <td>KLRG1</td>
+    </tr>
+    <tr>
+      <th>11</th>
+      <td>CYYR1</td>
+      <td>AC004918.1</td>
+      <td>PRICKLE1</td>
+      <td>VMO1</td>
+      <td>EFHC2</td>
+      <td>LINC00298</td>
+      <td>ZNF843</td>
+      <td>GALNTL6</td>
+      <td>AC114971.1</td>
+      <td>CD300E</td>
+      <td>...</td>
+      <td>KHDRBS2</td>
+      <td>ITGA6</td>
+      <td>SCML1</td>
+      <td>GLDC</td>
+      <td>LINC02721</td>
+      <td>AC139795.2</td>
+      <td>CCR10</td>
+      <td>CLNK</td>
+      <td>DTNA</td>
+      <td>A2M</td>
+    </tr>
+    <tr>
+      <th>12</th>
+      <td>LAMP5</td>
+      <td>CRTAM</td>
+      <td>GLT1D1</td>
+      <td>FMNL2</td>
+      <td>KLRC2</td>
+      <td>MMP23B</td>
+      <td>AC004223.2</td>
+      <td>AC116534.1</td>
+      <td>TESC-AS1</td>
+      <td>AC020656.1</td>
+      <td>...</td>
+      <td>STEAP1B</td>
+      <td>MAN1C1</td>
+      <td>APBA2</td>
+      <td>TXNDC5</td>
+      <td>AC022296.4</td>
+      <td>SMIM15</td>
+      <td>STAM</td>
+      <td>CLEC9A</td>
+      <td>FLT3</td>
+      <td>PZP</td>
+    </tr>
+    <tr>
+      <th>13</th>
+      <td>NRP1</td>
+      <td>AC025917.1</td>
+      <td>CSF3R</td>
+      <td>PAPSS2</td>
+      <td>NCAM1</td>
+      <td>PRF1</td>
+      <td>OSGEPL1-AS1</td>
+      <td>AL592429.2</td>
+      <td>AC003988.1</td>
+      <td>MARCO</td>
+      <td>...</td>
+      <td>FCRL1</td>
+      <td>CHRM3-AS2</td>
+      <td>SNTG2</td>
+      <td>TNFRSF17</td>
+      <td>PPP1R14B-AS1</td>
+      <td>PPAN</td>
+      <td>FGFR1</td>
+      <td>BCHE</td>
+      <td>SLAMF8</td>
+      <td>CACNA2D2</td>
+    </tr>
+    <tr>
+      <th>14</th>
+      <td>LINC01724</td>
+      <td>CDC14B</td>
+      <td>VCAN-AS1</td>
+      <td>NEURL1</td>
+      <td>KLRC3</td>
+      <td>PRSS23</td>
+      <td>AC008914.1</td>
+      <td>TNFRSF13B</td>
+      <td>AKR1C4</td>
+      <td>ZC3H12C</td>
+      <td>...</td>
+      <td>SCN3A</td>
+      <td>PRKCA</td>
+      <td>CRTAM</td>
+      <td>AL357873.1</td>
+      <td>AL138759.1</td>
+      <td>ZNF486</td>
+      <td>GMNN</td>
+      <td>HLA-DQB1-AS1</td>
+      <td>CST3</td>
+      <td>TNFSF14</td>
+    </tr>
+    <tr>
+      <th>15</th>
+      <td>LINC00865</td>
+      <td>STMN3</td>
+      <td>NRG1</td>
+      <td>SMIM25</td>
+      <td>C1orf141</td>
+      <td>GZMB</td>
+      <td>AKR1C1</td>
+      <td>LINC02669</td>
+      <td>AC134407.1</td>
+      <td>LYZ</td>
+      <td>...</td>
+      <td>IL4R</td>
+      <td>TRABD2A</td>
+      <td>CD8A</td>
+      <td>IGLV2-14</td>
+      <td>AC002563.1</td>
+      <td>AC078980.1</td>
+      <td>ZC2HC1A</td>
+      <td>CLSTN2</td>
+      <td>DEPTOR</td>
+      <td>A2M-AS1</td>
+    </tr>
+    <tr>
+      <th>16</th>
+      <td>PHEX</td>
+      <td>KIF21A</td>
+      <td>ACSL1</td>
+      <td>C1QA</td>
+      <td>C6orf226</td>
+      <td>CLIC3</td>
+      <td>AC243965.1</td>
+      <td>GPM6A</td>
+      <td>C20orf144</td>
+      <td>LILRB4</td>
+      <td>...</td>
+      <td>LARGE1</td>
+      <td>EPHX2</td>
+      <td>LRRC7</td>
+      <td>PLAAT2</td>
+      <td>SRARP</td>
+      <td>MAP2</td>
+      <td>SNX21</td>
+      <td>LRRC49</td>
+      <td>HLA-DRB1</td>
+      <td>COL6A2</td>
+    </tr>
+    <tr>
+      <th>17</th>
+      <td>LINC01226</td>
+      <td>AL645728.1</td>
+      <td>AQP9</td>
+      <td>ICAM4</td>
+      <td>TSPAN2</td>
+      <td>RHOBTB3</td>
+      <td>RAB3C</td>
+      <td>AL031728.1</td>
+      <td>SPACA3</td>
+      <td>FADS1</td>
+      <td>...</td>
+      <td>AFF3</td>
+      <td>MAL</td>
+      <td>EPHA1-AS1</td>
+      <td>CNKSR1</td>
+      <td>CR381670.2</td>
+      <td>AC061958.1</td>
+      <td>ICA1</td>
+      <td>SMO</td>
+      <td>ZNF366</td>
+      <td>HOPX</td>
+    </tr>
+    <tr>
+      <th>18</th>
+      <td>TCF4-AS1</td>
+      <td>IVD</td>
+      <td>SPOCK1</td>
+      <td>TCF7L2</td>
+      <td>TNFRSF18</td>
+      <td>AKR1C3</td>
+      <td>LINC00536</td>
+      <td>AC022509.2</td>
+      <td>AC112512.1</td>
+      <td>FCGRT</td>
+      <td>...</td>
+      <td>PAX5</td>
+      <td>RPL34-AS1</td>
+      <td>PRKCA-AS1</td>
+      <td>IGLC2</td>
+      <td>GRIK1-AS1</td>
+      <td>AC098829.1</td>
+      <td>MCF2L2</td>
+      <td>MIR924HG</td>
+      <td>HLA-DPA1</td>
+      <td>SH3BGRL3</td>
+    </tr>
+    <tr>
+      <th>19</th>
+      <td>PTPRS</td>
+      <td>GCLM</td>
+      <td>CYP1B1</td>
+      <td>LINC02345</td>
+      <td>LINC01146</td>
+      <td>KLRF1</td>
+      <td>EPPK1</td>
+      <td>AC090541.1</td>
+      <td>CYB5D1</td>
+      <td>FGL2</td>
+      <td>...</td>
+      <td>AC108879.1</td>
+      <td>MLLT3</td>
+      <td>PRKAR1B</td>
+      <td>IGHG2</td>
+      <td>FAM215A</td>
+      <td>C14orf119</td>
+      <td>TTN</td>
+      <td>AC022217.2</td>
+      <td>IL1R2</td>
+      <td>LINC00987</td>
+    </tr>
+    <tr>
+      <th>20</th>
+      <td>PTCRA</td>
+      <td>MGAT2</td>
+      <td>LINC00937</td>
+      <td>SFTPD</td>
+      <td>KLHL23</td>
+      <td>PDGFD</td>
+      <td>AL591684.1</td>
+      <td>SYT1</td>
+      <td>GRIA3</td>
+      <td>EMILIN2</td>
+      <td>...</td>
+      <td>SYN3</td>
+      <td>IL6ST</td>
+      <td>AC009041.2</td>
+      <td>GPRC5D</td>
+      <td>S100A2</td>
+      <td>ZNF350-AS1</td>
+      <td>OSBP2</td>
+      <td>AC104964.1</td>
+      <td>CLIC2</td>
+      <td>GNLY</td>
+    </tr>
+    <tr>
+      <th>21</th>
+      <td>LILRA4</td>
+      <td>SMYD2</td>
+      <td>PLBD1</td>
+      <td>CEACAM3</td>
+      <td>XCL2</td>
+      <td>TTC38</td>
+      <td>BNIPL</td>
+      <td>AC109446.3</td>
+      <td>SPDYE2B</td>
+      <td>MRAS</td>
+      <td>...</td>
+      <td>AC120193.1</td>
+      <td>AL163932.1</td>
+      <td>NR3C2</td>
+      <td>IGKC</td>
+      <td>DUSP13</td>
+      <td>CD180</td>
+      <td>IL2RA</td>
+      <td>LINC01134</td>
+      <td>HLA-DPB1</td>
+      <td>TGFBR3</td>
+    </tr>
+    <tr>
+      <th>22</th>
+      <td>ARPP21</td>
+      <td>PBDC1</td>
+      <td>TREM1</td>
+      <td>KNDC1</td>
+      <td>ROR1</td>
+      <td>NCR1</td>
+      <td>IGSF22</td>
+      <td>WDR11-AS1</td>
+      <td>AC005498.2</td>
+      <td>SECTM1</td>
+      <td>...</td>
+      <td>ADAM28</td>
+      <td>CCR7</td>
+      <td>LEF1</td>
+      <td>IGLV2-11</td>
+      <td>AL138976.2</td>
+      <td>ZNF669</td>
+      <td>SPSB1</td>
+      <td>SHC3</td>
+      <td>ITGB5</td>
+      <td>LYSMD2</td>
+    </tr>
+    <tr>
+      <th>23</th>
+      <td>TDRD1</td>
+      <td>C7orf26</td>
+      <td>CD36</td>
+      <td>LST1</td>
+      <td>IL12RB2</td>
+      <td>SH2D1B</td>
+      <td>GINS2</td>
+      <td>GEN1</td>
+      <td>MOBP</td>
+      <td>TSPAN4</td>
+      <td>...</td>
+      <td>KCNH8</td>
+      <td>CAMK4</td>
+      <td>ABLIM1</td>
+      <td>KCNMA1</td>
+      <td>AP005209.2</td>
+      <td>FAM3C</td>
+      <td>IKZF2</td>
+      <td>KCND3</td>
+      <td>NEGR1</td>
+      <td>GZMM</td>
+    </tr>
+    <tr>
+      <th>24</th>
+      <td>PLCB4</td>
+      <td>CORO2A</td>
+      <td>LPAR1</td>
+      <td>MS4A7</td>
+      <td>ATP8B4</td>
+      <td>SORBS2</td>
+      <td>AL033528.2</td>
+      <td>MS4A1</td>
+      <td>ZSCAN23</td>
+      <td>LGALS3</td>
+      <td>...</td>
+      <td>IGHM</td>
+      <td>IGF1R</td>
+      <td>CCR7</td>
+      <td>AC009570.2</td>
+      <td>TROAP</td>
+      <td>ADGRF3</td>
+      <td>MIAT</td>
+      <td>LAMB2</td>
+      <td>ADGRG6</td>
+      <td>C1orf21</td>
+    </tr>
+    <tr>
+      <th>25</th>
+      <td>SLC35F3</td>
+      <td>NIPSNAP3A</td>
+      <td>RBM47</td>
+      <td>SIGLEC10</td>
+      <td>GPR68</td>
+      <td>RNF165</td>
+      <td>LINC01949</td>
+      <td>PLPP3</td>
+      <td>LINC01182</td>
+      <td>CFP</td>
+      <td>...</td>
+      <td>SLC9A7</td>
+      <td>OXNAD1</td>
+      <td>PSMA1</td>
+      <td>EML6</td>
+      <td>LINC02354</td>
+      <td>MIR762HG</td>
+      <td>ZNF365</td>
+      <td>STEAP3</td>
+      <td>ZBTB46</td>
+      <td>ZDHHC12</td>
+    </tr>
+    <tr>
+      <th>26</th>
+      <td>NTM</td>
+      <td>SAP30L</td>
+      <td>TNFAIP6</td>
+      <td>CLEC4F</td>
+      <td>IL18R1</td>
+      <td>CCL4</td>
+      <td>PRMT6</td>
+      <td>GRAPL</td>
+      <td>VWCE</td>
+      <td>TTYH3</td>
+      <td>...</td>
+      <td>GLYATL1</td>
+      <td>SERINC5</td>
+      <td>OXNAD1</td>
+      <td>IGHG3</td>
+      <td>USP6</td>
+      <td>HAUS3</td>
+      <td>AC110611.1</td>
+      <td>TMEM201</td>
+      <td>FZD2</td>
+      <td>SH2D1A</td>
+    </tr>
+    <tr>
+      <th>27</th>
+      <td>COL24A1</td>
+      <td>CDKL3</td>
+      <td>FAM198B-AS1</td>
+      <td>FCGR3A</td>
+      <td>KLRC1</td>
+      <td>S1PR5</td>
+      <td>AC093227.1</td>
+      <td>EFNA4</td>
+      <td>PLEKHA4</td>
+      <td>TNFAIP2</td>
+      <td>...</td>
+      <td>LINC01800</td>
+      <td>RNF157</td>
+      <td>MAML2</td>
+      <td>IGHA2</td>
+      <td>PTPN3</td>
+      <td>OXSM</td>
+      <td>CTLA4</td>
+      <td>DZIP1L</td>
+      <td>CYP2S1</td>
+      <td>NDUFS3</td>
+    </tr>
+    <tr>
+      <th>28</th>
+      <td>AR</td>
+      <td>AC112722.1</td>
+      <td>AC020916.1</td>
+      <td>CTSL</td>
+      <td>KXD1</td>
+      <td>IL2RB</td>
+      <td>AC015911.6</td>
+      <td>AC025569.1</td>
+      <td>AC074366.1</td>
+      <td>NHSL1</td>
+      <td>...</td>
+      <td>AC019197.1</td>
+      <td>PRKCQ-AS1</td>
+      <td>NDFIP1</td>
+      <td>IGF1</td>
+      <td>AC091153.3</td>
+      <td>NCAM2</td>
+      <td>AK6</td>
+      <td>ENOX1</td>
+      <td>HLA-DRA</td>
+      <td>DUSP2</td>
+    </tr>
+    <tr>
+      <th>29</th>
+      <td>COL26A1</td>
+      <td>SEC23IP</td>
+      <td>AL034397.3</td>
+      <td>SPRED1</td>
+      <td>LINC01684</td>
+      <td>ANKRD20A4</td>
+      <td>PMP22</td>
+      <td>CD70</td>
+      <td>P3H3</td>
+      <td>CTSH</td>
+      <td>...</td>
+      <td>AP001636.3</td>
+      <td>TCF7</td>
+      <td>ACTN1</td>
+      <td>TSHR</td>
+      <td>TRAV18</td>
+      <td>AHCYL1</td>
+      <td>TOX</td>
+      <td>AC092794.1</td>
+      <td>LHFPL6</td>
+      <td>GZMH</td>
+    </tr>
+  </tbody>
+</table>
+<p>30 rows × 24 columns</p>
+</div></div>
+</div>
+<p>We can use a dendrogram dot plot to visualize the expression of the top three marker genes of each predicted cell type.</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[57]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.tl.dendrogram(adata,groupby=&#39;CellTypes_predicted&#39;,use_rep=&#39;X_svd&#39;)
+df_tmp=pd.DataFrame(adata.uns[&#39;cosg&#39;][&#39;names&#39;][:3,]).T
+df_tmp=df_tmp.reindex(adata.uns[&#39;dendrogram_&#39;+&#39;CellTypes_predicted&#39;][&#39;categories_ordered&#39;])
+marker_genes_list={idx: list(row.values) for idx, row in df_tmp.iterrows()}
+marker_genes_list = {k: v for k, v in marker_genes_list.items() if not any(isinstance(x, float) for x in v)}
+
+sc.pl.dotplot(adata,
+              marker_genes_list,
+              groupby=&#39;CellTypes_predicted&#39;,
+              layer=&#39;infog&#39;,
+              dendrogram=True,
+              swap_axes=False,
+              standard_scale=&#39;var&#39;,
+              cmap=&#39;Spectral_r&#39;)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_89_0.png" class="no-scaled-link" src="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_89_0.png" style="width: 1970px; height: 776px;" />
+</div>
+</div>
+<section id="Marker-genes-for-CD16-monocyte">
+<h4>Marker genes for CD16 monocyte<a class="headerlink" href="#Marker-genes-for-CD16-monocyte" title="Link to this heading">#</a></h4>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[58]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>cluster_check = &#39;CD16 monocyte&#39;
+marker_gene[cluster_check].values
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[58]:
+</pre></div>
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+array([&#39;AC104809.2&#39;, &#39;CDKN1C&#39;, &#39;LINC02085&#39;, &#39;LYPD2&#39;, &#39;GPR20&#39;,
+       &#39;AC020651.2&#39;, &#39;PPP1R17&#39;, &#39;CKB&#39;, &#39;HES4&#39;, &#39;LYNX1&#39;, &#39;CROCC2&#39;, &#39;VMO1&#39;,
+       &#39;FMNL2&#39;, &#39;PAPSS2&#39;, &#39;NEURL1&#39;, &#39;SMIM25&#39;, &#39;C1QA&#39;, &#39;ICAM4&#39;, &#39;TCF7L2&#39;,
+       &#39;LINC02345&#39;, &#39;SFTPD&#39;, &#39;CEACAM3&#39;, &#39;KNDC1&#39;, &#39;LST1&#39;, &#39;MS4A7&#39;,
+       &#39;SIGLEC10&#39;, &#39;CLEC4F&#39;, &#39;FCGR3A&#39;, &#39;CTSL&#39;, &#39;SPRED1&#39;], dtype=object)
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[59]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(adata,
+           color=[&#39;AC104809.2&#39;, &#39;GPR20&#39;, &#39;CDKN1C&#39;, &#39;AC020651.2&#39;, &#39;C1QA&#39;, &#39;LINC02085&#39;,
+                  &#39;LYPD2&#39;, &#39;PPP1R17&#39;, &#39;CKB&#39;, &#39;HES4&#39;, &#39;CROCC2&#39;, &#39;FMNL2&#39;, &#39;VMO1&#39;],
+           cmap=piaso.pl.color.c_color1,
+           palette=piaso.pl.color.d_color1,
+           ncols=3,
+           size=10,
+           frameon=False)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_92_0.png" class="no-scaled-link" src="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_92_0.png" style="width: 963px; height: 1402px;" />
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[60]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.dotplot(adata,
+              marker_gene[cluster_check].values[:30],
+              groupby=&#39;CellTypes_predicted&#39;,
+              dendrogram=False,
+              swap_axes=True,
+              standard_scale=&#39;var&#39;,
+              cmap=&#39;Spectral_r&#39;)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_93_0.png" class="no-scaled-link" src="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_93_0.png" style="width: 752px; height: 855px;" />
+</div>
+</div>
+</section>
+</section>
+</section>
+<section id="id7">
+<h2>Save the data<a class="headerlink" href="#id7" title="Link to this heading">#</a></h2>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[61]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata.write(save_dir + &#39;/&#39; + prefix + &#39;_QC.h5ad&#39;)
+</pre></div>
+</div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[62]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>marker_gene.to_csv(save_dir + &#39;/&#39; + prefix + &#39;CellType_markerGenes.csv&#39;)
+</pre></div>
+</div>
+</div>
+</section>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="GDR_Tutorial.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">GDR: marker Gene-guided Dimensionality Reduction</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="rnaSeqPipelineTutorial_mouse.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Pre-processing CellRanger outputs (single sample, mouse brain)</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#Download-the-data">Download the data</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#Load-the-data">Load the data</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#Quality-Control">Quality Control</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#Filter-cells">Filter cells</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#Calculate-cell-quality-metrics">Calculate cell quality metrics</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#Doublet-prediction">Doublet prediction</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#INFOG-Normalization">INFOG Normalization</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#Dimensionality-reduction">Dimensionality reduction</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#Save-the-data">Save the data</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#Filtering-cells-based-on-gene-counts">Filtering cells based on gene counts</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#Annotation">Annotation</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#Preprocessing-cell-type-specific-marker-gene-sets">Preprocessing cell type-specific marker gene sets</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#1.-INFOG-Normalization">1. INFOG Normalization</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#id2">Dimensionality reduction</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#Predict-cell-types-based-on-marker-gene-sets">Predict cell types based on marker gene sets</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#Clustering">Clustering</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#Identify-marker-genes-with-COSG">Identify marker genes with COSG</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#Removal-of-low-quality-cells">Removal of low-quality cells</a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#Remove-low-quality-cells">Remove low quality cells</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#Checking-potential-low-quality-clusters">Checking potential low quality clusters</a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#2.-INFOG-Normalization">2. INFOG Normalization</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#id4">Dimensionality reduction</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#id5">Predict cell types based on marker gene sets</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#id6">Identify marker genes with COSG</a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#Marker-genes-for-CD16-monocyte">Marker genes for CD16 monocyte</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#id7">Save the data</a></li>
+</ul>
+  </nav></div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf"></script>
+<script defer src="../_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2025, Min Dai.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 7.3.7.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  <!-- # L10n: Setting the PST URL as an argument as this does not need to be localized -->
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.16.1.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

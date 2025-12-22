@@ -6,10 +6,16 @@ Tutorials
 
    notebooks/PIASO_tutorial.ipynb
    notebooks/GDR_Tutorial.ipynb
-   notebooks/GDRPredictCellTypeTutorial.ipynb
+   notebooks/scRNAseqProcessingTutorial_SAN2.ipynb
+   notebooks/rnaSeqPipelineTutorial_mouse.ipynb
+   notebooks/rnaSeqPipelineTutorial_E18_mouse.ipynb
+   notebooks/1millionCells_AsianImmuneDiversityAtlasPhase1v2.ipynb
+   notebooks/PIASO_GDR_on_mousePancreaticEndocrinogenesis.ipynb
    notebooks/GDR_ATAC_Tutorial.ipynb
-   notebooks/rnaSeqPipelineTutorial.ipynb
-   notebooks/rnaSeqPipelineTutorial_E18.ipynb
+   notebooks/PIASO_GDR_on_MNIST.ipynb
+   notebooks/GDR_COSG_FashionMNIST.ipynb
+   notebooks/27_PIASO_markerGeneBasedCellTypePrediction_mouseCortex_updated.ipynb
+   notebooks/GDRPredictCellTypeTutorial.ipynb
    notebooks/LeidenLocalTutorial.ipynb
    notebooks/01_showThePlotFunction.ipynb
    notebooks/colorPalettes.ipynb

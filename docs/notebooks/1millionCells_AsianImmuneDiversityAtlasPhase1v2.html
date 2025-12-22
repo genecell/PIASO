@@ -1,0 +1,2444 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Running INFOG and GDR on one million cells &#8212; PIASO 0.1.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../_static/styles/theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+<link href="../_static/styles/pydata-sphinx-theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=362ab14a" />
+    <link rel="stylesheet" type="text/css" href="../_static/nbsphinx-code-cells.css?v=2aa19091" />
+    <link rel="stylesheet" type="text/css" href="../_static/custom.css?v=0330b353" />
+  
+  <!-- So that users can add custom icons -->
+  <script src="../_static/scripts/fontawesome.js?digest=8878045cc6db502f8baf"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf" />
+<link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf" />
+
+    <script src="../_static/documentation_options.js?v=01f34227"></script>
+    <script src="../_static/doctools.js?v=9a2dae69"></script>
+    <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+    <script>window.MathJax = {"tex": {"inlineMath": [["$", "$"], ["\\(", "\\)"]], "processEscapes": true}, "options": {"ignoreHtmlClass": "tex2jax_ignore|mathjax_ignore|document", "processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+    <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'notebooks/1millionCells_AsianImmuneDiversityAtlasPhase1v2';</script>
+    <script src="../_static/sidebar_toggle.js?v=3b053ec6"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Running GDR on MNIST image data" href="PIASO_GDR_on_MNIST.html" />
+    <link rel="prev" title="Running GDR on scATAC-seq data" href="GDR_ATAC_Tutorial.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="" />
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class=" navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../_static/PIASO_logo.png" class="logo__image only-light" alt="PIASO 0.1.0 documentation - Home"/>
+    <img src="../_static/PIASO_logo.png" class="logo__image only-dark pst-js-only" alt="PIASO 0.1.0 documentation - Home"/>
+  
+  
+</a></div>
+    
+  </div>
+  
+  <div class=" navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../installation.html">
+    Installation
+  </a>
+</li>
+
+
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="../tutorials.html">
+    Tutorials
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../modules.html">
+    API
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../references.html">
+    References
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../releaseNotes.html">
+    Release notes
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/genecell/PIASO" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+    </div>
+  
+
+  
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../installation.html">
+    Installation
+  </a>
+</li>
+
+
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="../tutorials.html">
+    Tutorials
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../modules.html">
+    API
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../references.html">
+    References
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../releaseNotes.html">
+    Release notes
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/genecell/PIASO" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+<h3><a href="../index.html">Table of Contents</a></h3>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../tutorials.html">Tutorials</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../modules.html">API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../references.html">References</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../releaseNotes.html">Release notes</a></li>
+</ul>
+</div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
+  </div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../tutorials.html" class="nav-link">Tutorials</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Running INFOG and GDR on one million cells</span></li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section id="Running-INFOG-and-GDR-on-one-million-cells">
+<h1>Running INFOG and GDR on one million cells<a class="headerlink" href="#Running-INFOG-and-GDR-on-one-million-cells" title="Link to this heading">#</a></h1>
+<section id="Load-basic-settings">
+<h2>Load basic settings<a class="headerlink" href="#Load-basic-settings" title="Link to this heading">#</a></h2>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[1]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>import numpy as np
+import pandas as pd
+import scanpy as sc
+sc.set_figure_params(dpi=80,dpi_save=300, color_map=&#39;viridis&#39;,facecolor=&#39;white&#39;)
+from matplotlib import rcParams
+# To modify the default figure size, use rcParams.
+rcParams[&#39;figure.figsize&#39;] = 4, 4
+rcParams[&#39;font.sans-serif&#39;] = &quot;Arial&quot;
+rcParams[&#39;font.family&#39;] = &quot;Arial&quot;
+sc.settings.verbosity = 3
+sc.logging.print_header()
+</pre></div>
+</div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+/tmp/ipykernel_884065/1353975569.py:11: RuntimeWarning: Failed to import dependencies for application/vnd.jupyter.widget-view+json representation. (ModuleNotFoundError: No module named &#39;ipywidgets&#39;)
+  sc.logging.print_header()
+</pre></div></div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[1]:
+</pre></div>
+</div>
+<div class="output_area rendered_html docutils container">
+<table class=table>
+            <thead style="position: sticky; top: 0; background-color: var(--jp-layout-color0, var(--vscode-editor-background, white));">
+        <tr><th>Component</th><th>Info</th></tr>
+    </thead>
+    <tbody>
+        <tr><td>Python</td><td>3.10.18 (main, Jun  5 2025, 13:14:17) [GCC 11.2.0]</td></tr>
+        <tr><td>OS</td><td>Linux-5.14.0-611.11.1.el9_7.x86_64-x86_64-with-glibc2.34</td></tr>
+        <tr><td>CPU</td><td>96 logical CPU cores, x86_64</td></tr>
+        <tr><td>GPU</td><td>No GPU found</td></tr>
+        <tr><td>Updated</td><td>2025-12-16 04:14</td></tr>
+    </tbody>
+        </table>
+
+        <details>
+        <summary>Dependencies</summary>
+                <div style="max-height: min(500px, 80vh); overflow-y: auto;">
+    <table class=table>
+            <thead style="position: sticky; top: 0; background-color: var(--jp-layout-color0, var(--vscode-editor-background, white));">
+    <tr><th>Dependency</th><th>Version</th></tr>
+</thead>
+<tbody>
+    <tr><td>cycler</td><td>0.12.1</td></tr>
+    <tr><td>matplotlib-inline</td><td>0.1.7</td></tr>
+    <tr><td>jedi</td><td>0.19.2</td></tr>
+    <tr><td>natsort</td><td>8.4.0</td></tr>
+    <tr><td>ipython</td><td>8.37.0</td></tr>
+    <tr><td>pillow</td><td>11.2.1</td></tr>
+    <tr><td>executing</td><td>2.2.0</td></tr>
+    <tr><td>leidenalg</td><td>0.10.2</td></tr>
+    <tr><td>llvmlite</td><td>0.44.0</td></tr>
+    <tr><td>pytz</td><td>2025.2</td></tr>
+    <tr><td>joblib</td><td>1.5.1</td></tr>
+    <tr><td>prompt_toolkit</td><td>3.0.51</td></tr>
+    <tr><td>decorator</td><td>5.2.1</td></tr>
+    <tr><td>stack-data</td><td>0.6.3</td></tr>
+    <tr><td>wcwidth</td><td>0.2.13</td></tr>
+    <tr><td>igraph</td><td>0.11.9</td></tr>
+    <tr><td>parso</td><td>0.8.4</td></tr>
+    <tr><td>debugpy</td><td>1.8.14</td></tr>
+    <tr><td>python-dateutil</td><td>2.9.0.post0</td></tr>
+    <tr><td>six</td><td>1.17.0</td></tr>
+    <tr><td>texttable</td><td>1.7.0</td></tr>
+    <tr><td>psutil</td><td>7.0.0</td></tr>
+    <tr><td>asttokens</td><td>3.0.0</td></tr>
+    <tr><td>Cython</td><td>3.1.4</td></tr>
+    <tr><td>h5py</td><td>3.14.0</td></tr>
+    <tr><td>numba</td><td>0.61.2</td></tr>
+    <tr><td>pure_eval</td><td>0.2.3</td></tr>
+    <tr><td>kiwisolver</td><td>1.4.8</td></tr>
+    <tr><td>setuptools</td><td>78.1.1</td></tr>
+    <tr><td>tornado</td><td>6.5.1</td></tr>
+</tbody>
+    </table>
+</div>
+    </details>
+        <details>
+            <summary>Copyable Markdown</summary>
+            <pre>| Dependency        | Version     |
+| ----------------- | ----------- |
+| cycler            | 0.12.1      |
+| matplotlib-inline | 0.1.7       |
+| jedi              | 0.19.2      |
+| natsort           | 8.4.0       |
+| ipython           | 8.37.0      |
+| pillow            | 11.2.1      |
+| executing         | 2.2.0       |
+| leidenalg         | 0.10.2      |
+| llvmlite          | 0.44.0      |
+| pytz              | 2025.2      |
+| joblib            | 1.5.1       |
+| prompt_toolkit    | 3.0.51      |
+| decorator         | 5.2.1       |
+| stack-data        | 0.6.3       |
+| wcwidth           | 0.2.13      |
+| igraph            | 0.11.9      |
+| parso             | 0.8.4       |
+| debugpy           | 1.8.14      |
+| python-dateutil   | 2.9.0.post0 |
+| six               | 1.17.0      |
+| texttable         | 1.7.0       |
+| psutil            | 7.0.0       |
+| asttokens         | 3.0.0       |
+| Cython            | 3.1.4       |
+| h5py              | 3.14.0      |
+| numba             | 0.61.2      |
+| pure_eval         | 0.2.3       |
+| kiwisolver        | 1.4.8       |
+| setuptools        | 78.1.1      |
+| tornado           | 6.5.1       |
+
+| Component | Info                                                     |
+| --------- | -------------------------------------------------------- |
+| Python    | 3.10.18 (main, Jun  5 2025, 13:14:17) [GCC 11.2.0]       |
+| OS        | Linux-5.14.0-611.11.1.el9_7.x86_64-x86_64-with-glibc2.34 |
+| CPU       | 96 logical CPU cores, x86_64                             |
+| GPU       | No GPU found                                             |
+| Updated   | 2025-12-16 04:14                                         |</pre>
+        </details></div>
+</div>
+</section>
+<section id="Setting-paths">
+<h2>Setting paths<a class="headerlink" href="#Setting-paths" title="Link to this heading">#</a></h2>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[4]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>save_dir=&#39;/n/scratch/users/m/mid166/Result/single-cell/Methods/DataProcessing/AsianImmuneDiversityAtlasPhase1v2&#39;
+sc.settings.figdir = save_dir
+prefix=&#39;AsianImmuneDiversityAtlasPhase1v2&#39;
+import os
+if not os.path.exists(save_dir):
+    os.makedirs(save_dir)
+
+sc.set_figure_params(dpi=80,dpi_save=300, color_map=&#39;viridis&#39;,facecolor=&#39;white&#39;)
+rcParams[&#39;figure.figsize&#39;] = 4, 4
+</pre></div>
+</div>
+</div>
+</section>
+<section id="Load-the-data">
+<h2>Load the data<a class="headerlink" href="#Load-the-data" title="Link to this heading">#</a></h2>
+<p>The data is from Asian diversity in human immune cells Kock, Kian Hong et al. Cell, Volume 188, Issue 8, 2288 - 2306.e24.</p>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>cd /n/scratch/users/m/mid166/Result/single-cell/Methods/DataProcessing/AsianImmuneDiversityAtlasPhase1v2
+wget https://datasets.cellxgene.cziscience.com/9deda9ad-6a71-401e-b909-5263919d85f9.h5ad
+mv 9deda9ad-6a71-401e-b909-5263919d85f9.h5ad AsianImmuneDiversityAtlasPhase1v2.h5ad
+</pre></div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[5]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata=sc.read(&#39;/n/scratch/users/m/mid166/Result/single-cell/Methods/DataProcessing/AsianImmuneDiversityAtlasPhase1v2/AsianImmuneDiversityAtlasPhase1v2.h5ad&#39;)
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[6]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[6]:
+</pre></div>
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+AnnData object with n_obs × n_vars = 1265624 × 35477
+    obs: &#39;reference_genome&#39;, &#39;gene_annotation_version&#39;, &#39;alignment_software&#39;, &#39;intronic_reads_counted&#39;, &#39;library_id&#39;, &#39;assay_ontology_term_id&#39;, &#39;sequenced_fragment&#39;, &#39;cell_number_loaded&#39;, &#39;institute&#39;, &#39;is_primary_data&#39;, &#39;cell_type_ontology_term_id&#39;, &#39;author_cell_type&#39;, &#39;sample_id&#39;, &#39;sample_preservation_method&#39;, &#39;tissue_ontology_term_id&#39;, &#39;development_stage_ontology_term_id&#39;, &#39;sample_collection_method&#39;, &#39;donor_BMI_at_collection&#39;, &#39;tissue_type&#39;, &#39;suspension_derivation_process&#39;, &#39;suspension_enriched_cell_types&#39;, &#39;cell_viability_percentage&#39;, &#39;suspension_uuid&#39;, &#39;suspension_type&#39;, &#39;donor_id&#39;, &#39;self_reported_ethnicity_ontology_term_id&#39;, &#39;donor_living_at_sample_collection&#39;, &#39;disease_ontology_term_id&#39;, &#39;sex_ontology_term_id&#39;, &#39;nCount_RNA&#39;, &#39;nFeature_RNA&#39;, &#39;pMito&#39;, &#39;NODG&#39;, &#39;nUMI&#39;, &#39;Country&#39;, &#39;Annotation_Level1&#39;, &#39;Annotation_Level2&#39;, &#39;Annotation_Level3&#39;, &#39;Annotation_Level4&#39;, &#39;Smoking Status&#39;, &#39;cell_type&#39;, &#39;assay&#39;, &#39;disease&#39;, &#39;sex&#39;, &#39;tissue&#39;, &#39;self_reported_ethnicity&#39;, &#39;development_stage&#39;, &#39;observation_joinid&#39;
+    var: &#39;feature_is_filtered&#39;, &#39;feature_name&#39;, &#39;feature_reference&#39;, &#39;feature_biotype&#39;, &#39;feature_length&#39;, &#39;feature_type&#39;
+    uns: &#39;citation&#39;, &#39;default_embedding&#39;, &#39;organism&#39;, &#39;organism_ontology_term_id&#39;, &#39;schema_reference&#39;, &#39;schema_version&#39;, &#39;title&#39;
+    obsm: &#39;X_umap&#39;
+</pre></div></div>
+</div>
+<section id="Change-the-adata.var-to-gene-symbols">
+<h3>Change the adata.var to gene symbols<a class="headerlink" href="#Change-the-adata.var-to-gene-symbols" title="Link to this heading">#</a></h3>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[10]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata.var.head()
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[10]:
+</pre></div>
+</div>
+<div class="output_area rendered_html docutils container">
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>feature_is_filtered</th>
+      <th>feature_name</th>
+      <th>feature_reference</th>
+      <th>feature_biotype</th>
+      <th>feature_length</th>
+      <th>feature_type</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>ENSG00000000003</th>
+      <td>False</td>
+      <td>TSPAN6</td>
+      <td>NCBITaxon:9606</td>
+      <td>gene</td>
+      <td>2396</td>
+      <td>protein_coding</td>
+    </tr>
+    <tr>
+      <th>ENSG00000000005</th>
+      <td>False</td>
+      <td>TNMD</td>
+      <td>NCBITaxon:9606</td>
+      <td>gene</td>
+      <td>873</td>
+      <td>protein_coding</td>
+    </tr>
+    <tr>
+      <th>ENSG00000000419</th>
+      <td>False</td>
+      <td>DPM1</td>
+      <td>NCBITaxon:9606</td>
+      <td>gene</td>
+      <td>1262</td>
+      <td>protein_coding</td>
+    </tr>
+    <tr>
+      <th>ENSG00000000457</th>
+      <td>False</td>
+      <td>SCYL3</td>
+      <td>NCBITaxon:9606</td>
+      <td>gene</td>
+      <td>2916</td>
+      <td>protein_coding</td>
+    </tr>
+    <tr>
+      <th>ENSG00000000460</th>
+      <td>False</td>
+      <td>FIRRM</td>
+      <td>NCBITaxon:9606</td>
+      <td>gene</td>
+      <td>2661</td>
+      <td>protein_coding</td>
+    </tr>
+  </tbody>
+</table>
+</div></div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[12]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata.var[&#39;Ensemble_ID&#39;]=adata.var_names.copy()
+</pre></div>
+</div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[13]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata.var_names=adata.var[&#39;feature_name&#39;].values.astype(str).copy()
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[14]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata.var.head()
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[14]:
+</pre></div>
+</div>
+<div class="output_area rendered_html docutils container">
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>feature_is_filtered</th>
+      <th>feature_name</th>
+      <th>feature_reference</th>
+      <th>feature_biotype</th>
+      <th>feature_length</th>
+      <th>feature_type</th>
+      <th>Ensemble_ID</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>TSPAN6</th>
+      <td>False</td>
+      <td>TSPAN6</td>
+      <td>NCBITaxon:9606</td>
+      <td>gene</td>
+      <td>2396</td>
+      <td>protein_coding</td>
+      <td>ENSG00000000003</td>
+    </tr>
+    <tr>
+      <th>TNMD</th>
+      <td>False</td>
+      <td>TNMD</td>
+      <td>NCBITaxon:9606</td>
+      <td>gene</td>
+      <td>873</td>
+      <td>protein_coding</td>
+      <td>ENSG00000000005</td>
+    </tr>
+    <tr>
+      <th>DPM1</th>
+      <td>False</td>
+      <td>DPM1</td>
+      <td>NCBITaxon:9606</td>
+      <td>gene</td>
+      <td>1262</td>
+      <td>protein_coding</td>
+      <td>ENSG00000000419</td>
+    </tr>
+    <tr>
+      <th>SCYL3</th>
+      <td>False</td>
+      <td>SCYL3</td>
+      <td>NCBITaxon:9606</td>
+      <td>gene</td>
+      <td>2916</td>
+      <td>protein_coding</td>
+      <td>ENSG00000000457</td>
+    </tr>
+    <tr>
+      <th>FIRRM</th>
+      <td>False</td>
+      <td>FIRRM</td>
+      <td>NCBITaxon:9606</td>
+      <td>gene</td>
+      <td>2661</td>
+      <td>protein_coding</td>
+      <td>ENSG00000000460</td>
+    </tr>
+  </tbody>
+</table>
+</div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata.var.tail(30)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area rendered_html docutils container">
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>feature_is_filtered</th>
+      <th>feature_name</th>
+      <th>feature_reference</th>
+      <th>feature_biotype</th>
+      <th>feature_length</th>
+      <th>feature_type</th>
+      <th>Ensemble_ID</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>ENSG00000288096</th>
+      <td>False</td>
+      <td>ENSG00000288096</td>
+      <td>NCBITaxon:9606</td>
+      <td>gene</td>
+      <td>2075</td>
+      <td>lncRNA</td>
+      <td>ENSG00000288096</td>
+    </tr>
+    <tr>
+      <th>ENSG00000288097</th>
+      <td>False</td>
+      <td>ENSG00000288097</td>
+      <td>NCBITaxon:9606</td>
+      <td>gene</td>
+      <td>2264</td>
+      <td>lncRNA</td>
+      <td>ENSG00000288097</td>
+    </tr>
+    <tr>
+      <th>ENSG00000288098</th>
+      <td>False</td>
+      <td>ENSG00000288098</td>
+      <td>NCBITaxon:9606</td>
+      <td>gene</td>
+      <td>653</td>
+      <td>lncRNA</td>
+      <td>ENSG00000288098</td>
+    </tr>
+    <tr>
+      <th>ENSG00000288099</th>
+      <td>False</td>
+      <td>ENSG00000288099</td>
+      <td>NCBITaxon:9606</td>
+      <td>gene</td>
+      <td>611</td>
+      <td>lncRNA</td>
+      <td>ENSG00000288099</td>
+    </tr>
+    <tr>
+      <th>ENSG00000288100</th>
+      <td>False</td>
+      <td>ENSG00000288100</td>
+      <td>NCBITaxon:9606</td>
+      <td>gene</td>
+      <td>1676</td>
+      <td>lncRNA</td>
+      <td>ENSG00000288100</td>
+    </tr>
+    <tr>
+      <th>ENSG00000288102</th>
+      <td>False</td>
+      <td>ENSG00000288102</td>
+      <td>NCBITaxon:9606</td>
+      <td>gene</td>
+      <td>872</td>
+      <td>lncRNA</td>
+      <td>ENSG00000288102</td>
+    </tr>
+    <tr>
+      <th>ENSG00000288103</th>
+      <td>False</td>
+      <td>ENSG00000288103</td>
+      <td>NCBITaxon:9606</td>
+      <td>gene</td>
+      <td>795</td>
+      <td>lncRNA</td>
+      <td>ENSG00000288103</td>
+    </tr>
+    <tr>
+      <th>ENSG00000288104</th>
+      <td>False</td>
+      <td>ENSG00000288104</td>
+      <td>NCBITaxon:9606</td>
+      <td>gene</td>
+      <td>2196</td>
+      <td>lncRNA</td>
+      <td>ENSG00000288104</td>
+    </tr>
+    <tr>
+      <th>ENSG00000288105</th>
+      <td>False</td>
+      <td>ENSG00000288105</td>
+      <td>NCBITaxon:9606</td>
+      <td>gene</td>
+      <td>1131</td>
+      <td>lncRNA</td>
+      <td>ENSG00000288105</td>
+    </tr>
+    <tr>
+      <th>ENSG00000288106</th>
+      <td>False</td>
+      <td>ENSG00000288106</td>
+      <td>NCBITaxon:9606</td>
+      <td>gene</td>
+      <td>1301</td>
+      <td>lncRNA</td>
+      <td>ENSG00000288106</td>
+    </tr>
+    <tr>
+      <th>ENSG00000288107</th>
+      <td>False</td>
+      <td>ENSG00000288107</td>
+      <td>NCBITaxon:9606</td>
+      <td>gene</td>
+      <td>2800</td>
+      <td>lncRNA</td>
+      <td>ENSG00000288107</td>
+    </tr>
+    <tr>
+      <th>ENSG00000288108</th>
+      <td>False</td>
+      <td>ENSG00000288108</td>
+      <td>NCBITaxon:9606</td>
+      <td>gene</td>
+      <td>509</td>
+      <td>lncRNA</td>
+      <td>ENSG00000288108</td>
+    </tr>
+    <tr>
+      <th>ENSG00000288109</th>
+      <td>False</td>
+      <td>ENSG00000288109</td>
+      <td>NCBITaxon:9606</td>
+      <td>gene</td>
+      <td>669</td>
+      <td>lncRNA</td>
+      <td>ENSG00000288109</td>
+    </tr>
+    <tr>
+      <th>ENSG00000288110</th>
+      <td>False</td>
+      <td>ENSG00000288110</td>
+      <td>NCBITaxon:9606</td>
+      <td>gene</td>
+      <td>2417</td>
+      <td>lncRNA</td>
+      <td>ENSG00000288110</td>
+    </tr>
+    <tr>
+      <th>ENSG00000288156</th>
+      <td>False</td>
+      <td>ENSG00000288156</td>
+      <td>NCBITaxon:9606</td>
+      <td>gene</td>
+      <td>2609</td>
+      <td>lncRNA</td>
+      <td>ENSG00000288156</td>
+    </tr>
+    <tr>
+      <th>ENSG00000288162</th>
+      <td>False</td>
+      <td>ENSG00000288162</td>
+      <td>NCBITaxon:9606</td>
+      <td>gene</td>
+      <td>1636</td>
+      <td>lncRNA</td>
+      <td>ENSG00000288162</td>
+    </tr>
+    <tr>
+      <th>ENSG00000288172</th>
+      <td>False</td>
+      <td>ENSG00000288172</td>
+      <td>NCBITaxon:9606</td>
+      <td>gene</td>
+      <td>1438</td>
+      <td>lncRNA</td>
+      <td>ENSG00000288172</td>
+    </tr>
+    <tr>
+      <th>ENSG00000288187</th>
+      <td>False</td>
+      <td>ENSG00000288187</td>
+      <td>NCBITaxon:9606</td>
+      <td>gene</td>
+      <td>1408</td>
+      <td>lncRNA</td>
+      <td>ENSG00000288187</td>
+    </tr>
+    <tr>
+      <th>ENSG00000288234</th>
+      <td>False</td>
+      <td>ENSG00000288234</td>
+      <td>NCBITaxon:9606</td>
+      <td>gene</td>
+      <td>812</td>
+      <td>lncRNA</td>
+      <td>ENSG00000288234</td>
+    </tr>
+    <tr>
+      <th>FAM106C</th>
+      <td>False</td>
+      <td>FAM106C</td>
+      <td>NCBITaxon:9606</td>
+      <td>gene</td>
+      <td>1623</td>
+      <td>lncRNA</td>
+      <td>ENSG00000288235</td>
+    </tr>
+    <tr>
+      <th>ENSG00000288245</th>
+      <td>False</td>
+      <td>ENSG00000288245</td>
+      <td>NCBITaxon:9606</td>
+      <td>gene</td>
+      <td>1317</td>
+      <td>lncRNA</td>
+      <td>ENSG00000288245</td>
+    </tr>
+    <tr>
+      <th>ENSG00000288252</th>
+      <td>False</td>
+      <td>ENSG00000288252</td>
+      <td>NCBITaxon:9606</td>
+      <td>gene</td>
+      <td>512</td>
+      <td>lncRNA</td>
+      <td>ENSG00000288252</td>
+    </tr>
+    <tr>
+      <th>ENSG00000288253</th>
+      <td>False</td>
+      <td>ENSG00000288253</td>
+      <td>NCBITaxon:9606</td>
+      <td>gene</td>
+      <td>615</td>
+      <td>lncRNA</td>
+      <td>ENSG00000288253</td>
+    </tr>
+    <tr>
+      <th>ENSG00000288300</th>
+      <td>False</td>
+      <td>ENSG00000288300</td>
+      <td>NCBITaxon:9606</td>
+      <td>gene</td>
+      <td>1622</td>
+      <td>lncRNA</td>
+      <td>ENSG00000288300</td>
+    </tr>
+    <tr>
+      <th>ENSG00000288302</th>
+      <td>False</td>
+      <td>ENSG00000288302</td>
+      <td>NCBITaxon:9606</td>
+      <td>gene</td>
+      <td>629</td>
+      <td>lncRNA</td>
+      <td>ENSG00000288302</td>
+    </tr>
+    <tr>
+      <th>ENSG00000288321</th>
+      <td>False</td>
+      <td>ENSG00000288321</td>
+      <td>NCBITaxon:9606</td>
+      <td>gene</td>
+      <td>478</td>
+      <td>lncRNA</td>
+      <td>ENSG00000288321</td>
+    </tr>
+    <tr>
+      <th>ENSG00000288330</th>
+      <td>False</td>
+      <td>ENSG00000288330</td>
+      <td>NCBITaxon:9606</td>
+      <td>gene</td>
+      <td>1601</td>
+      <td>TEC</td>
+      <td>ENSG00000288330</td>
+    </tr>
+    <tr>
+      <th>ENSG00000288398</th>
+      <td>False</td>
+      <td>ENSG00000288398</td>
+      <td>NCBITaxon:9606</td>
+      <td>gene</td>
+      <td>2662</td>
+      <td>lncRNA</td>
+      <td>ENSG00000288398</td>
+    </tr>
+    <tr>
+      <th>ENSG00000288459</th>
+      <td>False</td>
+      <td>ENSG00000288459</td>
+      <td>NCBITaxon:9606</td>
+      <td>gene</td>
+      <td>944</td>
+      <td>lncRNA</td>
+      <td>ENSG00000288459</td>
+    </tr>
+    <tr>
+      <th>SMIM42</th>
+      <td>False</td>
+      <td>SMIM42</td>
+      <td>NCBITaxon:9606</td>
+      <td>gene</td>
+      <td>1015</td>
+      <td>protein_coding</td>
+      <td>ENSG00000288460</td>
+    </tr>
+  </tbody>
+</table>
+</div></div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[20]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata.var_names=[np.str_.split(i, &#39;_ENSG&#39;)[0] for i in adata.var_names]
+</pre></div>
+</div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[21]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata.var_names_make_unique()
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[22]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata.var.head()
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[22]:
+</pre></div>
+</div>
+<div class="output_area rendered_html docutils container">
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>feature_is_filtered</th>
+      <th>feature_name</th>
+      <th>feature_reference</th>
+      <th>feature_biotype</th>
+      <th>feature_length</th>
+      <th>feature_type</th>
+      <th>Ensemble_ID</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>TSPAN6</th>
+      <td>False</td>
+      <td>TSPAN6</td>
+      <td>NCBITaxon:9606</td>
+      <td>gene</td>
+      <td>2396</td>
+      <td>protein_coding</td>
+      <td>ENSG00000000003</td>
+    </tr>
+    <tr>
+      <th>TNMD</th>
+      <td>False</td>
+      <td>TNMD</td>
+      <td>NCBITaxon:9606</td>
+      <td>gene</td>
+      <td>873</td>
+      <td>protein_coding</td>
+      <td>ENSG00000000005</td>
+    </tr>
+    <tr>
+      <th>DPM1</th>
+      <td>False</td>
+      <td>DPM1</td>
+      <td>NCBITaxon:9606</td>
+      <td>gene</td>
+      <td>1262</td>
+      <td>protein_coding</td>
+      <td>ENSG00000000419</td>
+    </tr>
+    <tr>
+      <th>SCYL3</th>
+      <td>False</td>
+      <td>SCYL3</td>
+      <td>NCBITaxon:9606</td>
+      <td>gene</td>
+      <td>2916</td>
+      <td>protein_coding</td>
+      <td>ENSG00000000457</td>
+    </tr>
+    <tr>
+      <th>FIRRM</th>
+      <td>False</td>
+      <td>FIRRM</td>
+      <td>NCBITaxon:9606</td>
+      <td>gene</td>
+      <td>2661</td>
+      <td>protein_coding</td>
+      <td>ENSG00000000460</td>
+    </tr>
+  </tbody>
+</table>
+</div></div>
+</div>
+</section>
+<section id="Set-up-the-raw-UMI-counts-layer">
+<h3>Set up the raw UMI counts layer<a class="headerlink" href="#Set-up-the-raw-UMI-counts-layer" title="Link to this heading">#</a></h3>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[15]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata.raw.X.data
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[15]:
+</pre></div>
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+array([1., 1., 1., ..., 2., 1., 1.], shape=(2545339623,), dtype=float32)
+</pre></div></div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[16]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata.layers[&#39;raw&#39;]=adata.raw.X.copy()
+</pre></div>
+</div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[17]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>del adata.raw
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[18]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata.X.data
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[18]:
+</pre></div>
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+array([1.21232039, 1.21232039, 1.21232039, ..., 2.99794589, 1.82356588,
+       3.96914141], shape=(2544339517,))
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[23]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[23]:
+</pre></div>
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+AnnData object with n_obs × n_vars = 1265624 × 35477
+    obs: &#39;reference_genome&#39;, &#39;gene_annotation_version&#39;, &#39;alignment_software&#39;, &#39;intronic_reads_counted&#39;, &#39;library_id&#39;, &#39;assay_ontology_term_id&#39;, &#39;sequenced_fragment&#39;, &#39;cell_number_loaded&#39;, &#39;institute&#39;, &#39;is_primary_data&#39;, &#39;cell_type_ontology_term_id&#39;, &#39;author_cell_type&#39;, &#39;sample_id&#39;, &#39;sample_preservation_method&#39;, &#39;tissue_ontology_term_id&#39;, &#39;development_stage_ontology_term_id&#39;, &#39;sample_collection_method&#39;, &#39;donor_BMI_at_collection&#39;, &#39;tissue_type&#39;, &#39;suspension_derivation_process&#39;, &#39;suspension_enriched_cell_types&#39;, &#39;cell_viability_percentage&#39;, &#39;suspension_uuid&#39;, &#39;suspension_type&#39;, &#39;donor_id&#39;, &#39;self_reported_ethnicity_ontology_term_id&#39;, &#39;donor_living_at_sample_collection&#39;, &#39;disease_ontology_term_id&#39;, &#39;sex_ontology_term_id&#39;, &#39;nCount_RNA&#39;, &#39;nFeature_RNA&#39;, &#39;pMito&#39;, &#39;NODG&#39;, &#39;nUMI&#39;, &#39;Country&#39;, &#39;Annotation_Level1&#39;, &#39;Annotation_Level2&#39;, &#39;Annotation_Level3&#39;, &#39;Annotation_Level4&#39;, &#39;Smoking Status&#39;, &#39;cell_type&#39;, &#39;assay&#39;, &#39;disease&#39;, &#39;sex&#39;, &#39;tissue&#39;, &#39;self_reported_ethnicity&#39;, &#39;development_stage&#39;, &#39;observation_joinid&#39;
+    var: &#39;feature_is_filtered&#39;, &#39;feature_name&#39;, &#39;feature_reference&#39;, &#39;feature_biotype&#39;, &#39;feature_length&#39;, &#39;feature_type&#39;, &#39;Ensemble_ID&#39;
+    uns: &#39;citation&#39;, &#39;default_embedding&#39;, &#39;organism&#39;, &#39;organism_ontology_term_id&#39;, &#39;schema_reference&#39;, &#39;schema_version&#39;, &#39;title&#39;
+    obsm: &#39;X_umap&#39;
+    layers: &#39;raw&#39;
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[25]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata.obs.head().T
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[25]:
+</pre></div>
+</div>
+<div class="output_area rendered_html docutils container">
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th>index</th>
+      <th>AAACCTGAGAACAATC-1-IN_NIB_B001_L001</th>
+      <th>AAACCTGAGAAGCCCA-1-IN_NIB_B001_L001</th>
+      <th>AAACCTGAGCAAATCA-1-IN_NIB_B001_L001</th>
+      <th>AAACCTGAGCTAGCCC-1-IN_NIB_B001_L001</th>
+      <th>AAACCTGAGTGTACCT-1-IN_NIB_B001_L001</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>reference_genome</th>
+      <td>GRCh38</td>
+      <td>GRCh38</td>
+      <td>GRCh38</td>
+      <td>GRCh38</td>
+      <td>GRCh38</td>
+    </tr>
+    <tr>
+      <th>gene_annotation_version</th>
+      <td>v98</td>
+      <td>v98</td>
+      <td>v98</td>
+      <td>v98</td>
+      <td>v98</td>
+    </tr>
+    <tr>
+      <th>alignment_software</th>
+      <td>Cell Ranger count v7.0.1</td>
+      <td>Cell Ranger count v7.0.1</td>
+      <td>Cell Ranger count v7.0.1</td>
+      <td>Cell Ranger count v7.0.1</td>
+      <td>Cell Ranger count v7.0.1</td>
+    </tr>
+    <tr>
+      <th>intronic_reads_counted</th>
+      <td>yes</td>
+      <td>yes</td>
+      <td>yes</td>
+      <td>yes</td>
+      <td>yes</td>
+    </tr>
+    <tr>
+      <th>library_id</th>
+      <td>c18f20cd-6317-4059-bc5a-5341fe134124</td>
+      <td>c18f20cd-6317-4059-bc5a-5341fe134124</td>
+      <td>c18f20cd-6317-4059-bc5a-5341fe134124</td>
+      <td>c18f20cd-6317-4059-bc5a-5341fe134124</td>
+      <td>c18f20cd-6317-4059-bc5a-5341fe134124</td>
+    </tr>
+    <tr>
+      <th>assay_ontology_term_id</th>
+      <td>EFO:0009900</td>
+      <td>EFO:0009900</td>
+      <td>EFO:0009900</td>
+      <td>EFO:0009900</td>
+      <td>EFO:0009900</td>
+    </tr>
+    <tr>
+      <th>sequenced_fragment</th>
+      <td>5 prime tag</td>
+      <td>5 prime tag</td>
+      <td>5 prime tag</td>
+      <td>5 prime tag</td>
+      <td>5 prime tag</td>
+    </tr>
+    <tr>
+      <th>cell_number_loaded</th>
+      <td>40000 cells</td>
+      <td>40000 cells</td>
+      <td>40000 cells</td>
+      <td>40000 cells</td>
+      <td>40000 cells</td>
+    </tr>
+    <tr>
+      <th>institute</th>
+      <td>National Institute of Biomedical Genetics</td>
+      <td>National Institute of Biomedical Genetics</td>
+      <td>National Institute of Biomedical Genetics</td>
+      <td>National Institute of Biomedical Genetics</td>
+      <td>National Institute of Biomedical Genetics</td>
+    </tr>
+    <tr>
+      <th>is_primary_data</th>
+      <td>True</td>
+      <td>True</td>
+      <td>True</td>
+      <td>True</td>
+      <td>True</td>
+    </tr>
+    <tr>
+      <th>cell_type_ontology_term_id</th>
+      <td>CL:0000084</td>
+      <td>CL:0000084</td>
+      <td>CL:0000084</td>
+      <td>CL:0000763</td>
+      <td>CL:0000084</td>
+    </tr>
+    <tr>
+      <th>author_cell_type</th>
+      <td>T_unknown</td>
+      <td>T_unknown</td>
+      <td>T_unknown</td>
+      <td>Myeloid_unknown</td>
+      <td>T_unknown</td>
+    </tr>
+    <tr>
+      <th>sample_id</th>
+      <td>737b4d87-a88d-4425-8c76-41ec721b42ca</td>
+      <td>69809569-be81-49f0-bc1f-0904e410de0d</td>
+      <td>5bf5934a-d137-476a-a0b0-d317fa774291</td>
+      <td>356a6078-60cb-40c5-88e8-e0632ba8ea92</td>
+      <td>796fdcb9-0d62-499a-9132-70a51f39d465</td>
+    </tr>
+    <tr>
+      <th>sample_preservation_method</th>
+      <td>other</td>
+      <td>other</td>
+      <td>other</td>
+      <td>other</td>
+      <td>other</td>
+    </tr>
+    <tr>
+      <th>tissue_ontology_term_id</th>
+      <td>UBERON:0000178</td>
+      <td>UBERON:0000178</td>
+      <td>UBERON:0000178</td>
+      <td>UBERON:0000178</td>
+      <td>UBERON:0000178</td>
+    </tr>
+    <tr>
+      <th>development_stage_ontology_term_id</th>
+      <td>HsapDv:0000116</td>
+      <td>HsapDv:0000125</td>
+      <td>HsapDv:0000119</td>
+      <td>HsapDv:0000116</td>
+      <td>HsapDv:0000118</td>
+    </tr>
+    <tr>
+      <th>sample_collection_method</th>
+      <td>blood draw</td>
+      <td>blood draw</td>
+      <td>blood draw</td>
+      <td>blood draw</td>
+      <td>blood draw</td>
+    </tr>
+    <tr>
+      <th>donor_BMI_at_collection</th>
+      <td>26.1</td>
+      <td>33.2</td>
+      <td>22.2</td>
+      <td>23.7</td>
+      <td>22.9</td>
+    </tr>
+    <tr>
+      <th>tissue_type</th>
+      <td>tissue</td>
+      <td>tissue</td>
+      <td>tissue</td>
+      <td>tissue</td>
+      <td>tissue</td>
+    </tr>
+    <tr>
+      <th>suspension_derivation_process</th>
+      <td>density gradient centrifugation</td>
+      <td>density gradient centrifugation</td>
+      <td>density gradient centrifugation</td>
+      <td>density gradient centrifugation</td>
+      <td>density gradient centrifugation</td>
+    </tr>
+    <tr>
+      <th>suspension_enriched_cell_types</th>
+      <td>peripheral blood mononuclear cell</td>
+      <td>peripheral blood mononuclear cell</td>
+      <td>peripheral blood mononuclear cell</td>
+      <td>peripheral blood mononuclear cell</td>
+      <td>peripheral blood mononuclear cell</td>
+    </tr>
+    <tr>
+      <th>cell_viability_percentage</th>
+      <td>98.0</td>
+      <td>97.5</td>
+      <td>99.0</td>
+      <td>95.3</td>
+      <td>97.8</td>
+    </tr>
+    <tr>
+      <th>suspension_uuid</th>
+      <td>9399b949-af6a-4766-8d8a-75022bfdbbd4</td>
+      <td>f54130cc-3610-444a-99e9-186271a937cc</td>
+      <td>4e83d0bf-e4a9-4f94-8ab6-91cde22c71a2</td>
+      <td>52e71bbf-9ed8-4ab6-9537-d11eb1c1e77f</td>
+      <td>9c4f48d5-b74e-400b-9945-b0d5187a0cad</td>
+    </tr>
+    <tr>
+      <th>suspension_type</th>
+      <td>cell</td>
+      <td>cell</td>
+      <td>cell</td>
+      <td>cell</td>
+      <td>cell</td>
+    </tr>
+    <tr>
+      <th>donor_id</th>
+      <td>IN_NIB_H031</td>
+      <td>IN_NIB_H028</td>
+      <td>IN_NIB_H019</td>
+      <td>IN_NIB_H033</td>
+      <td>IN_NIB_H026</td>
+    </tr>
+    <tr>
+      <th>self_reported_ethnicity_ontology_term_id</th>
+      <td>HANCESTRO:0487</td>
+      <td>HANCESTRO:0487</td>
+      <td>HANCESTRO:0487</td>
+      <td>HANCESTRO:0487</td>
+      <td>HANCESTRO:0487</td>
+    </tr>
+    <tr>
+      <th>donor_living_at_sample_collection</th>
+      <td>True</td>
+      <td>True</td>
+      <td>True</td>
+      <td>True</td>
+      <td>True</td>
+    </tr>
+    <tr>
+      <th>disease_ontology_term_id</th>
+      <td>PATO:0000461</td>
+      <td>PATO:0000461</td>
+      <td>PATO:0000461</td>
+      <td>PATO:0000461</td>
+      <td>PATO:0000461</td>
+    </tr>
+    <tr>
+      <th>sex_ontology_term_id</th>
+      <td>PATO:0000384</td>
+      <td>PATO:0000384</td>
+      <td>PATO:0000383</td>
+      <td>PATO:0000384</td>
+      <td>PATO:0000383</td>
+    </tr>
+    <tr>
+      <th>nCount_RNA</th>
+      <td>4235.0</td>
+      <td>3153.0</td>
+      <td>3642.0</td>
+      <td>2229.0</td>
+      <td>3125.0</td>
+    </tr>
+    <tr>
+      <th>nFeature_RNA</th>
+      <td>1571</td>
+      <td>1596</td>
+      <td>1454</td>
+      <td>1314</td>
+      <td>1368</td>
+    </tr>
+    <tr>
+      <th>pMito</th>
+      <td>0.020543</td>
+      <td>0.021884</td>
+      <td>0.032125</td>
+      <td>0.026918</td>
+      <td>0.01376</td>
+    </tr>
+    <tr>
+      <th>NODG</th>
+      <td>1571</td>
+      <td>1596</td>
+      <td>1454</td>
+      <td>1314</td>
+      <td>1368</td>
+    </tr>
+    <tr>
+      <th>nUMI</th>
+      <td>4235</td>
+      <td>3153</td>
+      <td>3642</td>
+      <td>2229</td>
+      <td>3125</td>
+    </tr>
+    <tr>
+      <th>Country</th>
+      <td>IN</td>
+      <td>IN</td>
+      <td>IN</td>
+      <td>IN</td>
+      <td>IN</td>
+    </tr>
+    <tr>
+      <th>Annotation_Level1</th>
+      <td>T</td>
+      <td>T</td>
+      <td>T</td>
+      <td>Myeloid</td>
+      <td>T</td>
+    </tr>
+    <tr>
+      <th>Annotation_Level2</th>
+      <td>T</td>
+      <td>T</td>
+      <td>T</td>
+      <td>Myeloid</td>
+      <td>T</td>
+    </tr>
+    <tr>
+      <th>Annotation_Level3</th>
+      <td>T</td>
+      <td>T</td>
+      <td>T</td>
+      <td>Myeloid</td>
+      <td>T</td>
+    </tr>
+    <tr>
+      <th>Annotation_Level4</th>
+      <td>T_unknown</td>
+      <td>T_unknown</td>
+      <td>T_unknown</td>
+      <td>Myeloid_unknown</td>
+      <td>T_unknown</td>
+    </tr>
+    <tr>
+      <th>Smoking Status</th>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+    </tr>
+    <tr>
+      <th>cell_type</th>
+      <td>T cell</td>
+      <td>T cell</td>
+      <td>T cell</td>
+      <td>myeloid cell</td>
+      <td>T cell</td>
+    </tr>
+    <tr>
+      <th>assay</th>
+      <td>10x 5' v2</td>
+      <td>10x 5' v2</td>
+      <td>10x 5' v2</td>
+      <td>10x 5' v2</td>
+      <td>10x 5' v2</td>
+    </tr>
+    <tr>
+      <th>disease</th>
+      <td>normal</td>
+      <td>normal</td>
+      <td>normal</td>
+      <td>normal</td>
+      <td>normal</td>
+    </tr>
+    <tr>
+      <th>sex</th>
+      <td>male</td>
+      <td>male</td>
+      <td>female</td>
+      <td>male</td>
+      <td>female</td>
+    </tr>
+    <tr>
+      <th>tissue</th>
+      <td>blood</td>
+      <td>blood</td>
+      <td>blood</td>
+      <td>blood</td>
+      <td>blood</td>
+    </tr>
+    <tr>
+      <th>self_reported_ethnicity</th>
+      <td>Indian</td>
+      <td>Indian</td>
+      <td>Indian</td>
+      <td>Indian</td>
+      <td>Indian</td>
+    </tr>
+    <tr>
+      <th>development_stage</th>
+      <td>22-year-old stage</td>
+      <td>31-year-old stage</td>
+      <td>25-year-old stage</td>
+      <td>22-year-old stage</td>
+      <td>24-year-old stage</td>
+    </tr>
+    <tr>
+      <th>observation_joinid</th>
+      <td>L#&amp;-yLt?V)</td>
+      <td>TiEL`2U3~o</td>
+      <td>534@tl7g&gt;n</td>
+      <td>ZR3T+u}`$6</td>
+      <td>k}Z5EqiqDM</td>
+    </tr>
+  </tbody>
+</table>
+</div></div>
+</div>
+</section>
+</section>
+<section id="Import-PIASO">
+<h2>Import PIASO<a class="headerlink" href="#Import-PIASO" title="Link to this heading">#</a></h2>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[27]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>import piaso
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+/n/data1/hms/neurobio/fishell/mindai/.conda/envs/scda5/lib/python3.10/site-packages/tqdm/auto.py:21: TqdmWarning: IProgress not found. Please update jupyter and ipywidgets. See https://ipywidgets.readthedocs.io/en/stable/user_install.html
+  from .autonotebook import tqdm as notebook_tqdm
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[28]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(adata,
+           color=[&#39;cell_type&#39;],
+           palette=piaso.pl.color.d_color4,
+           cmap=piaso.pl.color.c_color4,
+           # size=10,
+           ncols=1,
+           frameon=False)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_1millionCells_AsianImmuneDiversityAtlasPhase1v2_28_0.png" class="no-scaled-link" src="../_images/notebooks_1millionCells_AsianImmuneDiversityAtlasPhase1v2_28_0.png" style="width: 1250px; height: 277px;" />
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[29]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(adata,
+           color=[&#39;Annotation_Level4&#39;],
+           palette=piaso.pl.color.d_color4,
+           cmap=piaso.pl.color.c_color4,
+           # size=10,
+           ncols=1,
+           frameon=False)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_1millionCells_AsianImmuneDiversityAtlasPhase1v2_29_0.png" class="no-scaled-link" src="../_images/notebooks_1millionCells_AsianImmuneDiversityAtlasPhase1v2_29_0.png" style="width: 1325px; height: 654px;" />
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[30]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(adata,
+           color=[&#39;Annotation_Level3&#39;],
+           palette=piaso.pl.color.d_color4,
+           cmap=piaso.pl.color.c_color4,
+           # size=10,
+           ncols=1,
+           frameon=False)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_1millionCells_AsianImmuneDiversityAtlasPhase1v2_30_0.png" class="no-scaled-link" src="../_images/notebooks_1millionCells_AsianImmuneDiversityAtlasPhase1v2_30_0.png" style="width: 721px; height: 284px;" />
+</div>
+</div>
+</section>
+<section id="Run-INFOG">
+<h2>Run INFOG<a class="headerlink" href="#Run-INFOG" title="Link to this heading">#</a></h2>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[36]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>%%time
+piaso.tl.infog(adata,
+               layer=&#39;raw&#39;,
+               n_top_genes=3000,)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+The normalized data is saved as `infog` in `adata.layers`.
+The highly variable genes are saved as `highly_variable` in `adata.var`.
+Finished INFOG normalization.
+CPU times: user 3min 37s, sys: 2min 21s, total: 5min 58s
+Wall time: 5min 59s
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[37]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>piaso.pp.table(adata.obs[&#39;cell_type&#39;])
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[37]:
+</pre></div>
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+{&#39;T cell&#39;: 54800,
+ &#39;myeloid cell&#39;: 26020,
+ &#39;natural killer cell&#39;: 23234,
+ &#39;B cell&#39;: 9144,
+ &#39;platelet&#39;: 14799,
+ &#39;plasma cell&#39;: 1672,
+ &#39;naive B cell&#39;: 36778,
+ &#39;memory B cell&#39;: 35114,
+ &#39;mature B cell&#39;: 4850,
+ &#39;hematopoietic stem cell&#39;: 135,
+ &#39;CD14-positive monocyte&#39;: 202124,
+ &#39;CD14-low, CD16-positive monocyte&#39;: 46628,
+ &#39;CD1c-positive myeloid dendritic cell&#39;: 13207,
+ &#39;CD141-positive myeloid dendritic cell&#39;: 554,
+ &#39;pre-conventional dendritic cell&#39;: 894,
+ &#39;plasmacytoid dendritic cell&#39;: 3796,
+ &#39;CD16-positive, CD56-dim natural killer cell, human&#39;: 151655,
+ &#39;CD8-positive, alpha-beta cytotoxic T cell&#39;: 46528,
+ &#39;CD8-positive, alpha-beta T cell&#39;: 53658,
+ &#39;CD16-negative, CD56-bright natural killer cell, human&#39;: 6152,
+ &#39;CD4-positive, alpha-beta cytotoxic T cell&#39;: 13594,
+ &#39;gamma-delta T cell&#39;: 30695,
+ &#39;CD8-positive, alpha-beta memory T cell&#39;: 28138,
+ &#39;CD4-positive, alpha-beta T cell&#39;: 40100,
+ &#39;innate lymphoid cell&#39;: 707,
+ &#39;naive thymus-derived CD8-positive, alpha-beta T cell&#39;: 89029,
+ &#39;mucosal invariant T cell&#39;: 23001,
+ &#39;naive thymus-derived CD4-positive, alpha-beta T cell&#39;: 157616,
+ &#39;central memory CD4-positive, alpha-beta T cell&#39;: 110004,
+ &#39;effector memory CD4-positive, alpha-beta T cell&#39;: 25012,
+ &#39;regulatory T cell&#39;: 15497,
+ &#39;double negative T regulatory cell&#39;: 489}
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[38]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>piaso.pp.table(adata.obs[&#39;tissue&#39;])
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[38]:
+</pre></div>
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+{&#39;blood&#39;: 1265624}
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[39]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>piaso.pp.table(adata.obs[&#39;disease&#39;])
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[39]:
+</pre></div>
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+{&#39;normal&#39;: 1265624}
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[40]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>piaso.pp.table(adata.obs[&#39;assay&#39;])
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[40]:
+</pre></div>
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+{&#34;10x 5&#39; v2&#34;: 1265624}
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[41]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>piaso.pp.table(adata.obs[&#39;library_id&#39;])
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[41]:
+</pre></div>
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+{&#39;c18f20cd-6317-4059-bc5a-5341fe134124&#39;: 8341,
+ &#39;8c929df1-d96a-437e-94cf-795ba97ba226&#39;: 11777,
+ &#39;a539496c-999e-4935-865e-2c1c7506bbc9&#39;: 13902,
+ &#39;91f42a59-eeb0-4577-a6d0-52f17b4ea3b3&#39;: 12056,
+ &#39;25e6ef7a-298c-42d5-9be8-b09932e1fd9d&#39;: 12235,
+ &#39;10a42edf-8fd3-4e25-900c-5a8e4890bcc8&#39;: 16351,
+ &#39;3caa9824-a0cb-4d3c-a642-b2f374f690b5&#39;: 12486,
+ &#39;a6c4ebc3-beac-4ebe-8e27-85afbe0d55b2&#39;: 18336,
+ &#39;5205817f-44c5-468b-9d41-043ecacb7dbb&#39;: 17684,
+ &#39;163573e7-c093-4a02-8ce4-b38e61d4d78e&#39;: 15374,
+ &#39;1833343d-c74b-409a-a2ad-15bdfaddf876&#39;: 16129,
+ &#39;db0a8252-6f37-47d4-98d6-806b181c1520&#39;: 17231,
+ &#39;745201e8-508b-4484-b179-6a3dc332895a&#39;: 16823,
+ &#39;8eb9096b-f4be-4fbf-91a3-402621f6d7d2&#39;: 17066,
+ &#39;688adb38-2ca3-4efa-8183-a1130f6c7801&#39;: 18609,
+ &#39;354ba71c-599c-4cd0-8f31-07d7b5676ded&#39;: 16138,
+ &#39;fef1f5a0-b108-435e-a754-3cc995daaa1f&#39;: 15994,
+ &#39;7b848d92-f5d1-4b53-a681-889c581d5ec9&#39;: 17178,
+ &#39;d43d2448-bf59-4267-a458-1ceb83096c67&#39;: 17712,
+ &#39;bb48421f-5cb1-4f12-b725-dcfa41bc700b&#39;: 10244,
+ &#39;7da3c8a8-dfcf-4d98-bcdb-63281d8903f9&#39;: 12889,
+ &#39;1d7edd49-e8ab-494d-8d33-f452f138e945&#39;: 16113,
+ &#39;0ebbd2ac-4260-4342-af3b-ff24012e8681&#39;: 17663,
+ &#39;091b1af8-3dc5-494f-a485-4b647c9f2bfa&#39;: 17975,
+ &#39;57aa8942-f88d-4b83-9888-f6f5917a84a9&#39;: 17443,
+ &#39;acc5bec2-dd3f-44c3-bc54-6746e0295f2f&#39;: 18117,
+ &#39;fab2de88-119e-40ea-b5c1-e7b616c8483d&#39;: 16994,
+ &#39;f75482e2-85c9-414b-a2d3-fd6505fc3e0b&#39;: 18836,
+ &#39;5491dd9a-e8f1-4788-8495-3deaf7b3fa4d&#39;: 18710,
+ &#39;95b09160-b9c3-4035-8263-205a4a11e118&#39;: 19176,
+ &#39;537d845f-42e1-4498-b827-737cf9fd3df6&#39;: 17666,
+ &#39;dc6ba966-a025-4222-a671-ffb5519a0a24&#39;: 17200,
+ &#39;5b6184ee-60b3-4f4e-ad21-c8424f7a4a8b&#39;: 19120,
+ &#39;0b8994d6-7ead-4d27-913b-69cab52df357&#39;: 18837,
+ &#39;0b1175aa-350d-4e0a-8535-d667980cb949&#39;: 19320,
+ &#39;f2b4f75b-4de2-4894-bdaa-3cbae7efc951&#39;: 17506,
+ &#39;60d897bb-bd81-4794-a1bd-f89200faa1c1&#39;: 17851,
+ &#39;25561afb-5a09-4eb7-aebb-be2dc52258c1&#39;: 16646,
+ &#39;62e4c041-4c8d-4b07-808d-e888b97ceab0&#39;: 16768,
+ &#39;c2b6c7fa-e925-4715-a0b8-cd02bd1d2469&#39;: 18281,
+ &#39;6a2dc1c5-9a2c-4490-b720-b39c49c26d5b&#39;: 18051,
+ &#39;ba7dd120-1236-43ec-ae73-1961577a71f0&#39;: 17757,
+ &#39;ba4b2831-5211-4c45-a814-467012f6c356&#39;: 15092,
+ &#39;2afec21c-9b5c-43e6-9bb2-cfb41181758c&#39;: 13693,
+ &#39;f7b36e3c-39e1-4aac-88ce-12f31ef4bf33&#39;: 15753,
+ &#39;925ed908-cb3d-4eeb-8db9-cf8967de971d&#39;: 19209,
+ &#39;c8ee9b8a-793e-4712-bc91-0c9cd291a698&#39;: 16323,
+ &#39;49dc02c4-bd12-4148-a760-d5631154a019&#39;: 12727,
+ &#39;735e1302-a6a2-49f2-9c7e-117a8706aab0&#39;: 12765,
+ &#39;e1c3cd5d-70b7-4eb1-8028-218da445dc3e&#39;: 8608,
+ &#39;ea8c3957-1abc-43b2-b412-93c104e8acbb&#39;: 9506,
+ &#39;daf47ff8-958c-4aa1-b50e-acb15f88279c&#39;: 10040,
+ &#39;c818b1d0-12f3-4768-b395-daaf8f5fd70b&#39;: 10822,
+ &#39;40c0cad6-88ca-4e19-9ead-6f48dfca8823&#39;: 9890,
+ &#39;902e88a3-8007-4ea4-9520-299190672fdf&#39;: 9783,
+ &#39;b9119f90-58cd-42ae-83f6-2f7f82827972&#39;: 9667,
+ &#39;215f5ef8-70d9-4efd-8564-60b05a1a1a52&#39;: 8531,
+ &#39;3eba0346-ae6a-4a8b-9a33-d637004f4352&#39;: 11012,
+ &#39;e689732d-7e84-4467-ab20-b85678d81dd9&#39;: 8919,
+ &#39;bc3f63cf-404c-4f5c-8e9b-15f00d830d84&#39;: 8890,
+ &#39;155f18d1-1754-4353-ba9d-7107adc68223&#39;: 8191,
+ &#39;2361585a-ad3d-4236-af8e-e3188a71fa26&#39;: 8496,
+ &#39;87bba90e-4389-405c-adec-ca27e2c94219&#39;: 8947,
+ &#39;74224522-53fc-4a99-aff4-091f642f9c90&#39;: 7275,
+ &#39;ad6e9dda-40b1-4ae8-9b29-2a64ddb8ab9f&#39;: 8913,
+ &#39;5397ecce-4f99-4f7c-b833-000c8d57cdb1&#39;: 6823,
+ &#39;c0eb5cbc-7a22-4e4a-bc48-f15219ea2d0e&#39;: 6030,
+ &#39;91f8d6ee-8ed5-40c8-9597-f0d87a9f9922&#39;: 6991,
+ &#39;df470eeb-1e73-482a-a850-aa90c736f4cd&#39;: 7681,
+ &#39;ff9b156b-5ca7-4c1f-9a2d-32cc7d729713&#39;: 8369,
+ &#39;53539254-c074-4fc6-b902-ce2a795057ef&#39;: 9168,
+ &#39;bd5eaeae-ee8b-44c3-93d6-e639160df738&#39;: 9549,
+ &#39;9c9d26f4-487c-46b2-98c2-51c17f1972e5&#39;: 9416,
+ &#39;e6e2a3ba-84af-43b7-b913-0ad174393cae&#39;: 8900,
+ &#39;89156b35-22e6-42db-80ed-72ed15b9cffc&#39;: 7865,
+ &#39;38f769ce-583e-4e9b-9434-2042d3649f6e&#39;: 8805,
+ &#39;f22affcb-67e9-458e-81e8-4f7c6fc2bcf1&#39;: 8144,
+ &#39;de842ea6-cb26-47c3-8957-5e58c178c2a1&#39;: 7763,
+ &#39;57a6d9c9-ec4a-4591-b341-b50a4f99f8a3&#39;: 9188,
+ &#39;9cded2d7-90ec-4dcb-bb64-6e46ff06323a&#39;: 13011,
+ &#39;ed813075-c243-46c8-bcc9-bd2f855dd332&#39;: 9522,
+ &#39;82dcae80-03e7-4bbb-befc-67ac9b3c4aef&#39;: 8991,
+ &#39;39e88fce-97eb-4e7f-977e-68d23176c372&#39;: 9954,
+ &#39;5cfc2c07-b9c5-42bf-8307-cfb51e677c3e&#39;: 16719,
+ &#39;78bf1fed-bf59-4a2e-a791-f7bb5737ad56&#39;: 13120,
+ &#39;dbb06e58-a137-4a92-bbaa-053a936de27c&#39;: 17390,
+ &#39;bc30a108-b78f-4157-93e2-90b661a3d639&#39;: 20564,
+ &#39;2cd6ef50-de2b-450e-8c43-db151315302b&#39;: 15427,
+ &#39;3dfdc900-2c20-45fe-80a7-8d821f362ee5&#39;: 17156,
+ &#39;72c440dc-7d5c-494b-8240-6bd4fd260ea0&#39;: 16492,
+ &#39;ac74f903-c5cb-42cc-a2c4-6241904081c3&#39;: 16071,
+ &#39;3961d088-d775-4784-ab8e-e892d1f70166&#39;: 16566,
+ &#39;9f3fb493-13bd-4e80-9cd2-83948a26e01d&#39;: 16312}
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[42]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata.X.data
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[42]:
+</pre></div>
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+array([1.21232039, 1.21232039, 1.21232039, ..., 2.99794589, 1.82356588,
+       3.96914141], shape=(2544339517,))
+</pre></div></div>
+</div>
+</section>
+<section id="Run-GDR">
+<h2>Run GDR<a class="headerlink" href="#Run-GDR" title="Link to this heading">#</a></h2>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[43]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>%%time
+piaso.tl.runGDRParallel(adata,
+                        batch_key=&#39;library_id&#39;,
+                        groupby=None,
+                        n_gene=20,
+                        mu=10,
+                        resolution=3.0,
+                        layer=&#39;infog&#39;,
+                        infog_layer=&#39;raw&#39;,
+                        score_layer=&#39;infog&#39;,
+                        scoring_method=&#39;piaso&#39;,
+                        use_highly_variable=True,
+                        n_highly_variable_genes=5000,
+                        n_svd_dims=50,
+                        key_added=&#39;X_gdr&#39;,
+                        max_workers=32,
+                        calculate_score_multiBatch = False,
+                        verbosity=0)
+</pre></div>
+</div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+Calculating marker genes: 100%|██████████| 93/93 [11:38&lt;00:00,  7.51s/batch]
+Calculating cell embeddings: 100%|██████████| 93/93 [21:13:01&lt;00:00, 821.31s/batch]
+</pre></div></div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+The cell embeddings calculated by GDR were saved as `X_gdr` in adata.obsm.
+CPU times: user 14min 15s, sys: 5min 11s, total: 19min 27s
+Wall time: 21h 26min 6s
+</pre></div></div>
+</div>
+<p>It took ~21.5 hours to run GDR on 1.2 million cells from 93 libraries.</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[52]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[52]:
+</pre></div>
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+AnnData object with n_obs × n_vars = 1265624 × 35477
+    obs: &#39;reference_genome&#39;, &#39;gene_annotation_version&#39;, &#39;alignment_software&#39;, &#39;intronic_reads_counted&#39;, &#39;library_id&#39;, &#39;assay_ontology_term_id&#39;, &#39;sequenced_fragment&#39;, &#39;cell_number_loaded&#39;, &#39;institute&#39;, &#39;is_primary_data&#39;, &#39;cell_type_ontology_term_id&#39;, &#39;author_cell_type&#39;, &#39;sample_id&#39;, &#39;sample_preservation_method&#39;, &#39;tissue_ontology_term_id&#39;, &#39;development_stage_ontology_term_id&#39;, &#39;sample_collection_method&#39;, &#39;donor_BMI_at_collection&#39;, &#39;tissue_type&#39;, &#39;suspension_derivation_process&#39;, &#39;suspension_enriched_cell_types&#39;, &#39;cell_viability_percentage&#39;, &#39;suspension_uuid&#39;, &#39;suspension_type&#39;, &#39;donor_id&#39;, &#39;self_reported_ethnicity_ontology_term_id&#39;, &#39;donor_living_at_sample_collection&#39;, &#39;disease_ontology_term_id&#39;, &#39;sex_ontology_term_id&#39;, &#39;nCount_RNA&#39;, &#39;nFeature_RNA&#39;, &#39;pMito&#39;, &#39;NODG&#39;, &#39;nUMI&#39;, &#39;Country&#39;, &#39;Annotation_Level1&#39;, &#39;Annotation_Level2&#39;, &#39;Annotation_Level3&#39;, &#39;Annotation_Level4&#39;, &#39;Smoking Status&#39;, &#39;cell_type&#39;, &#39;assay&#39;, &#39;disease&#39;, &#39;sex&#39;, &#39;tissue&#39;, &#39;self_reported_ethnicity&#39;, &#39;development_stage&#39;, &#39;observation_joinid&#39;
+    var: &#39;feature_is_filtered&#39;, &#39;feature_name&#39;, &#39;feature_reference&#39;, &#39;feature_biotype&#39;, &#39;feature_length&#39;, &#39;feature_type&#39;, &#39;Ensemble_ID&#39;, &#39;infog_var&#39;, &#39;highly_variable&#39;
+    uns: &#39;Annotation_Level3_colors&#39;, &#39;Annotation_Level4_colors&#39;, &#39;cell_type_colors&#39;, &#39;citation&#39;, &#39;default_embedding&#39;, &#39;organism&#39;, &#39;organism_ontology_term_id&#39;, &#39;schema_reference&#39;, &#39;schema_version&#39;, &#39;title&#39;, &#39;gdr&#39;, &#39;neighbors&#39;, &#39;umap&#39;, &#39;assay_colors&#39;
+    obsm: &#39;X_umap&#39;, &#39;X_gdr&#39;, &#39;X_umap_author&#39;
+    layers: &#39;raw&#39;, &#39;infog&#39;
+    obsp: &#39;distances&#39;, &#39;connectivities&#39;
+</pre></div></div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata.obsm[&#39;X_umap_author&#39;]=adata.obsm[&#39;X_umap&#39;].copy()
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>%%time
+sc.pp.neighbors(adata,
+                use_rep=&#39;X_gdr&#39;,
+                n_neighbors=15,
+                random_state=10,
+                knn=True,
+                method=&quot;umap&quot;)
+sc.tl.umap(adata)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+computing neighbors
+    finished: added
+    &#39;X_umap&#39;, UMAP coordinates (adata.obsm)
+    &#39;umap&#39;, UMAP parameters (adata.uns) (0:35:54)
+CPU times: user 2h 22min, sys: 25min 7s, total: 2h 47min 8s
+Wall time: 2h 31min 48s
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[48]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(adata,
+           color=[&#39;assay&#39;],
+           palette=piaso.pl.color.d_color4,
+           cmap=piaso.pl.color.c_color4,
+           # size=10,
+           ncols=1,
+           frameon=False)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_1millionCells_AsianImmuneDiversityAtlasPhase1v2_45_0.png" class="no-scaled-link" src="../_images/notebooks_1millionCells_AsianImmuneDiversityAtlasPhase1v2_45_0.png" style="width: 354px; height: 277px;" />
+</div>
+</div>
+<p>The UMAP from GDR:</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[50]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(adata,
+           color=[&#39;cell_type&#39;],
+           palette=piaso.pl.color.d_color4,
+           cmap=piaso.pl.color.c_color4,
+           # size=10,
+           ncols=1,
+           frameon=False)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_1millionCells_AsianImmuneDiversityAtlasPhase1v2_47_0.png" class="no-scaled-link" src="../_images/notebooks_1millionCells_AsianImmuneDiversityAtlasPhase1v2_47_0.png" style="width: 1250px; height: 277px;" />
+</div>
+</div>
+<p>Compared to the UMAP from the publication:</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[61]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.embedding(adata,
+           basis=&#39;X_umap_author&#39;,
+           color=[&#39;cell_type&#39;],
+           palette=piaso.pl.color.d_color4,
+           cmap=piaso.pl.color.c_color4,
+           # size=10,
+           ncols=1,
+           frameon=False)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_1millionCells_AsianImmuneDiversityAtlasPhase1v2_49_0.png" class="no-scaled-link" src="../_images/notebooks_1millionCells_AsianImmuneDiversityAtlasPhase1v2_49_0.png" style="width: 1250px; height: 277px;" />
+</div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[53]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata.obsm[&#39;X_umap_gdr&#39;]=adata.obsm[&#39;X_umap&#39;].copy()
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[54]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[54]:
+</pre></div>
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+AnnData object with n_obs × n_vars = 1265624 × 35477
+    obs: &#39;reference_genome&#39;, &#39;gene_annotation_version&#39;, &#39;alignment_software&#39;, &#39;intronic_reads_counted&#39;, &#39;library_id&#39;, &#39;assay_ontology_term_id&#39;, &#39;sequenced_fragment&#39;, &#39;cell_number_loaded&#39;, &#39;institute&#39;, &#39;is_primary_data&#39;, &#39;cell_type_ontology_term_id&#39;, &#39;author_cell_type&#39;, &#39;sample_id&#39;, &#39;sample_preservation_method&#39;, &#39;tissue_ontology_term_id&#39;, &#39;development_stage_ontology_term_id&#39;, &#39;sample_collection_method&#39;, &#39;donor_BMI_at_collection&#39;, &#39;tissue_type&#39;, &#39;suspension_derivation_process&#39;, &#39;suspension_enriched_cell_types&#39;, &#39;cell_viability_percentage&#39;, &#39;suspension_uuid&#39;, &#39;suspension_type&#39;, &#39;donor_id&#39;, &#39;self_reported_ethnicity_ontology_term_id&#39;, &#39;donor_living_at_sample_collection&#39;, &#39;disease_ontology_term_id&#39;, &#39;sex_ontology_term_id&#39;, &#39;nCount_RNA&#39;, &#39;nFeature_RNA&#39;, &#39;pMito&#39;, &#39;NODG&#39;, &#39;nUMI&#39;, &#39;Country&#39;, &#39;Annotation_Level1&#39;, &#39;Annotation_Level2&#39;, &#39;Annotation_Level3&#39;, &#39;Annotation_Level4&#39;, &#39;Smoking Status&#39;, &#39;cell_type&#39;, &#39;assay&#39;, &#39;disease&#39;, &#39;sex&#39;, &#39;tissue&#39;, &#39;self_reported_ethnicity&#39;, &#39;development_stage&#39;, &#39;observation_joinid&#39;
+    var: &#39;feature_is_filtered&#39;, &#39;feature_name&#39;, &#39;feature_reference&#39;, &#39;feature_biotype&#39;, &#39;feature_length&#39;, &#39;feature_type&#39;, &#39;Ensemble_ID&#39;, &#39;infog_var&#39;, &#39;highly_variable&#39;
+    uns: &#39;Annotation_Level3_colors&#39;, &#39;Annotation_Level4_colors&#39;, &#39;cell_type_colors&#39;, &#39;citation&#39;, &#39;default_embedding&#39;, &#39;organism&#39;, &#39;organism_ontology_term_id&#39;, &#39;schema_reference&#39;, &#39;schema_version&#39;, &#39;title&#39;, &#39;gdr&#39;, &#39;neighbors&#39;, &#39;umap&#39;, &#39;assay_colors&#39;
+    obsm: &#39;X_umap&#39;, &#39;X_gdr&#39;, &#39;X_umap_author&#39;, &#39;X_umap_gdr&#39;
+    layers: &#39;raw&#39;, &#39;infog&#39;
+    obsp: &#39;distances&#39;, &#39;connectivities&#39;
+</pre></div></div>
+</div>
+</section>
+<section id="Save-the-data">
+<h2>Save the data<a class="headerlink" href="#Save-the-data" title="Link to this heading">#</a></h2>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[55]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata.write(save_dir+&#39;/&#39;+prefix+&#39;_gdr.h5ad&#39;)
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[56]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>save_dir+&#39;/&#39;+prefix+&#39;_gdr.h5ad&#39;
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[56]:
+</pre></div>
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+&#39;/n/scratch/users/m/mid166/Result/single-cell/Methods/DataProcessing/AsianImmuneDiversityAtlasPhase1v2/AsianImmuneDiversityAtlasPhase1v2_gdr.h5ad&#39;
+</pre></div></div>
+</div>
+<p>The h5ad file with GDR embeddings could be downloaded from <a class="reference external" href="https://drive.google.com/file/d/1eXbUzpZxzbKHhEbhoiCM2MUgpuYCfgtE/view">https://drive.google.com/file/d/1eXbUzpZxzbKHhEbhoiCM2MUgpuYCfgtE/view</a>.</p>
+</section>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="GDR_ATAC_Tutorial.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Running GDR on scATAC-seq data</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="PIASO_GDR_on_MNIST.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Running GDR on MNIST image data</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#Load-basic-settings">Load basic settings</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#Setting-paths">Setting paths</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#Load-the-data">Load the data</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#Change-the-adata.var-to-gene-symbols">Change the adata.var to gene symbols</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#Set-up-the-raw-UMI-counts-layer">Set up the raw UMI counts layer</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#Import-PIASO">Import PIASO</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#Run-INFOG">Run INFOG</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#Run-GDR">Run GDR</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#Save-the-data">Save the data</a></li>
+</ul>
+  </nav></div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf"></script>
+<script defer src="../_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2025, Min Dai.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 7.3.7.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  <!-- # L10n: Setting the PST URL as an argument as this does not need to be localized -->
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.16.1.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

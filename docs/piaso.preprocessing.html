@@ -453,6 +453,47 @@ If rank is True, the dictionary is sorted by count.</p>
 </dl>
 </dd></dl>
 
+<dl class="py function">
+<dt class="sig sig-object py" id="piaso.preprocessing.rotateSpatialCoordinates">
+<span class="sig-prename descclassname"><span class="pre">piaso.preprocessing.</span></span><span class="sig-name descname"><span class="pre">rotateSpatialCoordinates</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">adata</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">AnnData</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">angle_degrees</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">spatial_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'X_spatial'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">clockwise</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">inplace</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">backup_spatial_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">AnnData</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#piaso.preprocessing.rotateSpatialCoordinates" title="Link to this definition">#</a></dt>
+<dd><p>Rotates the spatial coordinates in an AnnData object around their center.</p>
+<p>This function performs a 2D rotation on the coordinates stored in
+adata.obsm[spatial_key]. It first calculates the centroid of the
+coordinates, translates the data to center it at the origin, performs
+the rotation, and then translates it back.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>adata</strong> – The annotated data matrix of shape <cite>(n_obs, n_vars)</cite>.</p></li>
+<li><p><strong>angle_degrees</strong> – The angle of rotation in degrees.</p></li>
+<li><p><strong>spatial_key</strong> – The key in <cite>adata.obsm</cite> where the spatial coordinates are stored.
+Defaults to ‘X_spatial’.</p></li>
+<li><p><strong>clockwise</strong> – If True, performs a clockwise rotation. If False (default),
+performs a counter-clockwise rotation (standard mathematical convention).</p></li>
+<li><p><strong>inplace</strong> – If True (default), modifies the input AnnData object in place and returns None.
+If False, returns a new AnnData object with rotated coordinates.</p></li>
+<li><p><strong>backup_spatial_key</strong> – If specified, the original spatial coordinates will be backed up in
+<cite>adata.obsm[backup_spatial_key]</cite> before rotation. If None (default), no backup is created.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>If inplace=True, returns None and modifies the input adata object.
+If inplace=False, returns a new AnnData object with the rotated spatial coordinates.</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>KeyError</strong> – If <cite>spatial_key</cite> is not found in <cite>adata.obsm</cite>.</p></li>
+<li><p><strong>ValueError</strong> – If the coordinates in <cite>adata.obsm[spatial_key]</cite> are not 2D or 3D.</p></li>
+</ul>
+</dd>
+</dl>
+<p class="rubric">Example</p>
+<p># Rotate coordinates in place with backup
+piaso.pp.rotateSpatialCoordinates(adata, 45, backup_spatial_key=’X_spatial_original’)</p>
+<p># Rotate and create new object without backup
+adata_rotated = piaso.pp.rotateSpatialCoordinates(adata, 90, inplace=False)</p>
+</dd></dl>
+
 </section>
 
 
@@ -504,6 +545,7 @@ If rank is True, the dictionary is sorted by count.</p>
     <ul class="visible nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#piaso.preprocessing.getCrossCategories"><code class="docutils literal notranslate"><span class="pre">getCrossCategories()</span></code></a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#piaso.preprocessing.table"><code class="docutils literal notranslate"><span class="pre">table()</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#piaso.preprocessing.rotateSpatialCoordinates"><code class="docutils literal notranslate"><span class="pre">rotateSpatialCoordinates()</span></code></a></li>
 </ul>
   </nav></div>
 

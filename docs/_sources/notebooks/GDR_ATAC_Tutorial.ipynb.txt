@@ -5,7 +5,7 @@
    "id": "b5a0981a-c8e5-4235-92ae-ddaa26a23ff4",
    "metadata": {},
    "source": [
-    "## GDR for scATAC-seq data\n",
+    "## Running GDR on scATAC-seq data\n",
     "\n",
     "GDR demonstrates strong performance not only with scRNA-seq data but also with scATAC-seq data. Despite scATAC-seq data being characteristically sparse and containing significantly more features than scRNA-seq, GDR effectively manages these challenges. This notebook illustrates how GDR can be successfully applied to scATAC-seq datasets."
    ]

@@ -397,18 +397,7 @@
 <h1>Installation<a class="headerlink" href="#installation" title="Link to this heading">#</a></h1>
 <section id="stable-version">
 <h2>Stable version<a class="headerlink" href="#stable-version" title="Link to this heading">#</a></h2>
-<p><strong>1. Activate conda environment</strong></p>
-<p>If you already have an environment, activate it:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="c1">## Replace ` &lt;myenv&gt; ` with your actual environment name</span>
-<span class="n">conda</span> <span class="n">activate</span> <span class="o">&lt;</span><span class="n">myenv</span><span class="o">&gt;</span>
-</pre></div>
-</div>
-<p>If you don’t have an environment yet, create one first:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">conda</span> <span class="n">create</span> <span class="o">--</span><span class="n">name</span> <span class="o">&lt;</span><span class="n">myenv</span><span class="o">&gt;</span>
-<span class="n">conda</span> <span class="n">activate</span> <span class="o">&lt;</span><span class="n">myenv</span><span class="o">&gt;</span>
-</pre></div>
-</div>
-<p><strong>2. Install PIASO</strong></p>
+<p>Install PIASO to your environment:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">pip</span> <span class="n">install</span> <span class="n">piaso</span><span class="o">-</span><span class="n">tools</span>
 </pre></div>
 </div>
@@ -417,6 +406,29 @@
 <h2>Development version<a class="headerlink" href="#development-version" title="Link to this heading">#</a></h2>
 <p>Install PIASO from GitHub directly:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">pip</span> <span class="n">install</span> <span class="n">git</span><span class="o">+</span><span class="n">https</span><span class="p">:</span><span class="o">//</span><span class="n">github</span><span class="o">.</span><span class="n">com</span><span class="o">/</span><span class="n">genecell</span><span class="o">/</span><span class="n">PIASO</span><span class="o">.</span><span class="n">git</span>
+</pre></div>
+</div>
+</section>
+<section id="environment-set-up-for-piaso-tutorials">
+<h2>Environment set-up for PIASO tutorials<a class="headerlink" href="#environment-set-up-for-piaso-tutorials" title="Link to this heading">#</a></h2>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">conda</span> <span class="n">create</span> <span class="o">--</span><span class="n">name</span> <span class="n">piaso_env</span> <span class="n">python</span><span class="o">=</span><span class="mf">3.10</span> <span class="o">-</span><span class="n">y</span>
+<span class="n">conda</span> <span class="n">activate</span> <span class="n">test_piaso_env</span>
+<span class="n">conda</span> <span class="n">install</span> <span class="n">git</span> <span class="n">pip</span> <span class="o">-</span><span class="n">y</span>
+<span class="n">pip</span> <span class="n">install</span> <span class="n">piaso</span><span class="o">-</span><span class="n">tools</span>
+</pre></div>
+</div>
+<p>Quick validation:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">python</span> <span class="o">-</span><span class="n">c</span> <span class="s2">&quot;import piaso; print(&#39;Success: PIASO installed and imported correctly!&#39;)&quot;</span>
+</pre></div>
+</div>
+<p>Installing ipykernel for jupyter compatibility:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">conda</span> <span class="n">install</span> <span class="n">anaconda</span><span class="p">::</span><span class="n">ipykernel</span>
+<span class="n">python</span> <span class="o">-</span><span class="n">m</span> <span class="n">ipykernel</span> <span class="n">install</span> <span class="o">--</span><span class="n">user</span> <span class="o">--</span><span class="n">name</span> <span class="n">piaso_env</span> <span class="o">--</span><span class="n">display</span><span class="o">-</span><span class="n">name</span> <span class="s2">&quot;Python piaso_env&quot;</span>
+</pre></div>
+</div>
+<p>Additional packages required for tutorials:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">pip</span> <span class="n">install</span> <span class="s1">&#39;scanpy[leiden]&#39;</span>
+<span class="n">pip</span> <span class="n">install</span> <span class="n">scrublet</span>
 </pre></div>
 </div>
 </section>
@@ -471,6 +483,7 @@
     <ul class="visible nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#stable-version">Stable version</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#development-version">Development version</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#environment-set-up-for-piaso-tutorials">Environment set-up for PIASO tutorials</a></li>
 </ul>
   </nav></div>
 

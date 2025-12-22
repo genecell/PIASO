@@ -1,0 +1,1514 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Cell type prediction based on marker genes from reference dataset &#8212; PIASO 0.1.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../_static/styles/theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+<link href="../_static/styles/pydata-sphinx-theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=362ab14a" />
+    <link rel="stylesheet" type="text/css" href="../_static/nbsphinx-code-cells.css?v=2aa19091" />
+    <link rel="stylesheet" type="text/css" href="../_static/custom.css?v=0330b353" />
+  
+  <!-- So that users can add custom icons -->
+  <script src="../_static/scripts/fontawesome.js?digest=8878045cc6db502f8baf"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf" />
+<link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf" />
+
+    <script src="../_static/documentation_options.js?v=01f34227"></script>
+    <script src="../_static/doctools.js?v=9a2dae69"></script>
+    <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+    <script>window.MathJax = {"tex": {"inlineMath": [["$", "$"], ["\\(", "\\)"]], "processEscapes": true}, "options": {"ignoreHtmlClass": "tex2jax_ignore|mathjax_ignore|document", "processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+    <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'notebooks/27_PIASO_markerGeneBasedCellTypePrediction_mouseCortex_updated';</script>
+    <script src="../_static/sidebar_toggle.js?v=3b053ec6"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Cell type prediction by GDR" href="GDRPredictCellTypeTutorial.html" />
+    <link rel="prev" title="Running GDR on Fashion MNIST data" href="GDR_COSG_FashionMNIST.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="" />
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class=" navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../_static/PIASO_logo.png" class="logo__image only-light" alt="PIASO 0.1.0 documentation - Home"/>
+    <img src="../_static/PIASO_logo.png" class="logo__image only-dark pst-js-only" alt="PIASO 0.1.0 documentation - Home"/>
+  
+  
+</a></div>
+    
+  </div>
+  
+  <div class=" navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../installation.html">
+    Installation
+  </a>
+</li>
+
+
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="../tutorials.html">
+    Tutorials
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../modules.html">
+    API
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../references.html">
+    References
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../releaseNotes.html">
+    Release notes
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/genecell/PIASO" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+    </div>
+  
+
+  
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../installation.html">
+    Installation
+  </a>
+</li>
+
+
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="../tutorials.html">
+    Tutorials
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../modules.html">
+    API
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../references.html">
+    References
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../releaseNotes.html">
+    Release notes
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/genecell/PIASO" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+<h3><a href="../index.html">Table of Contents</a></h3>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../tutorials.html">Tutorials</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../modules.html">API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../references.html">References</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../releaseNotes.html">Release notes</a></li>
+</ul>
+</div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
+  </div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../tutorials.html" class="nav-link">Tutorials</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Cell type prediction based on marker genes from reference dataset</span></li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section id="Cell-type-prediction-based-on-marker-genes-from-reference-dataset">
+<h1>Cell type prediction based on marker genes from reference dataset<a class="headerlink" href="#Cell-type-prediction-based-on-marker-genes-from-reference-dataset" title="Link to this heading">#</a></h1>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[1]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>import numpy as np
+import pandas as pd
+import scanpy as sc
+sc.set_figure_params(dpi=80,dpi_save=300, color_map=&#39;viridis&#39;,facecolor=&#39;white&#39;)
+from matplotlib import rcParams
+# To modify the default figure size, use rcParams.
+rcParams[&#39;figure.figsize&#39;] = 4, 4
+rcParams[&#39;font.sans-serif&#39;] = &quot;Arial&quot;
+rcParams[&#39;font.family&#39;] = &quot;Arial&quot;
+sc.settings.verbosity = 3
+sc.logging.print_header()
+</pre></div>
+</div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+/tmp/ipykernel_1586743/1353975569.py:11: RuntimeWarning: Failed to import dependencies for application/vnd.jupyter.widget-view+json representation. (ModuleNotFoundError: No module named &#39;ipywidgets&#39;)
+  sc.logging.print_header()
+</pre></div></div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[1]:
+</pre></div>
+</div>
+<div class="output_area rendered_html docutils container">
+<table class=table>
+            <thead style="position: sticky; top: 0; background-color: var(--jp-layout-color0, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));">
+        <tr><th>Component</th><th>Info</th></tr>
+    </thead>
+    <tbody>
+        <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>Python</td><td>3.10.19 (main, Oct 21 2025, 16:43:05) [GCC 11.2.0]</td></tr>
+        <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>OS</td><td>Linux-5.14.0-611.7.1.el9_7.x86_64-x86_64-with-glibc2.34</td></tr>
+        <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>CPU</td><td>32 logical CPU cores, x86_64</td></tr>
+        <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>GPU</td><td>No GPU found</td></tr>
+        <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>Updated</td><td>2025-12-22 21:51</td></tr>
+    </tbody>
+        </table>
+
+        <details>
+        <summary>Dependencies</summary>
+                <div style="max-height: min(500px, 80vh); overflow-y: auto;">
+    <table class=table>
+            <thead style="position: sticky; top: 0; background-color: var(--jp-layout-color0, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));">
+    <tr><th>Dependency</th><th>Version</th></tr>
+</thead>
+<tbody>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>wcwidth</td><td>0.2.13</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>ipython</td><td>8.30.0</td></tr>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>cycler</td><td>0.12.1</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>debugpy</td><td>1.8.16</td></tr>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>natsort</td><td>8.4.0</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>pytz</td><td>2025.2</td></tr>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>llvmlite</td><td>0.46.0</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>igraph</td><td>0.11.9</td></tr>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>asttokens</td><td>3.0.0</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>h5py</td><td>3.15.1</td></tr>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>numba</td><td>0.63.1</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>joblib</td><td>1.5.3</td></tr>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>psutil</td><td>7.0.0</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>pillow</td><td>12.0.0</td></tr>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>setuptools</td><td>80.9.0</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>parso</td><td>0.8.5</td></tr>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>executing</td><td>2.2.1</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>kiwisolver</td><td>1.4.9</td></tr>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>torch</td><td>2.9.1 (2.9.1+cu128)</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>leidenalg</td><td>0.10.2</td></tr>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>tqdm</td><td>4.67.1</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>six</td><td>1.17.0</td></tr>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>tornado</td><td>6.5.4</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>stack_data</td><td>0.6.3</td></tr>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>python-dateutil</td><td>2.9.0.post0</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>prompt_toolkit</td><td>3.0.52</td></tr>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>decorator</td><td>5.2.1</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>texttable</td><td>1.7.0</td></tr>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>jedi</td><td>0.19.2</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>pure_eval</td><td>0.2.3</td></tr>
+</tbody>
+    </table>
+</div>
+    </details>
+        <details>
+            <summary>Copyable Markdown</summary>
+            <pre>| Dependency      | Version             |
+| --------------- | ------------------- |
+| wcwidth         | 0.2.13              |
+| ipython         | 8.30.0              |
+| cycler          | 0.12.1              |
+| debugpy         | 1.8.16              |
+| natsort         | 8.4.0               |
+| pytz            | 2025.2              |
+| llvmlite        | 0.46.0              |
+| igraph          | 0.11.9              |
+| asttokens       | 3.0.0               |
+| h5py            | 3.15.1              |
+| numba           | 0.63.1              |
+| joblib          | 1.5.3               |
+| psutil          | 7.0.0               |
+| pillow          | 12.0.0              |
+| setuptools      | 80.9.0              |
+| parso           | 0.8.5               |
+| executing       | 2.2.1               |
+| kiwisolver      | 1.4.9               |
+| torch           | 2.9.1 (2.9.1+cu128) |
+| leidenalg       | 0.10.2              |
+| tqdm            | 4.67.1              |
+| six             | 1.17.0              |
+| tornado         | 6.5.4               |
+| stack_data      | 0.6.3               |
+| python-dateutil | 2.9.0.post0         |
+| prompt_toolkit  | 3.0.52              |
+| decorator       | 5.2.1               |
+| texttable       | 1.7.0               |
+| jedi            | 0.19.2              |
+| pure_eval       | 0.2.3               |
+
+| Component | Info                                                    |
+| --------- | ------------------------------------------------------- |
+| Python    | 3.10.19 (main, Oct 21 2025, 16:43:05) [GCC 11.2.0]      |
+| OS        | Linux-5.14.0-611.7.1.el9_7.x86_64-x86_64-with-glibc2.34 |
+| CPU       | 32 logical CPU cores, x86_64                            |
+| GPU       | No GPU found                                            |
+| Updated   | 2025-12-22 21:51                                        |</pre>
+        </details></div>
+</div>
+<section id="Setting-paths">
+<h2>Setting paths<a class="headerlink" href="#Setting-paths" title="Link to this heading">#</a></h2>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[2]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>path = &#39;/home/mid166/Analysis/Jupyter/Python/Longitudinal/Integration&#39;
+import sys
+sys.path.append(path)
+from env_settings import *
+sc.set_figure_params(dpi=80,dpi_save=300, color_map=&#39;viridis&#39;,facecolor=&#39;white&#39;)
+rcParams[&#39;figure.figsize&#39;] = 4, 4
+save_dir=&#39;/n/scratch/users/m/mid166/Result/single-cell/Methods/COSG/Database&#39;
+### Create the save_dir if not existed
+!mkdir -p {save_dir}
+</pre></div>
+</div>
+</div>
+</section>
+<section id="Load-the-adult-mouse-cortex-RNA">
+<h2>Load the adult mouse cortex RNA<a class="headerlink" href="#Load-the-adult-mouse-cortex-RNA" title="Link to this heading">#</a></h2>
+<p>Google Drive link: <a class="reference external" href="https://drive.google.com/file/d/1bEyWNjGvoA9kz3J6jnbXRKgAIytb555W">https://drive.google.com/file/d/1bEyWNjGvoA9kz3J6jnbXRKgAIytb555W</a></p>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>mkdir -p /n/scratch/users/m/mid166/Result/single-cell/Enhancer/AdultCortexMultiome
+cd /n/scratch/users/m/mid166/Result/single-cell/Enhancer/AdultCortexMultiome
+gdrive files download 1bEyWNjGvoA9kz3J6jnbXRKgAIytb555W
+</pre></div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[3]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata=sc.read(&#39;/n/scratch/users/m/mid166/Result/single-cell/Enhancer/AdultCortexMultiome/AdultCortexMultiomeRNA_integrated_anno.h5ad&#39;)
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[4]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(adata,
+           color=[&#39;CellTypes&#39;],
+           palette=self_palette2,
+           # legend_loc=&#39;on data&#39;,
+           legend_fontoutline=2,
+           legend_fontweight=5,
+           cmap=&#39;Spectral_r&#39;,
+           ncols=3,
+           size=10,
+           frameon=False)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_27_PIASO_markerGeneBasedCellTypePrediction_mouseCortex_updated_8_0.png" class="no-scaled-link" src="../_images/notebooks_27_PIASO_markerGeneBasedCellTypePrediction_mouseCortex_updated_8_0.png" style="width: 510px; height: 277px;" />
+</div>
+</div>
+</section>
+<section id="Load-the-top-50-marker-gene-table-from-Allen-Whole-Mouse-Brain-(isocortex-subset)">
+<h2>Load the top 50 marker gene table from Allen Whole Mouse Brain (isocortex subset)<a class="headerlink" href="#Load-the-top-50-marker-gene-table-from-Allen-Whole-Mouse-Brain-(isocortex-subset)" title="Link to this heading">#</a></h2>
+<p>Here, we load the top marker genes precomputed using COSG on Allen Institute’s Whole Mouse Brain Atlas (isocortex subset), and other marker gene lists are also compatible. Precomputed marker gene sets for multiple studies are available in <a class="reference external" href="https://piaso.org/piasomarkerdb">PIASOmarkerDB</a>.</p>
+<p>The top marker genes for the Allen Whole Mouse Brain (isocortex subset) are available in google drive:</p>
+<p>WholeMouseBrainRNAAllen_isocortex_subclass_leidenlocalRes0.5_markerGenes.csv <a class="reference external" href="https://drive.google.com/file/d/1O-PCQn0kpzxyrVxBKWDb6Piuusnf3IPw/view?usp=drivesdk">https://drive.google.com/file/d/1O-PCQn0kpzxyrVxBKWDb6Piuusnf3IPw/view?usp=drivesdk</a></p>
+<p>and the corresponding cell type specificity scores for the markers are in this file:</p>
+<p>WholeMouseBrainRNAAllen_isocortex_subclass_leidenlocalRes0.5_markerGenesScores.csv <a class="reference external" href="https://drive.google.com/file/d/1G8V1SKBXbR8YsTKfkC_W6ce0mq47A7PV/view?usp=drivesdk">https://drive.google.com/file/d/1G8V1SKBXbR8YsTKfkC_W6ce0mq47A7PV/view?usp=drivesdk</a></p>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>mkdir -p /n/scratch/users/m/mid166/Result/single-cell/Enhancer/WholeMouseBrainRNAAllen
+cd /n/scratch/users/m/mid166/Result/single-cell/Enhancer/WholeMouseBrainRNAAllen
+gdrive files download 1O-PCQn0kpzxyrVxBKWDb6Piuusnf3IPw
+gdrive files download 1G8V1SKBXbR8YsTKfkC_W6ce0mq47A7PV
+</pre></div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[5]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>cosgMarkerDB=pd.read_csv(&#39;/n/scratch/users/m/mid166/Result/single-cell/Enhancer/WholeMouseBrainRNAAllen/WholeMouseBrainRNAAllen_isocortex_subclass_leidenlocalRes0.5_markerGenes.csv&#39;,
+                         index_col=0)
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[6]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>cosgMarkerDB.shape
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[6]:
+</pre></div>
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+(32285, 201)
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[7]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>cosgMarkerDB.head()
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[7]:
+</pre></div>
+</div>
+<div class="output_area rendered_html docutils container">
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>001 CLA-EPd-CTX Car3 Glut-0</th>
+      <th>001 CLA-EPd-CTX Car3 Glut-1</th>
+      <th>001 CLA-EPd-CTX Car3 Glut-2</th>
+      <th>001 CLA-EPd-CTX Car3 Glut-3</th>
+      <th>001 CLA-EPd-CTX Car3 Glut-4</th>
+      <th>004 L6 IT CTX Glut-0</th>
+      <th>004 L6 IT CTX Glut-1</th>
+      <th>004 L6 IT CTX Glut-2</th>
+      <th>004 L6 IT CTX Glut-3</th>
+      <th>004 L6 IT CTX Glut-4</th>
+      <th>...</th>
+      <th>334 Microglia NN-3</th>
+      <th>334 Microglia NN-4</th>
+      <th>334 Microglia NN-5</th>
+      <th>334 Microglia NN-6</th>
+      <th>335 BAM NN-0</th>
+      <th>335 BAM NN-1</th>
+      <th>335 BAM NN-2</th>
+      <th>335 BAM NN-3</th>
+      <th>335 BAM NN-4</th>
+      <th>335 BAM NN-5</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>Kcnj5</td>
+      <td>Cd109</td>
+      <td>Hes3</td>
+      <td>Gm15825</td>
+      <td>Pkp1</td>
+      <td>Aspg</td>
+      <td>Oprk1</td>
+      <td>Lipg</td>
+      <td>4933406J09Rik</td>
+      <td>Fst</td>
+      <td>...</td>
+      <td>Arhgap45</td>
+      <td>Cxcl2</td>
+      <td>Gm2629</td>
+      <td>Ccl5</td>
+      <td>Lyve1</td>
+      <td>Pf4</td>
+      <td>Wfdc17</td>
+      <td>Cd209g</td>
+      <td>Ifi206</td>
+      <td>Lilr4b</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>Tfap2d</td>
+      <td>Fermt1</td>
+      <td>Car3</td>
+      <td>Gtf2a1l</td>
+      <td>Tfap2d</td>
+      <td>Sulf1</td>
+      <td>Gm2694</td>
+      <td>1700023F02Rik</td>
+      <td>Gm38407</td>
+      <td>Met</td>
+      <td>...</td>
+      <td>Siglech</td>
+      <td>Tnf</td>
+      <td>Dock2</td>
+      <td>BC147527</td>
+      <td>Ccl7</td>
+      <td>F13a1</td>
+      <td>F630028O10Rik</td>
+      <td>Cd209b</td>
+      <td>Ifi213</td>
+      <td>Aoah</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>Car3</td>
+      <td>Gm6602</td>
+      <td>Kcnj5</td>
+      <td>Tfap2d</td>
+      <td>Gm15825</td>
+      <td>Dmkn</td>
+      <td>Ccnb1</td>
+      <td>Slc26a4</td>
+      <td>Gm19744</td>
+      <td>Lgr5</td>
+      <td>...</td>
+      <td>Tmem119</td>
+      <td>Bcl2a1d</td>
+      <td>Ptprc</td>
+      <td>Phf11b</td>
+      <td>Gm47675</td>
+      <td>Mrc1</td>
+      <td>Clec12a</td>
+      <td>Cd209a</td>
+      <td>Ifi211</td>
+      <td>Lilrb4a</td>
+    </tr>
+    <tr>
+      <th>3</th>
+      <td>Gm6602</td>
+      <td>Oprk1</td>
+      <td>Gm45623</td>
+      <td>Oprk1</td>
+      <td>Car3</td>
+      <td>Gm6209</td>
+      <td>Cwh43</td>
+      <td>Adgrd1</td>
+      <td>Gm6209</td>
+      <td>Kcng1</td>
+      <td>...</td>
+      <td>P2ry12</td>
+      <td>Gpr84</td>
+      <td>Ikzf1</td>
+      <td>Ifi209</td>
+      <td>Pf4</td>
+      <td>Cybb</td>
+      <td>Lilrb4a</td>
+      <td>Cd209f</td>
+      <td>Ifi209</td>
+      <td>Mrc1</td>
+    </tr>
+    <tr>
+      <th>4</th>
+      <td>BB557941</td>
+      <td>Gm47352</td>
+      <td>Col24a1</td>
+      <td>Gm45623</td>
+      <td>Vgll2</td>
+      <td>Bmp3</td>
+      <td>Ptpru</td>
+      <td>4930407I19Rik</td>
+      <td>Iqca</td>
+      <td>Bmp3</td>
+      <td>...</td>
+      <td>Cx3cr1</td>
+      <td>Gm43936</td>
+      <td>Apbb1ip</td>
+      <td>Trim30b</td>
+      <td>Fpr1</td>
+      <td>Lyz2</td>
+      <td>Ms4a4a</td>
+      <td>Fcna</td>
+      <td>Oas1g</td>
+      <td>Ms4a7</td>
+    </tr>
+  </tbody>
+</table>
+<p>5 rows × 201 columns</p>
+</div></div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[8]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>cosgMarkerScoreDB=pd.read_csv(&#39;/n/scratch/users/m/mid166/Result/single-cell/Enhancer/WholeMouseBrainRNAAllen/WholeMouseBrainRNAAllen_isocortex_subclass_leidenlocalRes0.5_markerGenesScores.csv&#39;, index_col=0)
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[9]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>cosgMarkerScoreDB.head()
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[9]:
+</pre></div>
+</div>
+<div class="output_area rendered_html docutils container">
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>001 CLA-EPd-CTX Car3 Glut-0</th>
+      <th>001 CLA-EPd-CTX Car3 Glut-1</th>
+      <th>001 CLA-EPd-CTX Car3 Glut-2</th>
+      <th>001 CLA-EPd-CTX Car3 Glut-3</th>
+      <th>001 CLA-EPd-CTX Car3 Glut-4</th>
+      <th>004 L6 IT CTX Glut-0</th>
+      <th>004 L6 IT CTX Glut-1</th>
+      <th>004 L6 IT CTX Glut-2</th>
+      <th>004 L6 IT CTX Glut-3</th>
+      <th>004 L6 IT CTX Glut-4</th>
+      <th>...</th>
+      <th>334 Microglia NN-3</th>
+      <th>334 Microglia NN-4</th>
+      <th>334 Microglia NN-5</th>
+      <th>334 Microglia NN-6</th>
+      <th>335 BAM NN-0</th>
+      <th>335 BAM NN-1</th>
+      <th>335 BAM NN-2</th>
+      <th>335 BAM NN-3</th>
+      <th>335 BAM NN-4</th>
+      <th>335 BAM NN-5</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>0.000152</td>
+      <td>0.000256</td>
+      <td>0.000798</td>
+      <td>0.000061</td>
+      <td>0.000123</td>
+      <td>0.000089</td>
+      <td>0.000049</td>
+      <td>0.000095</td>
+      <td>0.000199</td>
+      <td>0.000176</td>
+      <td>...</td>
+      <td>0.000122</td>
+      <td>0.002985</td>
+      <td>0.000003</td>
+      <td>0.000212</td>
+      <td>0.000298</td>
+      <td>0.000089</td>
+      <td>0.000132</td>
+      <td>0.001023</td>
+      <td>0.005484</td>
+      <td>0.000083</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>0.000130</td>
+      <td>0.000055</td>
+      <td>0.000159</td>
+      <td>0.000046</td>
+      <td>0.000063</td>
+      <td>0.000073</td>
+      <td>0.000029</td>
+      <td>0.000084</td>
+      <td>0.000197</td>
+      <td>0.000062</td>
+      <td>...</td>
+      <td>0.000121</td>
+      <td>0.002543</td>
+      <td>0.000003</td>
+      <td>0.000139</td>
+      <td>0.000271</td>
+      <td>0.000067</td>
+      <td>0.000113</td>
+      <td>0.000715</td>
+      <td>0.001042</td>
+      <td>0.000044</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>0.000101</td>
+      <td>0.000051</td>
+      <td>0.000144</td>
+      <td>0.000029</td>
+      <td>0.000037</td>
+      <td>0.000072</td>
+      <td>0.000029</td>
+      <td>0.000075</td>
+      <td>0.000119</td>
+      <td>0.000047</td>
+      <td>...</td>
+      <td>0.000111</td>
+      <td>0.001407</td>
+      <td>0.000002</td>
+      <td>0.000088</td>
+      <td>0.000266</td>
+      <td>0.000066</td>
+      <td>0.000107</td>
+      <td>0.000686</td>
+      <td>0.000864</td>
+      <td>0.000034</td>
+    </tr>
+    <tr>
+      <th>3</th>
+      <td>0.000099</td>
+      <td>0.000051</td>
+      <td>0.000058</td>
+      <td>0.000027</td>
+      <td>0.000030</td>
+      <td>0.000065</td>
+      <td>0.000022</td>
+      <td>0.000065</td>
+      <td>0.000097</td>
+      <td>0.000027</td>
+      <td>...</td>
+      <td>0.000111</td>
+      <td>0.001169</td>
+      <td>0.000002</td>
+      <td>0.000045</td>
+      <td>0.000219</td>
+      <td>0.000065</td>
+      <td>0.000093</td>
+      <td>0.000555</td>
+      <td>0.000470</td>
+      <td>0.000033</td>
+    </tr>
+    <tr>
+      <th>4</th>
+      <td>0.000041</td>
+      <td>0.000033</td>
+      <td>0.000049</td>
+      <td>0.000026</td>
+      <td>0.000021</td>
+      <td>0.000064</td>
+      <td>0.000018</td>
+      <td>0.000041</td>
+      <td>0.000089</td>
+      <td>0.000025</td>
+      <td>...</td>
+      <td>0.000109</td>
+      <td>0.000993</td>
+      <td>0.000002</td>
+      <td>0.000024</td>
+      <td>0.000208</td>
+      <td>0.000055</td>
+      <td>0.000093</td>
+      <td>0.000292</td>
+      <td>0.000446</td>
+      <td>0.000032</td>
+    </tr>
+  </tbody>
+</table>
+<p>5 rows × 201 columns</p>
+</div></div>
+</div>
+</section>
+<section id="Calculate-the-identity-scores-with-PIASO">
+<h2>Calculate the identity scores with PIASO<a class="headerlink" href="#Calculate-the-identity-scores-with-PIASO" title="Link to this heading">#</a></h2>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[10]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>import piaso
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+/n/data1/hms/neurobio/fishell/mindai/.conda/envs/nca/lib/python3.10/site-packages/tqdm/auto.py:21: TqdmWarning: IProgress not found. Please update jupyter and ipywidgets. See https://ipywidgets.readthedocs.io/en/stable/user_install.html
+  from .autonotebook import tqdm as notebook_tqdm
+</pre></div></div>
+</div>
+<section id="INFOG-normalization">
+<h3>INFOG normalization<a class="headerlink" href="#INFOG-normalization" title="Link to this heading">#</a></h3>
+<p>The layer used for INFOG normalization should be the raw UMI counts:</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[11]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>%%time
+piaso.tl.infog(adata, layer=&#39;raw&#39;)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+The normalized data is saved as `infog` in `adata.layers`.
+The highly variable genes are saved as `highly_variable` in `adata.var`.
+Finished INFOG normalization.
+CPU times: user 2.4 s, sys: 1.15 s, total: 3.55 s
+Wall time: 3.59 s
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[12]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[12]:
+</pre></div>
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+AnnData object with n_obs × n_vars = 17412 × 26205
+    obs: &#39;gex_barcode&#39;, &#39;atac_barcode&#39;, &#39;is_cell&#39;, &#39;excluded_reason&#39;, &#39;gex_raw_reads&#39;, &#39;gex_mapped_reads&#39;, &#39;gex_conf_intergenic_reads&#39;, &#39;gex_conf_exonic_reads&#39;, &#39;gex_conf_intronic_reads&#39;, &#39;gex_conf_exonic_unique_reads&#39;, &#39;gex_conf_exonic_antisense_reads&#39;, &#39;gex_conf_exonic_dup_reads&#39;, &#39;gex_exonic_umis&#39;, &#39;gex_conf_intronic_unique_reads&#39;, &#39;gex_conf_intronic_antisense_reads&#39;, &#39;gex_conf_intronic_dup_reads&#39;, &#39;gex_intronic_umis&#39;, &#39;gex_conf_txomic_unique_reads&#39;, &#39;gex_umis_count&#39;, &#39;gex_genes_count&#39;, &#39;atac_raw_reads&#39;, &#39;atac_unmapped_reads&#39;, &#39;atac_lowmapq&#39;, &#39;atac_dup_reads&#39;, &#39;atac_chimeric_reads&#39;, &#39;atac_mitochondrial_reads&#39;, &#39;atac_fragments&#39;, &#39;atac_TSS_fragments&#39;, &#39;atac_peak_region_fragments&#39;, &#39;atac_peak_region_cutsites&#39;, &#39;Sample&#39;, &#39;batch&#39;, &#39;n_genes&#39;, &#39;n_genes_by_counts&#39;, &#39;total_counts&#39;, &#39;total_counts_mt&#39;, &#39;pct_counts_mt&#39;, &#39;pct_counts_ribo&#39;, &#39;scrublet_score&#39;, &#39;predicted_doublets&#39;, &#39;scrublet_cluster_score&#39;, &#39;bh_pval&#39;, &#39;Leiden&#39;, &#39;Leiden_last&#39;, &#39;Leiden_last2&#39;, &#39;Leiden_sample&#39;, &#39;CellTypes_TACCO&#39;, &#39;Leiden_local&#39;, &#39;CellTypes&#39;
+    var: &#39;gene_ids&#39;, &#39;feature_types&#39;, &#39;genome&#39;, &#39;n_cells&#39;, &#39;mt&#39;, &#39;n_cells_by_counts&#39;, &#39;mean_counts&#39;, &#39;pct_dropout_by_counts&#39;, &#39;total_counts&#39;, &#39;means&#39;, &#39;variances&#39;, &#39;residual_variances&#39;, &#39;highly_variable_rank&#39;, &#39;highly_variable&#39;, &#39;highly_variable_nbatches&#39;, &#39;highly_variable_intersection&#39;, &#39;infog_var&#39;
+    uns: &#39;CellTypes_TACCO_colors&#39;, &#39;CellTypes_colors&#39;, &#39;Leiden_colors&#39;, &#39;Leiden_last2_colors&#39;, &#39;Leiden_last_colors&#39;, &#39;Leiden_local_colors&#39;, &#39;Sample_colors&#39;, &#39;cosg&#39;, &#39;dendrogram_Leiden&#39;, &#39;dendrogram_Leiden_local&#39;, &#39;hvg&#39;, &#39;leiden&#39;, &#39;log1p&#39;, &#39;neighbors&#39;, &#39;umap&#39;
+    obsm: &#39;CellTypes_TACCO&#39;, &#39;X_pca&#39;, &#39;X_pca_harmony&#39;, &#39;X_umap&#39;, &#39;X_umap_pca&#39;, &#39;X_umap_raw&#39;
+    varm: &#39;CellTypes_TACCO&#39;
+    layers: &#39;log1p&#39;, &#39;raw&#39;, &#39;infog&#39;
+    obsp: &#39;connectivities&#39;, &#39;distances&#39;
+</pre></div></div>
+</div>
+<p>You could also set score layer as <code class="docutils literal notranslate"><span class="pre">log1p</span></code>, and here the top 30 marker genes were used:</p>
+<p>Here because we used the marker genes identified from finer clustering of <code class="docutils literal notranslate"><span class="pre">Subclass</span></code>, so we set <code class="docutils literal notranslate"><span class="pre">extract_cell_type</span>&#160; <span class="pre">=</span> <span class="pre">True</span></code>, <code class="docutils literal notranslate"><span class="pre">delimiter_cell_type</span>&#160; <span class="pre">=</span> <span class="pre">'-'</span></code>, you can set <code class="docutils literal notranslate"><span class="pre">extract_cell_type</span>&#160; <span class="pre">=</span> <span class="pre">False</span></code> if the input marker genes resolution already matched to the annotations you are interested:</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[13]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>piaso.tl.predictCellTypeByMarker(
+    adata,
+    marker_gene_set=cosgMarkerDB[:50], ### Use the top 50 marker genes,
+    score_method = &#39;piaso&#39;,
+    score_layer = &#39;infog&#39;,
+    use_score  = True,
+    max_workers = 32,
+    smooth_prediction = True,
+    use_rep = &#39;X_pca_harmony&#39;, ### Use the specified low-dimensional cell embeddings for kNN graph-based cell type prediction smoothing
+    k_nearest_neighbors = 9,
+    return_confidence  = False,
+    use_existing_adjacency_graph = False,
+    use_faiss = False,
+    key_added  = &#39;Subclass_predicted&#39;,
+    extract_cell_type  = True, delimiter_cell_type  = &#39;-&#39;, ## Set True to extract the subclass, as now it&#39;s clusters of subclass level
+
+    inplace  = True,
+    random_seed = 1927,
+    verbosity = 1,
+    n_jobs  = -1,
+)
+</pre></div>
+</div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Calculating gene set scores using piaso method...
+</pre></div></div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+Scoring gene sets: 100%|██████████| 201/201 [00:41&lt;00:00,  4.87set/s]
+</pre></div></div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Predicting cell types based on marker gene scores...
+Smoothing cell type predictions...
+Smoothing cell type predictions from &#39;Subclass_predicted_raw&#39; using 9-nearest neighbors
+Smoothed predictions stored in adata.obs[&#39;Subclass_predicted_smoothed&#39;]
+Modified 1141 cell labels (6.55% of total)
+Cell type prediction completed. Results saved to:
+  - adata.obs[&#39;Subclass_predicted&#39;]: predicted cell types
+  - adata.obsm[&#39;Subclass_predicted_score&#39;]: full score matrix
+  - adata.obs[&#39;Subclass_predicted_score&#39;]: maximum scores
+  - adata.obs[&#39;Subclass_predicted_raw&#39;]: original unsmoothed predictions
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[14]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(adata,
+           color=[&#39;Subclass_predicted&#39;],
+           palette=piaso.pl.color.d_color10,
+           # legend_loc=&#39;on data&#39;,
+           legend_fontoutline=2,
+           legend_fontweight=5,
+           cmap=&#39;Spectral_r&#39;,
+           ncols=3,
+           size=10,
+           frameon=False)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_27_PIASO_markerGeneBasedCellTypePrediction_mouseCortex_updated_27_0.png" class="no-scaled-link" src="../_images/notebooks_27_PIASO_markerGeneBasedCellTypePrediction_mouseCortex_updated_27_0.png" style="width: 697px; height: 284px;" />
+</div>
+</div>
+<p>Let’s compare to the mannually annotated cell types:</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[15]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(adata,
+           color=[&#39;CellTypes&#39;],
+           palette=piaso.pl.color.d_color10,
+           legend_loc=&#39;on data&#39;,
+           legend_fontoutline=2,
+           legend_fontsize=6,
+           legend_fontweight=5,
+           # cmap=&#39;Spectral_r&#39;,
+           cmap=sp_cmap,
+           ncols=1,
+           size=10,
+           frameon=False)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_27_PIASO_markerGeneBasedCellTypePrediction_mouseCortex_updated_29_0.png" class="no-scaled-link" src="../_images/notebooks_27_PIASO_markerGeneBasedCellTypePrediction_mouseCortex_updated_29_0.png" style="width: 265px; height: 277px;" />
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[16]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(adata,
+           color=[&#39;Subclass_predicted_score&#39;],
+           palette=piaso.pl.color.d_color10,
+           # legend_loc=&#39;on data&#39;,
+           legend_fontoutline=2,
+           legend_fontweight=5,
+           # cmap=&#39;Spectral_r&#39;,
+           cmap=piaso.pl.color.c_color6,
+
+           ncols=1,
+           size=10,
+           frameon=False)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_27_PIASO_markerGeneBasedCellTypePrediction_mouseCortex_updated_30_0.png" class="no-scaled-link" src="../_images/notebooks_27_PIASO_markerGeneBasedCellTypePrediction_mouseCortex_updated_30_0.png" style="width: 278px; height: 277px;" />
+</div>
+</div>
+</section>
+</section>
+<section id="Use-P-values-for-the-cell-type-prediction">
+<h2>Use P values for the cell type prediction<a class="headerlink" href="#Use-P-values-for-the-cell-type-prediction" title="Link to this heading">#</a></h2>
+<p>Set <code class="docutils literal notranslate"><span class="pre">use_score</span> <span class="pre">=</span> <span class="pre">False</span></code> to use the P values for the prediction:</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[17]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>piaso.tl.predictCellTypeByMarker(
+    adata,
+    marker_gene_set=cosgMarkerDB[:50], ### Use the top 50 marker genes,
+    score_method = &#39;piaso&#39;,
+    score_layer = &#39;infog&#39;,
+    use_score  = False,
+    max_workers = 32,
+    smooth_prediction = True,
+    use_rep = &#39;X_pca_harmony&#39;, ### Use the specified low-dimensional cell embeddings for kNN graph-based cell type prediction smoothing
+    k_nearest_neighbors = 9,
+    return_confidence  = False,
+    use_existing_adjacency_graph = False,
+    use_faiss = False,
+    key_added  = &#39;Subclass_predicted_pvals&#39;,
+    extract_cell_type  = True, delimiter_cell_type  = &#39;-&#39;, ## Set True to extract the subclass, as now it&#39;s clusters of subclass level
+
+    inplace  = True,
+    random_seed = 1927,
+    verbosity = 1,
+    n_jobs  = -1,
+)
+</pre></div>
+</div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Calculating gene set scores using piaso method...
+</pre></div></div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+Scoring gene sets: 100%|██████████| 201/201 [00:45&lt;00:00,  4.42set/s]
+</pre></div></div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Predicting cell types based on marker gene p-values...
+Smoothing cell type predictions...
+Smoothing cell type predictions from &#39;Subclass_predicted_pvals_raw&#39; using 9-nearest neighbors
+Smoothed predictions stored in adata.obs[&#39;Subclass_predicted_pvals_smoothed&#39;]
+Modified 1372 cell labels (7.88% of total)
+Cell type prediction completed. Results saved to:
+  - adata.obs[&#39;Subclass_predicted_pvals&#39;]: predicted cell types
+  - adata.obsm[&#39;Subclass_predicted_pvals_score&#39;]: full score matrix
+  - adata.obsm[&#39;Subclass_predicted_pvals_nlog10pvals&#39;]: full -log10(p-value) matrix
+  - adata.obs[&#39;Subclass_predicted_pvals_nlog10pvals&#39;]: maximum -log10(p-values)
+  - adata.obs[&#39;Subclass_predicted_pvals_raw&#39;]: original unsmoothed predictions
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[18]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(adata,
+           color=[&#39;Subclass_predicted&#39;, &#39;Subclass_predicted_pvals&#39;],
+           palette=piaso.pl.color.d_color10,
+           # legend_loc=&#39;on data&#39;,
+           legend_fontoutline=2,
+           legend_fontweight=5,
+           cmap=&#39;Spectral_r&#39;,
+           ncols=1,
+           size=10,
+           frameon=False)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_27_PIASO_markerGeneBasedCellTypePrediction_mouseCortex_updated_34_0.png" class="no-scaled-link" src="../_images/notebooks_27_PIASO_markerGeneBasedCellTypePrediction_mouseCortex_updated_34_0.png" style="width: 726px; height: 560px;" />
+</div>
+</div>
+<p>Let’s compare to the mannually annotated cell types:</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[19]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(adata,
+           color=[&#39;CellTypes&#39;],
+           palette=piaso.pl.color.d_color10,
+           legend_loc=&#39;on data&#39;,
+           legend_fontoutline=2,
+           legend_fontsize=6,
+           legend_fontweight=5,
+           # cmap=&#39;Spectral_r&#39;,
+           cmap=sp_cmap,
+           ncols=1,
+           size=10,
+           frameon=False)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_27_PIASO_markerGeneBasedCellTypePrediction_mouseCortex_updated_36_0.png" class="no-scaled-link" src="../_images/notebooks_27_PIASO_markerGeneBasedCellTypePrediction_mouseCortex_updated_36_0.png" style="width: 265px; height: 277px;" />
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[20]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(adata,
+           color=[&#39;Subclass_predicted_pvals_nlog10pvals&#39;],
+           palette=piaso.pl.color.d_color10,
+           # legend_loc=&#39;on data&#39;,
+           legend_fontoutline=2,
+           legend_fontweight=5,
+           # cmap=&#39;Spectral_r&#39;,
+           cmap=piaso.pl.color.c_color6,
+           vcenter= -np.log10(0.05), vmin=0,
+
+           ncols=1,
+           size=10,
+           frameon=False)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_27_PIASO_markerGeneBasedCellTypePrediction_mouseCortex_updated_37_0.png" class="no-scaled-link" src="../_images/notebooks_27_PIASO_markerGeneBasedCellTypePrediction_mouseCortex_updated_37_0.png" style="width: 292px; height: 286px;" />
+</div>
+</div>
+<p>This dataset actually has batch effects (the UMAP cell embeddings were after integration), and here we showed that our cell type prediction is robust to batch effects in the query dataset.</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[21]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(adata,
+           color=[&#39;Sample&#39;, &#39;Leiden&#39;],
+           palette=self_palette2,
+           # legend_loc=&#39;on data&#39;,
+           legend_fontoutline=2,
+           legend_fontweight=5,
+           # cmap=&#39;Spectral_r&#39;,
+           cmap=sp_cmap,
+           ncols=1,
+           size=10,
+           frameon=False)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_27_PIASO_markerGeneBasedCellTypePrediction_mouseCortex_updated_39_0.png" class="no-scaled-link" src="../_images/notebooks_27_PIASO_markerGeneBasedCellTypePrediction_mouseCortex_updated_39_0.png" style="width: 501px; height: 582px;" />
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[23]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>piaso.pl.plotConfusionMatrix(adata, &#39;CellTypes&#39;, &#39;Subclass_predicted&#39;,)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_27_PIASO_markerGeneBasedCellTypePrediction_mouseCortex_updated_40_0.png" class="no-scaled-link" src="../_images/notebooks_27_PIASO_markerGeneBasedCellTypePrediction_mouseCortex_updated_40_0.png" style="width: 887px; height: 781px;" />
+</div>
+</div>
+</section>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="GDR_COSG_FashionMNIST.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Running GDR on Fashion MNIST data</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="GDRPredictCellTypeTutorial.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Cell type prediction by GDR</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#Setting-paths">Setting paths</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#Load-the-adult-mouse-cortex-RNA">Load the adult mouse cortex RNA</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#Load-the-top-50-marker-gene-table-from-Allen-Whole-Mouse-Brain-(isocortex-subset)">Load the top 50 marker gene table from Allen Whole Mouse Brain (isocortex subset)</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#Calculate-the-identity-scores-with-PIASO">Calculate the identity scores with PIASO</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#INFOG-normalization">INFOG normalization</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#Use-P-values-for-the-cell-type-prediction">Use P values for the cell type prediction</a></li>
+</ul>
+  </nav></div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf"></script>
+<script defer src="../_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2025, Min Dai.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 7.3.7.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  <!-- # L10n: Setting the PST URL as an argument as this does not need to be localized -->
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.16.1.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

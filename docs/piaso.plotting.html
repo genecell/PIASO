@@ -402,35 +402,6 @@
   <section id="module-piaso.plotting">
 <span id="piaso-plotting-package"></span><h1>piaso.plotting package<a class="headerlink" href="#module-piaso.plotting" title="Link to this heading">#</a></h1>
 <dl class="py function">
-<dt class="sig sig-object py" id="piaso.plotting.plot_features_violin">
-<span class="sig-prename descclassname"><span class="pre">piaso.plotting.</span></span><span class="sig-name descname"><span class="pre">plot_features_violin</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">adata</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">feature_list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">groupby</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_raw</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">layer</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">width_single</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">14.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">height_single</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">2.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">show_grid</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">show_figure</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#piaso.plotting.plot_features_violin" title="Link to this definition">#</a></dt>
-<dd><p>Plots a violin plot for each feature specified in <cite>feature_list</cite> using the Scanpy library (sc.pl.violin).</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>adata</strong> (<em>anndata.AnnData</em>) – The annotated data matrix of shape n_obs × n_vars. Rows correspond to cells and columns to genes.</p></li>
-<li><p><strong>feature_list</strong> (<em>List</em><em>[</em><em>str</em><em>]</em>) – A list of strings denoting the feature names (gene names and cell metrics, e.g., number of genes detected and doublet score) to be visualized.</p></li>
-<li><p><strong>groupby</strong> (<em>str</em><em>, </em><em>optional</em>) – A key in the observation DataFrame (adata.obs) used to group data points in the violin plot. Default is None, which means no grouping is applied.</p></li>
-<li><p><strong>use_raw</strong> (<em>bool</em><em>, </em><em>optional</em>) – A boolean indicating whether to use the raw attribute of adata. If True, uses raw data if available.</p></li>
-<li><p><strong>layer</strong> (<em>str</em><em>, </em><em>optional</em>) – A key from the layers of adata. If provided, the specified layer is used for visualization.</p></li>
-<li><p><strong>width_single</strong> (<em>float</em><em>, </em><em>optional</em>) – The width of each subplot. Default is 14.0.</p></li>
-<li><p><strong>height_single</strong> (<em>float</em><em>, </em><em>optional</em>) – The height of each subplot. Default is 2.0.</p></li>
-<li><p><strong>size</strong> (<em>float</em><em>, </em><em>optional</em>) – The size of the jitter points in the violin plot. Default is 0.1.</p></li>
-<li><p><strong>show_grid</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether to display grid lines in the plots. Default is True (grid lines shown).</p></li>
-<li><p><strong>show_figure</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether to show the figure (plt.show()). Default is True.</p></li>
-<li><p><strong>save</strong> (<em>str</em><em>, </em><em>optional</em>) – If provided, the path where the plot should be saved, e.g., <cite>./violin_plot_by_piaso.pdf</cite>. If None, the plot is not saved to a file.</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>This function does not return any value but visualizes the violin plots and optionally saves the figure.</p>
-</dd>
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p>None</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py function">
 <dt class="sig sig-object py" id="piaso.plotting.plot_embeddings_split">
 <span class="sig-prename descclassname"><span class="pre">piaso.plotting.</span></span><span class="sig-name descname"><span class="pre">plot_embeddings_split</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">adata</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">color</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">splitby</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ncol</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dpi</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">80</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">col_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">5</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">row_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">5</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">vmax</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">vmin</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">show_figure</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">layer</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">basis</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'X_umap'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fix_coordinate_ratio</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">show_axis_ticks</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">margin_ratio</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.05</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">legend_fontsize</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">10</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">legend_fontoutline</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">legend_loc</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'right</span> <span class="pre">margin'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">legend_marker_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1.6</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">x_min</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">x_max</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y_min</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y_max</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#piaso.plotting.plot_embeddings_split" title="Link to this definition">#</a></dt>
 <dd><p>Plot cell embeddings side by side based on a categorical variable.</p>
@@ -486,41 +457,295 @@ additional spacing around the plotted points.</p></li>
 </dd></dl>
 
 <dl class="py function">
-<dt class="sig sig-object py" id="piaso.plotting.createCustomCmapFromHex">
-<span class="sig-prename descclassname"><span class="pre">piaso.plotting.</span></span><span class="sig-name descname"><span class="pre">createCustomCmapFromHex</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">hex_colors</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#piaso.plotting.createCustomCmapFromHex" title="Link to this definition">#</a></dt>
-<dd><p>Create a custom colormap from a list of hex colors.
-This function converts a sequence of hex colors into an RGB-based colormap that can be used for visualizations in Matplotlib.</p>
+<dt class="sig sig-object py" id="piaso.plotting.plotEmbeddingsSplit">
+<span class="sig-prename descclassname"><span class="pre">piaso.plotting.</span></span><span class="sig-name descname"><span class="pre">plotEmbeddingsSplit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">adata</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">color</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">splitby</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ncol</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dpi</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">80</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">col_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">5</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">row_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">5</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">vmax</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">vmin</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">show_figure</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">layer</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">basis</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'X_umap'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fix_coordinate_ratio</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">show_axis_ticks</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">margin_ratio</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.05</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">legend_fontsize</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">10</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">legend_fontoutline</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">legend_loc</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'right</span> <span class="pre">margin'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">legend_marker_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1.6</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">x_min</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">x_max</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y_min</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y_max</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#piaso.plotting.plotEmbeddingsSplit" title="Link to this definition">#</a></dt>
+<dd><p>Plot cell embeddings side by side based on a categorical variable.</p>
+<p>The plots are split by a specified categorical variable, with each unique category producing a separate subplot.
+Data points in each subplot are colored according to the <cite>color</cite> variable.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>hex_colors</strong> (<em>list</em><em> of </em><em>str</em>) – A list of color codes in hexadecimal format (e.g., <cite>[‘#faefef’, ‘#e8aebc’, ‘#d96998’, ‘#b1257a’, ‘#572266’]</cite>).</p>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>adata</strong> (<em>AnnData</em>) – An AnnData object.</p></li>
+<li><p><strong>color</strong> (<em>str</em>) – Used to specify a gene name to plot, or a key in <cite>adata.obs</cite> used to assign colors to the cells in the embedding plot.</p></li>
+<li><p><strong>splitby</strong> (<em>str</em>) – Key in <cite>adata.obs</cite> used to split the dataset into multiple panels. Each unique value under this key
+will result in a separate subplot.</p></li>
+<li><p><strong>ncol</strong> (<em>int</em><em> or </em><em>None</em><em>, </em><em>optional</em><em> (</em><em>default: None</em><em>)</em>) – If specified, defines the number of columns per row. If None, the number of columns is computed
+as the ceiling of n divided by the integer square root of n.</p></li>
+<li><p><strong>dpi</strong> (<em>int</em><em>, </em><em>optional</em><em> (</em><em>default: 80</em><em>)</em>) – Dots per inch (DPI) setting for the figure.</p></li>
+<li><p><strong>col_size</strong> (<em>int</em><em>, </em><em>optional</em><em> (</em><em>default=5</em><em>)</em>) – Width (in inches) of each subplot column.</p></li>
+<li><p><strong>row_size</strong> (<em>int</em><em>, </em><em>optional</em><em> (</em><em>default=5</em><em>)</em>) – Height (in inches) of each subplot row.</p></li>
+<li><p><strong>vmax</strong> (<em>float</em><em> or </em><em>None</em><em>, </em><em>optional</em><em> (</em><em>default=None</em><em>)</em>) – Maximum value for the color scale. If not provided, the upper limit is determined automatically.</p></li>
+<li><p><strong>vmin</strong> (<em>float</em><em> or </em><em>None</em><em>, </em><em>optional</em><em> (</em><em>default=None</em><em>)</em>) – Minimum value for the color scale. If not provided, the lower limit is determined automatically.</p></li>
+<li><p><strong>show_figure</strong> (<em>bool</em><em>, </em><em>optional</em><em> (</em><em>default=True</em><em>)</em>) – Whether to display the figure after plotting.</p></li>
+<li><p><strong>save</strong> (<em>str</em><em> or </em><em>None</em><em>, </em><em>optional</em><em> (</em><em>default=None</em><em>)</em>) – File path to save the resulting figure. If None, the figure will not be saved.</p></li>
+<li><p><strong>layer</strong> (<em>str</em><em> or </em><em>None</em><em>, </em><em>optional</em><em> (</em><em>default=None</em><em>)</em>) – If specified, the name of the layer in <cite>adata.layers</cite> from which to obtain the gene expression values.</p></li>
+<li><p><strong>basis</strong> (<em>str</em><em>, </em><em>optional</em><em> (</em><em>default='X_umap'</em><em>)</em>) – Key in <cite>adata.obsm</cite> that contains the embedding coordinates (e.g., <cite>X_umap</cite> or <cite>X_pca</cite>).</p></li>
+<li><p><strong>fix_coordinate_ratio</strong> (<em>bool</em><em>, </em><em>optional</em><em> (</em><em>default=True</em><em>)</em>) – If True, the aspect ratio of each subplot is fixed so that the x- and y-axes are scaled equally.</p></li>
+<li><p><strong>show_axis_ticks</strong> (<em>bool</em><em>, </em><em>optional</em><em> (</em><em>default=False</em><em>)</em>) – Whether to display axis ticks and tick labels on the plots.</p></li>
+<li><p><strong>margin_ratio</strong> (<em>float</em><em>, </em><em>optional</em><em> (</em><em>default=0.05</em><em>)</em>) – Margin ratio for both the x-axis and y-axis limits, relative to the range of the data. This provides
+additional spacing around the plotted points.</p></li>
+<li><p><strong>legend_fontsize</strong> (<em>int</em><em>, </em><em>optional</em><em> (</em><em>default=9</em><em>)</em>) – Font size in pt.</p></li>
+<li><p><strong>legend_fontoutline</strong> (<em>int</em><em>, </em><em>optional</em><em> (</em><em>default=2</em><em>)</em>) – Line width of the legend font outline in pt.</p></li>
+<li><p><strong>legend_loc</strong> (<em>str</em><em>, </em><em>optional</em><em> (</em><em>default='right margin'</em><em>)</em>) – Location of legend, defaults to ‘right margin’.</p></li>
+<li><p><strong>legend_marker_size</strong> (<em>float</em><em>, </em><em>optional</em><em> (</em><em>default=1.5</em><em>)</em>) – Scaling factor for legend markers (dot size).</p></li>
+<li><p><strong>x_min</strong> (<em>float</em><em> or </em><em>None</em><em>, </em><em>optional</em><em> (</em><em>default=None</em><em>)</em>) – Minimum limit for the x-axis. If None, the limit is computed automatically based on the data.</p></li>
+<li><p><strong>x_max</strong> (<em>float</em><em> or </em><em>None</em><em>, </em><em>optional</em><em> (</em><em>default=None</em><em>)</em>) – Maximum limit for the x-axis. If None, the limit is computed automatically based on the data.</p></li>
+<li><p><strong>y_min</strong> (<em>float</em><em> or </em><em>None</em><em>, </em><em>optional</em><em> (</em><em>default=None</em><em>)</em>) – Minimum limit for the y-axis. If None, the limit is computed automatically based on the data.</p></li>
+<li><p><strong>y_max</strong> (<em>float</em><em> or </em><em>None</em><em>, </em><em>optional</em><em> (</em><em>default=None</em><em>)</em>) – Maximum limit for the y-axis. If None, the limit is computed automatically based on the data.</p></li>
+<li><p><strong>**kwargs</strong> (<em>dict</em>) – Additional keyword arguments passed to the <cite>scanpy.pl.embedding</cite> function.</p></li>
+</ul>
 </dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>A Matplotlib <cite>LinearSegmentedColormap</cite> object that can be applied to plots using the <cite>cmap</cite> parameter.</p>
-</dd>
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p>LinearSegmentedColormap</p>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>None.</p>
 </dd>
 </dl>
-<p class="rubric">Example</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="k">as</span> <span class="nn">plt</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">scanpy</span> <span class="k">as</span> <span class="nn">sc</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">piaso</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Define custom hex colors</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">hex_colors</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;#faefef&#39;</span><span class="p">,</span> <span class="s1">&#39;#e8aebc&#39;</span><span class="p">,</span> <span class="s1">&#39;#d96998&#39;</span><span class="p">,</span> <span class="s1">&#39;#b1257a&#39;</span><span class="p">,</span> <span class="s1">&#39;#572266&#39;</span><span class="p">]</span>
-<span class="gp">&gt;&gt;&gt;</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Create the colormap</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">c_color4</span> <span class="o">=</span> <span class="n">piaso</span><span class="o">.</span><span class="n">pl</span><span class="o">.</span><span class="n">color</span><span class="o">.</span><span class="n">createCustomCmapFromHex</span><span class="p">(</span><span class="n">hex_colors</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt;</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Generate a gradient to visualize the colormap</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">gradient</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">256</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt;</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Display the colormap</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">6</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">plt</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">gradient</span><span class="p">,</span> <span class="n">aspect</span><span class="o">=</span><span class="s2">&quot;auto&quot;</span><span class="p">,</span> <span class="n">cmap</span><span class="o">=</span><span class="n">c_color4</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">plt</span><span class="o">.</span><span class="n">axis</span><span class="p">(</span><span class="s2">&quot;off&quot;</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">adata</span> <span class="o">=</span> <span class="n">sc</span><span class="o">.</span><span class="n">datasets</span><span class="o">.</span><span class="n">pbmc3k</span><span class="p">()</span>  <span class="c1"># Load an example dataset</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Plot embeddings colored by a gene expression value and split by clusters</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">piaso</span><span class="o">.</span><span class="n">pl</span><span class="o">.</span><span class="n">plot_embeddings_split</span><span class="p">(</span><span class="n">adata</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;CDK9&#39;</span><span class="p">,</span> <span class="n">splitby</span><span class="o">=</span><span class="s1">&#39;louvain&#39;</span><span class="p">,</span> <span class="n">col_size</span><span class="o">=</span><span class="mi">6</span><span class="p">,</span> <span class="n">row_size</span><span class="o">=</span><span class="mi">6</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Save the figure to a file</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">piaso</span><span class="o">.</span><span class="n">pl</span><span class="o">.</span><span class="n">plot_embeddings_split</span><span class="p">(</span><span class="n">adata</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;CDK9&#39;</span><span class="p">,</span> <span class="n">splitby</span><span class="o">=</span><span class="s1">&#39;louvain&#39;</span><span class="p">,</span> <span class="n">save</span><span class="o">=</span><span class="s1">&#39;./CST3_embeddingsSplit.pdf&#39;</span><span class="p">)</span>
 </pre></div>
 </div>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="piaso.plotting.plot_features_violin">
+<span class="sig-prename descclassname"><span class="pre">piaso.plotting.</span></span><span class="sig-name descname"><span class="pre">plot_features_violin</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">adata</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">feature_list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">groupby</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_raw</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">layer</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">width_single</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">14.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">height_single</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">2.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">show_grid</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">show_figure</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#piaso.plotting.plot_features_violin" title="Link to this definition">#</a></dt>
+<dd><p>Plots a violin plot for each feature specified in <cite>feature_list</cite> using the Scanpy library (sc.pl.violin).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>adata</strong> (<em>anndata.AnnData</em>) – The annotated data matrix of shape n_obs × n_vars. Rows correspond to cells and columns to genes.</p></li>
+<li><p><strong>feature_list</strong> (<em>List</em><em>[</em><em>str</em><em>]</em>) – A list of strings denoting the feature names (gene names and cell metrics, e.g., number of genes detected and doublet score) to be visualized.</p></li>
+<li><p><strong>groupby</strong> (<em>str</em><em>, </em><em>optional</em>) – A key in the observation DataFrame (adata.obs) used to group data points in the violin plot. Default is None, which means no grouping is applied.</p></li>
+<li><p><strong>use_raw</strong> (<em>bool</em><em>, </em><em>optional</em>) – A boolean indicating whether to use the raw attribute of adata. If True, uses raw data if available.</p></li>
+<li><p><strong>layer</strong> (<em>str</em><em>, </em><em>optional</em>) – A key from the layers of adata. If provided, the specified layer is used for visualization.</p></li>
+<li><p><strong>width_single</strong> (<em>float</em><em>, </em><em>optional</em>) – The width of each subplot. Default is 14.0.</p></li>
+<li><p><strong>height_single</strong> (<em>float</em><em>, </em><em>optional</em>) – The height of each subplot. Default is 2.0.</p></li>
+<li><p><strong>size</strong> (<em>float</em><em>, </em><em>optional</em>) – The size of the jitter points in the violin plot. Default is 0.1.</p></li>
+<li><p><strong>show_grid</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether to display grid lines in the plots. Default is True (grid lines shown).</p></li>
+<li><p><strong>show_figure</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether to show the figure (plt.show()). Default is True.</p></li>
+<li><p><strong>save</strong> (<em>str</em><em>, </em><em>optional</em>) – If provided, the path where the plot should be saved, e.g., <cite>./violin_plot_by_piaso.pdf</cite>. If None, the plot is not saved to a file.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>This function does not return any value but visualizes the violin plots and optionally saves the figure.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="piaso.plotting.plotLigandReceptorInteraction">
+<span class="sig-prename descclassname"><span class="pre">piaso.plotting.</span></span><span class="sig-name descname"><span class="pre">plotLigandReceptorInteraction</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">interactions_df</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">specificity_df</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cell_type_pairs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">top_n</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">50</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y_max</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">10</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cell_type_sep</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'&#64;'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ligand_receptor_sep</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'--&gt;'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">heatmap_height_ratio</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1.5</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">heatmap_cmap</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'Purples'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">heatmap_cmap_ligand</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">heatmap_cmap_receptor</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">shared_legend</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">heatmap_vmax</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fig_width</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">24</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fig_height_per_pair</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">9</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">col_interaction_score</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'interaction_score'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">col_ligand_receptor_pair</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'ligandXreceptor'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">col_cell_type_pair</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'CellTypeXCellType'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">col_annotation</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'annotation'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">col_ligand</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'ligand'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">col_receptor</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'receptor'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">vertical_layout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">color_labels_by_annotation</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">barplot_palette</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'Paired'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sort_by_category</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">category_agg_method</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'sum'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">preserve_input_order</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#piaso.plotting.plotLigandReceptorInteraction" title="Link to this definition">#</a></dt>
+<dd><p>Generates plots with a bar plot of top interactions and a heatmap showing
+ligand and receptor specificity, with an option for vertical orientation.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>interactions_df</strong> (<em>pd.DataFrame</em>) – DataFrame with interaction scores.</p></li>
+<li><p><strong>specificity_df</strong> (<em>pd.DataFrame</em>) – DataFrame with gene specificity scores.</p></li>
+<li><p><strong>cell_type_pairs</strong> (<em>list</em>) – A list of ‘CellTypeXCellType’ strings to plot.</p></li>
+<li><p><strong>top_n</strong> (<em>int</em>) – The number of top interactions to display.</p></li>
+<li><p><strong>y_max</strong> (<em>int</em>) – The maximum y-axis value for the bar plot.</p></li>
+<li><p><strong>cell_type_sep</strong> (<em>str</em>) – The separator for sender/receiver cell types.</p></li>
+<li><p><strong>ligand_receptor_sep</strong> (<em>str</em>) – The separator for ligand/receptor genes.</p></li>
+<li><p><strong>heatmap_height_ratio</strong> (<em>float</em>) – The height/width ratio of the heatmap relative to the bar plot.</p></li>
+<li><p><strong>heatmap_cmap</strong> (<em>str</em>) – The colormap for the specificity heatmap (used when ligand/receptor cmaps not specified).</p></li>
+<li><p><strong>heatmap_cmap_ligand</strong> (<em>str</em>) – The colormap for ligand specificity. If None, uses heatmap_cmap.</p></li>
+<li><p><strong>heatmap_cmap_receptor</strong> (<em>str</em>) – The colormap for receptor specificity. If None, uses heatmap_cmap.</p></li>
+<li><p><strong>shared_legend</strong> (<em>bool</em>) – If True, a single legend/colorbar is shown for all plots.</p></li>
+<li><p><strong>heatmap_vmax</strong> (<em>float</em>) – The maximum value for the heatmap color scale.</p></li>
+<li><p><strong>save_path</strong> (<em>str</em><em>, </em><em>optional</em>) – Path to save the figure (e.g., ‘plot.pdf’).</p></li>
+<li><p><strong>fig_width</strong> (<em>int</em>) – For horizontal layout, the total figure width. For vertical, this controls the total figure HEIGHT.</p></li>
+<li><p><strong>fig_height_per_pair</strong> (<em>int</em>) – For horizontal layout, height per subplot. For vertical, this controls the WIDTH of each subplot group.</p></li>
+<li><p><strong>col_interaction_score</strong> (<em>str</em>) – Column name for interaction scores.</p></li>
+<li><p><strong>col_ligand_receptor_pair</strong> (<em>str</em>) – Column name for ligand-receptor pair strings.</p></li>
+<li><p><strong>col_cell_type_pair</strong> (<em>str</em>) – Column name for cell type pair strings.</p></li>
+<li><p><strong>col_annotation</strong> (<em>str</em>) – Column name for pathway/annotation data.</p></li>
+<li><p><strong>col_ligand</strong> (<em>str</em>) – Column name for ligand after splitting.</p></li>
+<li><p><strong>col_receptor</strong> (<em>str</em>) – Column name for receptor after splitting.</p></li>
+<li><p><strong>vertical_layout</strong> (<em>bool</em>) – If True, plots are arranged horizontally (rotated 90 degrees).</p></li>
+<li><p><strong>color_labels_by_annotation</strong> (<em>bool</em>) – If True, color ligand-receptor labels by their annotation category.</p></li>
+<li><p><strong>barplot_palette</strong> (<em>str</em><em> or </em><em>list</em>) – Color palette for bar plots. Can be a seaborn palette name (e.g., ‘Paired’, ‘Set1’)
+or a list of hex colors (e.g., [‘#F198CC’, ‘#D6DAB9’, ‘#BC938B’]).</p></li>
+<li><p><strong>sort_by_category</strong> (<em>bool</em>) – If True, sort interactions by category first, then by interaction score within category.</p></li>
+<li><p><strong>category_agg_method</strong> (<em>str</em>) – Method to aggregate interaction scores by category (‘sum’ or ‘mean’) when sort_by_category=True.</p></li>
+<li><p><strong>preserve_input_order</strong> (<em>bool</em>) – If True, preserve the original order from interactions_df without any sorting.</p></li>
+</ul>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<p># Preserve original input order
+plotLigandReceptorInteraction(</p>
+<blockquote>
+<div><p>interactions_df=specific_interactions,
+specificity_df=cosg_scores,
+cell_type_pairs=[‘L5 <a class="reference external" href="mailto:NP&#37;&#52;&#48;SST-Chrna2">NP<span>&#64;</span>SST-Chrna2</a>’],
+preserve_input_order=True,  # Use original DataFrame order
+vertical_layout=False</p>
+</div></blockquote>
+<p>)</p>
+<p># Horizontal layout with category sorting
+plotLigandReceptorInteraction(</p>
+<blockquote>
+<div><p>interactions_df=specific_interactions,
+specificity_df=cosg_scores,
+cell_type_pairs=[‘L5 <a class="reference external" href="mailto:NP&#37;&#52;&#48;SST-Chrna2">NP<span>&#64;</span>SST-Chrna2</a>’, ‘L5 <a class="reference external" href="mailto:PT&#37;&#52;&#48;SST-Chrna2">PT<span>&#64;</span>SST-Chrna2</a>’],
+ligand_receptor_sep=’–&gt;’,
+top_n=50,
+y_max=10,
+heatmap_cmap_ligand=’Blues’,
+heatmap_cmap_receptor=’Reds’,
+shared_legend=True,
+vertical_layout=False,
+sort_by_category=True,
+category_agg_method=’sum’,
+color_labels_by_annotation=True</p>
+</div></blockquote>
+<p>)</p>
+<p># Vertical layout with custom hex colors
+plotLigandReceptorInteraction(</p>
+<blockquote>
+<div><p>interactions_df=specific_interactions_cellchat,
+specificity_df=cosg_scores,
+cell_type_pairs=[‘L5 <a class="reference external" href="mailto:NP&#37;&#52;&#48;SST-Chrna2">NP<span>&#64;</span>SST-Chrna2</a>’],
+ligand_receptor_sep=’–&gt;’,
+top_n=50,
+y_max=10,
+heatmap_cmap_ligand=’Purples’,
+heatmap_cmap_receptor=’Reds’,
+shared_legend=True,
+vertical_layout=True,
+barplot_palette=[‘#F198CC’, ‘#D6DAB9’, ‘#BC938B’, ‘#93DCFC’, ‘#F4DBCD’, ‘#bcf60c’],
+sort_by_category=True,
+category_agg_method=’mean’</p>
+</div></blockquote>
+<p>)</p>
+<dl class="field-list simple">
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>ValueError</strong> – If required columns are missing from DataFrames or if data is inconsistent.</p></li>
+<li><p><strong>KeyError</strong> – If specified cell type pairs are not found in the data.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="piaso.plotting.plotConfusionMatrix">
+<span class="sig-prename descclassname"><span class="pre">piaso.plotting.</span></span><span class="sig-name descname"><span class="pre">plotConfusionMatrix</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">groupby_query</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">groupby_reference</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">normalize</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'query'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">figsize</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">(11.5,</span> <span class="pre">10)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cmap</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'Purples'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">annot</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fmt</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'.2f'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">title</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save_path</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dpi</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">300</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">return_objects</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">show_group_color_bars</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#piaso.plotting.plotConfusionMatrix" title="Link to this definition">#</a></dt>
+<dd><p>Plot a normalized and reordered confusion matrix from clustering results.</p>
+<p>This function creates a confusion matrix heatmap with SVD-based reordering for
+better visualization of cluster relationships. The matrix can be normalized
+in different ways and customized extensively.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>data</strong> (<em>pandas.DataFrame</em><em> or </em><em>AnnData</em>) – DataFrame or AnnData object containing the data.
+If AnnData, will use data.obs for the analysis.</p></li>
+<li><p><strong>groupby_query</strong> (<em>str</em>) – Column name for the query labels (typically predicted clusters).</p></li>
+<li><p><strong>groupby_reference</strong> (<em>str</em>) – Column name for the reference labels (typically true labels).</p></li>
+<li><p><strong>normalize</strong> (<em>str</em>) – How to normalize the confusion matrix. Options:
+- ‘query’: normalize by query (row-wise) - default
+- ‘reference’: normalize by reference (column-wise)
+- ‘all’: normalize by total count
+- None: no normalization</p></li>
+<li><p><strong>figsize</strong> (<em>tuple</em>) – Figure size for the plot. Default is (11.5, 10).</p></li>
+<li><p><strong>cmap</strong> (<em>str</em>) – Colormap for the heatmap. Default is ‘Purples’.</p></li>
+<li><p><strong>annot</strong> (<em>bool</em>) – Whether to show annotations in cells. Default is False.</p></li>
+<li><p><strong>fmt</strong> (<em>str</em>) – Format for annotations. Default is ‘.2f’.</p></li>
+<li><p><strong>title</strong> (<em>str</em>) – Custom title for the plot. If None, generates automatic title.</p></li>
+<li><p><strong>save_path</strong> (<em>str</em>) – Path to save the figure. If None, only displays.</p></li>
+<li><p><strong>dpi</strong> (<em>int</em>) – DPI for saved figure. Default is 300.</p></li>
+<li><p><strong>return_objects</strong> (<em>bool</em>) – If True, returns (confusion_matrix, fig, ax). Default is False.</p></li>
+<li><p><strong>show_group_color_bars</strong> (<em>bool</em>) – If True, shows colored bars next to ticks for categories
+that have colors defined in adata.uns (e.g., ‘CellTypes_colors’).
+Default is False.</p></li>
+<li><p><strong>**kwargs</strong> – Additional arguments passed to sns.heatmap()</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>If return_objects=True, returns
+(reordered_confusion_matrix, fig, ax) for further customization</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>None (default) or tuple</p>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<p>Basic usage with AnnData object:
+&gt;&gt;&gt; import scanpy as sc
+&gt;&gt;&gt; import pandas as pd
+&gt;&gt;&gt; # Load your data
+&gt;&gt;&gt; adata = sc.read_h5ad(‘your_data.h5ad’)
+&gt;&gt;&gt; # Plot confusion matrix between cell types and Leiden clusters
+&gt;&gt;&gt; plotConfusionMatrix(adata, groupby_query=’CellTypes’, groupby_reference=’Leiden’)</p>
+<p>Using a pandas DataFrame:
+&gt;&gt;&gt; df = pd.DataFrame({
+…     ‘CellTypes’: [‘T_cell’, ‘B_cell’, ‘Monocyte’, ‘T_cell’, ‘B_cell’],
+…     ‘Leiden’: [‘0’, ‘1’, ‘2’, ‘0’, ‘1’]
+… })
+&gt;&gt;&gt; plotConfusionMatrix(df, groupby_query=’CellTypes’, groupby_reference=’Leiden’)</p>
+<p>Different normalization methods:
+&gt;&gt;&gt; # Normalize by reference (column-wise)
+&gt;&gt;&gt; plotConfusionMatrix(adata, groupby_query=’CellTypes’, groupby_reference=’Leiden’,
+…                     normalize=’reference’)
+&gt;&gt;&gt;
+&gt;&gt;&gt; # No normalization, show raw counts
+&gt;&gt;&gt; plotConfusionMatrix(adata, groupby_query=’CellTypes’, groupby_reference=’Leiden’,
+…                     normalize=None)
+&gt;&gt;&gt;
+&gt;&gt;&gt; # Normalize by total count
+&gt;&gt;&gt; plotConfusionMatrix(adata, groupby_query=’CellTypes’, groupby_reference=’Leiden’,
+…                     normalize=’all’)</p>
+<p>Customization options:
+&gt;&gt;&gt; # Custom colors and show detailed values
+&gt;&gt;&gt; plotConfusionMatrix(adata, groupby_query=’CellTypes’, groupby_reference=’Leiden’,
+…                     cmap=’viridis’, annot=True)
+&gt;&gt;&gt;
+&gt;&gt;&gt; # Custom figure size and save to file
+&gt;&gt;&gt; plotConfusionMatrix(adata, groupby_query=’CellTypes’, groupby_reference=’Leiden’,
+…                     figsize=(15, 12),
+…                     save_path=’confusion_matrix.png’,
+…                     title=’Cell Types vs Leiden Clusters’)</p>
+<p>Show detailed values in the plot:
+&gt;&gt;&gt; # Display percentage values in each cell
+&gt;&gt;&gt; plotConfusionMatrix(adata, groupby_query=’CellTypes’, groupby_reference=’Leiden’,
+…                     annot=True, fmt=’.1%’)
+&gt;&gt;&gt;
+&gt;&gt;&gt; # Display raw counts (with no normalization)
+&gt;&gt;&gt; plotConfusionMatrix(adata, groupby_query=’CellTypes’, groupby_reference=’Leiden’,
+…                     normalize=None, annot=True, fmt=’d’)</p>
+<p>Show color bars for categories:
+&gt;&gt;&gt; # Display colored bars next to ticks (requires colors in adata.uns)
+&gt;&gt;&gt; plotConfusionMatrix(adata, groupby_query=’CellTypes’, groupby_reference=’Leiden’,
+…                     show_group_color_bars=True)
+&gt;&gt;&gt; # This will look for ‘CellTypes_colors’ and ‘Leiden_colors’ in adata.uns</p>
+<p>Advanced usage - getting results for further analysis:
+&gt;&gt;&gt; conf_matrix, fig, ax = plotConfusionMatrix(adata,
+…                                           groupby_query=’CellTypes’,
+…                                           groupby_reference=’Leiden’,
+…                                           return_objects=True)
+&gt;&gt;&gt; # Access the reordered confusion matrix
+&gt;&gt;&gt; print(conf_matrix.head())
+&gt;&gt;&gt; # Further customize the plot
+&gt;&gt;&gt; ax.set_title(‘Custom Title’, fontsize=16)
+&gt;&gt;&gt; plt.show()</p>
+<p>Using with different data sources:
+&gt;&gt;&gt; # From Seurat object converted to pandas
+&gt;&gt;&gt; seurat_df = pd.read_csv(‘seurat_metadata.csv’)
+&gt;&gt;&gt; plotConfusionMatrix(seurat_df, groupby_query=’CellTypes’, groupby_reference=’Leiden’)
+&gt;&gt;&gt;
+&gt;&gt;&gt; # From flow cytometry data
+&gt;&gt;&gt; flow_df = pd.read_csv(‘flow_cytometry_results.csv’)
+&gt;&gt;&gt; plotConfusionMatrix(flow_df, groupby_query=’CellTypes’, groupby_reference=’Leiden’,
+…                     normalize=’reference’, cmap=’Reds’, annot=True)</p>
 </dd></dl>
 
 </section>
@@ -572,9 +797,11 @@ This function converts a sequence of hex colors into an RGB-based colormap that 
   </div>
   <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="visible nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#piaso.plotting.plot_features_violin"><code class="docutils literal notranslate"><span class="pre">plot_features_violin()</span></code></a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#piaso.plotting.plot_embeddings_split"><code class="docutils literal notranslate"><span class="pre">plot_embeddings_split()</span></code></a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#piaso.plotting.createCustomCmapFromHex"><code class="docutils literal notranslate"><span class="pre">createCustomCmapFromHex()</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#piaso.plotting.plotEmbeddingsSplit"><code class="docutils literal notranslate"><span class="pre">plotEmbeddingsSplit()</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#piaso.plotting.plot_features_violin"><code class="docutils literal notranslate"><span class="pre">plot_features_violin()</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#piaso.plotting.plotLigandReceptorInteraction"><code class="docutils literal notranslate"><span class="pre">plotLigandReceptorInteraction()</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#piaso.plotting.plotConfusionMatrix"><code class="docutils literal notranslate"><span class="pre">plotConfusionMatrix()</span></code></a></li>
 </ul>
   </nav></div>
 
