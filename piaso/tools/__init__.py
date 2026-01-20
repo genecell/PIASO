@@ -11,3 +11,5 @@ from ._predictCellType import predictCellTypeByGDR, smoothCellTypePrediction, pr
 from ._integration import stitchSpace
 
 from ._ligandReceptor import runSCALAR
+
+from ._markerdb import queryPIASOmarkerDB, getMarkers, analyzeMarkers, PIASOmarkerDB

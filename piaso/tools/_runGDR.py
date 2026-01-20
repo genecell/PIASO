@@ -656,6 +656,8 @@ def _calculate_gene_set_score_shared(gene_indices, metadata, score_name, is_spar
 
 
         else:
+            from multiprocessing import shared_memory
+            import numpy as np
             shm = shared_memory.SharedMemory(name=metadata["shm"].name, create=False)
             X = np.ndarray(metadata["shape"], dtype=metadata["dtype"], buffer=shm.buf)          
 
@@ -721,60 +723,97 @@ from concurrent.futures import ProcessPoolExecutor
 from functools import partial
 import numpy as np
 import scanpy as sc
-from typing import Literal
+from typing import Literal, Union, Optional
 from tqdm import tqdm
 
 def calculateScoreParallel(
     adata,
-    gene_set,
-    score_method: Literal["scanpy", "piaso"],
+    gene_set: Union[dict, list, pd.DataFrame],
+    score_method: Literal["scanpy", "piaso"] = "piaso",
     random_seed: int = 1927,
-    score_layer = None,
-    max_workers = None,
+    score_layer: Optional[str] = None,
+    max_workers: Optional[int] = None,
     return_pvals: bool = False,
     verbosity: int = 0,
 ):
     """
     Compute gene set scores in parallel using shared memory for efficiency.
+    
+    This function processes multiple gene sets in parallel, computing enrichment scores
+    for each gene set across all cells in the AnnData object. It uses shared memory
+    to efficiently pass the expression matrix to worker processes, avoiding costly
+    serialization overhead.
 
     Parameters
     ----------
     adata : AnnData
-        The input AnnData object.
+        The input AnnData object containing gene expression data.
     gene_set : dict, list of lists, or pandas.DataFrame
-        A collection of gene sets, where each gene set is either:
-            - A dictionary: Keys are gene set names, values are lists of genes.
-            - A list of lists: Each sublist contains genes in a gene set.
-            - A pandas.DataFrame: Each column represents a gene set, and column names are gene set names.
-    score_method : {'scanpy', 'piaso'}, optional
-        The method used for gene set scoring. Must be either 'scanpy' (default) or 'piaso'.
-        - 'scanpy': Uses the Scanpy's built-in gene set scoring method.
-        - 'piaso': Uses the PIASO's gene set scoring method, which is more robust to sequencing depth variations.
-    random_seed : int, optional
-        Random seed for reproducibility. Default is 1927.
-    score_layer : str or None, optional
+        A collection of gene sets to score. Supported formats:
+            - dict: Keys are gene set names, values are lists of gene names.
+            - list of lists: Each sublist contains gene names for one gene set.
+              Gene sets will be named "GeneSet_0", "GeneSet_1", etc.
+            - pandas.DataFrame: Each column represents a gene set, with column names
+              as gene set names and gene names as values.
+    score_method : {'scanpy', 'piaso'}, default 'piaso'
+        The method used for gene set scoring.
+        - 'scanpy': Uses Scanpy's built-in gene set scoring method.
+        - 'piaso': Uses the PIASO's gene set scoring method, which is more robust to sequencing
+          depth variations and provides p-values.
+    random_seed : int, default 1927
+        Random seed for reproducibility. 
+    score_layer : str or None, default None
         Layer of the AnnData object to use. If None, `adata.X` is used.
-    max_workers : int or None, optional
-        Number of parallel workers to use. Defaults to the number of CPUs.
-    return_pvals : bool, optional
-        Whether to return -log10 p-values when using 'piaso' method. Default is False.
-    verbosity : int, optional
-        Level of verbosity. Default is 0.
+    max_workers : int or None, default None
+        Number of parallel worker processes to use. If None, defaults to the number
+        of CPU cores available.
+    return_pvals : bool, default False
+        Whether to return -log10(p-values) when using 'piaso' method. Only applicable
+        when score_method='piaso'. If True, returns a third array containing p-values.
+    verbosity : int, default 0
+        Level of verbosity for progress reporting.
+        - 0: Silent (no progress bar)
+        - >0: Show progress bar during parallel computation
 
         
     Returns
     -------
-    tuple
-        If score_method is 'scanpy':
-            - np.ndarray: A 2D array where each column contains the scores for a gene set.
-            - list: The names of the gene sets.
-        If score_method is 'piaso' and return_pvals is True:
-            - np.ndarray: A 2D array where each column contains the scores for a gene set.
-            - list: The names of the gene sets.
-            - np.ndarray: A 2D array where each column contains the -log10(p-values) for a gene set.
-        If score_method is 'piaso' and return_pvals is False:
-            - np.ndarray: A 2D array where each column contains the scores for a gene set.
-            - list: The names of the gene sets.
+    score_matrix : np.ndarray
+        A 2D array of shape (n_cells, n_gene_sets) where each column contains
+        the scores for one gene set across all cells.
+    gene_set_names : list of str
+        The names of the gene sets, in the same order as columns in score_matrix.
+    nlog10_pval_matrix : np.ndarray, optional
+        Only returned when score_method='piaso' and return_pvals=True.
+        A 2D array of shape (n_cells, n_gene_sets) containing -log10(p-values)
+        for each gene set score. Returns None if p-values are not available.
+        
+    Examples
+    --------
+    >>> import scanpy as sc
+    >>> import numpy as np
+    >>> import piaso
+    >>>
+    >>> # Load example data
+    >>> adata = sc.datasets.pbmc3k()
+    >>> 
+    >>> # Define gene sets
+    >>> gene_sets = {
+    ...     'T_cell_markers': ['CD3D', 'CD3E', 'CD8A'],
+    ...     'B_cell_markers': ['CD79A', 'CD79B', 'MS4A1']
+    ... }
+    >>> 
+    >>> # Compute scores using Scanpy method
+    >>> scores, names = piaso.tl.calculateScoreParallel(
+    ...     adata, 
+    ...     gene_set=gene_sets,
+    ...     score_method='piaso',
+    ...     verbosity=1
+    ... )
+    >>> 
+    >>> # Add scores to AnnData object
+    >>> for i, name in enumerate(names):
+    ...     adata.obs[f'{name}_score'] = scores[:, i]
     """
     
     # Validate score_method
@@ -802,9 +841,21 @@ def calculateScoreParallel(
      
     # Preprocess gene sets to map to indices, and only keep the genes in the adata.var.index
     valid_gene_sets = _process_gene_sets(gene_set, adata.var.index)
-    ### need to add list() to valid_gene_sets.values(), otherwise, the dict's value is dict_value object, which is an iterable view, not a standard list.
-    valid_gene_sets_indices=list(valid_gene_sets.values())
-
+    
+    if not valid_gene_sets:
+        raise ValueError(
+            "No valid gene sets found. Ensure that gene names in gene_set match "
+            "gene names in adata.var.index."
+        )
+    
+    # ### need to add list() to valid_gene_sets.values(), otherwise, the dict's value is dict_value object, which is an iterable view, not a standard list.
+    # valid_gene_sets_indices=list(valid_gene_sets.values())
+    
+    
+    # Extract names and indices together to ensure alignment
+    gene_set_names, valid_gene_sets_indices = zip(*valid_gene_sets.items()) if valid_gene_sets else ([], [])
+    gene_set_names = list(gene_set_names)
+    valid_gene_sets_indices = list(valid_gene_sets_indices)
 
     # Prepare partial function
     partial_func = partial(
@@ -849,7 +900,7 @@ def calculateScoreParallel(
     
     
     # Process results based on score_method
-    gene_set_names=list(valid_gene_sets.keys())
+    # gene_set_names=list(valid_gene_sets.keys())
     
     if score_method == 'piaso':
         # For piaso, results should be tuples of (scores, nlog10_pvals)
