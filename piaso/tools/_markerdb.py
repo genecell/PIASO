@@ -13,12 +13,12 @@ Usage
     import piaso
     
     # Query marker genes
-    df = piaso.tl.queryPIASOmarkerDB(gene="CD3E", species="Human")
+    df = piaso.tl.queryPIASOmarkerDB(gene="Foxp2", species="Mouse")
     
     # Get both DataFrame and marker dict
     df, marker_dict = piaso.tl.queryPIASOmarkerDB(
-        study="AllenHumanImmuneHealthAtlas_L2",
-        species="Human", 
+        study="AllenWholeMouseBrain_isocortex",
+        species="Mouse", 
         as_dict=True
     )
     
@@ -26,15 +26,16 @@ Usage
     studies = piaso.tl.queryPIASOmarkerDB(list_studies=True)
     
     # Analyze gene lists for cell type inference
-    df = piaso.tl.analyzeMarkers(["CD3E", "CD8A", "GZMK"])
+    df = piaso.tl.analyzeMarkers(["Syt6", "Tle4", "Foxp2", "Fezf2"])
     
     # Analyze COSG results (DataFrame input) with specific study
     import pandas as pd
-    cosg_df = pd.DataFrame(adata.uns['cosg']['names'])
+    cosg_df = pd.DataFrame(adata.uns['cosg']['names']).head(50)
     results, top_hits = piaso.tl.analyzeMarkers(
         cosg_df, 
         n_top_genes=50,
-        studies="SEAAD2024_MTG_Subclass"
+        species="Mouse",
+        studies="AllenWholeMouseBrain_isocortex"
     )
 """
 
@@ -88,7 +89,7 @@ class MarkerDBConnectionError(PIASOmarkerDBError):
 
 
 class AuthenticationError(PIASOmarkerDBError):
-    """Authentication/invitation code error for download access."""
+    """Authentication error (kept for potential future use)."""
     pass
 
 
@@ -109,9 +110,6 @@ class PIASOmarkerDB:
     base_url : str, optional
         Base URL for the PIASOmarkerDB API. 
         Default: "https://piaso.org/piasomarkerdb"
-    invitation_code : str, optional
-        Invitation code for bulk download access.
-        Contact dai@broadinstitute.org to request.
     timeout : int, optional
         Request timeout in seconds. Default: 30
     cache_dir : str or Path, optional
@@ -126,10 +124,16 @@ class PIASOmarkerDB:
     >>> client = PIASOmarkerDB()
     >>> 
     >>> # Query markers
-    >>> df = client.getMarkers(gene="CD3E")
+    >>> df = client.getMarkers(gene="Foxp2")
     >>> 
     >>> # Get as dict
-    >>> df, marker_dict = client.getMarkers(gene="CD3E", as_dict=True)
+    >>> df, marker_dict = client.getMarkers(
+    ...     study="AllenWholeMouseBrain_isocortex", 
+    ...     as_dict=True
+    ... )
+    >>> 
+    >>> # Download markers
+    >>> client.downloadMarkers("markers.csv", species="Mouse")
     
     See Also
     --------
@@ -155,12 +159,10 @@ class PIASOmarkerDB:
     def __init__(
         self,
         base_url: str = None,
-        invitation_code: str = None,
         timeout: int = None,
         cache_dir: str | Path | None = None,
     ):
         self.base_url = (base_url or self.DEFAULT_BASE_URL).rstrip('/')
-        self.invitation_code = invitation_code
         self.timeout = timeout or self.DEFAULT_TIMEOUT
         self._session = requests.Session()
         
@@ -214,11 +216,6 @@ class PIASOmarkerDB:
                 timeout=self.timeout,
                 **kwargs
             )
-            
-            if response.status_code == 403:
-                raise AuthenticationError(
-                    "Invalid or missing invitation code"
-                )
             
             if response.status_code >= 400:
                 try:
@@ -324,8 +321,11 @@ class PIASOmarkerDB:
         
         Examples
         --------
-        >>> df = client.getMarkers(gene="CD3E", species="Human")
-        >>> df, marker_dict = client.getMarkers(study="SEAAD2024_MTG_Subclass", as_dict=True)
+        >>> df = client.getMarkers(gene="Foxp2", species="Mouse")
+        >>> df, marker_dict = client.getMarkers(
+        ...     study="AllenWholeMouseBrain_isocortex", 
+        ...     as_dict=True
+        ... )
         """
         params = {}
         
@@ -479,6 +479,12 @@ class PIASOmarkerDB:
         -------
         list of str
             List of study/publication identifiers.
+        
+        Examples
+        --------
+        >>> studies = client.listStudies()
+        >>> print(f"Total studies: {len(studies)}")
+        >>> mouse_studies = client.listStudies(species="Mouse")
         """
         params = {}
         if species:
@@ -628,7 +634,7 @@ class PIASOmarkerDB:
             
             - **list of str**: Single list of gene symbols. Returns DataFrame.
             - **pd.DataFrame**: Columns are clusters/cell types, rows are genes.
-              E.g., COSG output: pd.DataFrame(adata.uns['cosg']['names']).
+              E.g., COSG output: pd.DataFrame(adata.uns['cosg']['names']).head(50).
               Returns tuple (results_dict, top_hits_dict).
             - **dict**: {cluster_name: [gene_list]}. 
               Returns tuple (results_dict, top_hits_dict).
@@ -670,34 +676,30 @@ class PIASOmarkerDB:
         
         Examples
         --------
-        Single gene list:
-        
-        >>> df = client.analyzeGenes(["CD3E", "CD8A", "GZMK"])
-        
-        With specific study:
+        Single gene list (mouse cortex L6 markers):
         
         >>> df = client.analyzeGenes(
-        ...     ["CD3E", "CD8A", "GZMK"],
-        ...     studies="SEAAD2024_MTG_Subclass"
+        ...     ["Syt6", "Tle4", "Hs3st4", "Fezf2", "Foxp2"],
+        ...     species="Mouse"
         ... )
         
-        COSG output (DataFrame) with multiple studies:
+        With specific study filter:
         
-        >>> cosg_df = pd.DataFrame(adata.uns['cosg']['names'])
         >>> results, top_hits = client.analyzeGenes(
-        ...     cosg_df, 
+        ...     cosg_marker_df,
         ...     n_top_genes=50,
-        ...     studies=["SEAAD2024_MTG_Subclass", "SilettiLinnarssonWholeHumanBrain2023_class"]
+        ...     min_genes=5,
+        ...     studies=['AllenWholeMouseBrain_isocortex'],
+        ...     species="Mouse"
         ... )
-        >>> print(top_hits)
-        {'Lamp5': 'GABAergic neuron', 'Lhx6': 'Interneuron', ...}
         
         Dictionary input:
         
-        >>> results, top_hits = client.analyzeGenes({
-        ...     'Cluster_0': ['CD3E', 'CD8A', 'GZMK'],
-        ...     'Cluster_1': ['MS4A1', 'CD19', 'CD79A'],
-        ... })
+        >>> gene_sets = {
+        ...     'Microglia': ['Cx3cr1', 'P2ry12', 'Tmem119', 'Csf1r', 'Trem2'],
+        ...     'L6_CT': ['Syt6', 'Tle4', 'Foxp2', 'Fezf2'],
+        ... }
+        >>> results, top_hits = client.analyzeGenes(gene_sets)
         """
         # Validate and normalize studies parameter
         studies_list = None
@@ -1015,32 +1017,25 @@ class PIASOmarkerDB:
     def downloadMarkers(
         self,
         filepath: str | Path,
-        invitation_code: str = None,
         **kwargs
     ) -> None:
         """
         Download markers to CSV file.
         
-        Requires an invitation code. Contact dai@broadinstitute.org to request.
-        
         Parameters
         ----------
         filepath : str or Path
             Path to save the CSV file.
-        invitation_code : str, optional
-            Invitation code. Uses client default if not provided.
         **kwargs
-            Same filter parameters as getMarkers().
-        """
-        code = invitation_code or self.invitation_code
-        if not code:
-            raise AuthenticationError(
-                "Invitation code required for download. "
-                "Request one from dai@broadinstitute.org"
-            )
+            Same filter parameters as getMarkers() (species, tissue, study, etc.).
         
+        Examples
+        --------
+        >>> client = PIASOmarkerDB()
+        >>> client.downloadMarkers("human_markers.csv", species="Human")
+        >>> client.downloadMarkers("mouse_brain.csv", species="Mouse", tissue="brain")
+        """
         params = dict(kwargs)
-        params['invitation_code'] = code
         params['format'] = 'csv'
         
         url = self._build_url('markers')
@@ -1051,9 +1046,6 @@ class PIASOmarkerDB:
                 params=params, 
                 timeout=self.timeout * 2
             )
-            
-            if response.status_code == 403:
-                raise AuthenticationError("Invalid invitation code")
             
             response.raise_for_status()
             
@@ -1135,6 +1127,13 @@ class PIASOmarkerDB:
         -------
         str or None
             Recommended study name, or None if no recommendation.
+        
+        Examples
+        --------
+        >>> client.getRecommendedStudy("human", "blood")
+        'AllenHumanImmuneHealthAtlas_L2'
+        >>> client.getRecommendedStudy("mouse", "cortex")
+        'AllenWholeMouseBrain_isocortex'
         """
         recommendations = {
             ("human", "blood"): "AllenHumanImmuneHealthAtlas_L2",
@@ -1151,6 +1150,7 @@ class PIASOmarkerDB:
             ("human", "spleen"): "XuTeichmann2023_Spleen",
             ("human", "intestine"): "XuTeichmann2023_Intestine",
             ("mouse", "cortex"): "AllenWholeMouseBrain_isocortex",
+            ("mouse", "brain"): "AllenWholeMouseBrain_Neuron",
         }
         
         key = (species.lower(), tissue.lower())
@@ -1245,28 +1245,27 @@ def queryPIASOmarkerDB(
     Query marker genes:
     
     >>> import piaso
-    >>> df = piaso.tl.queryPIASOmarkerDB(gene="CD3E", species="Human")
+    >>> df = piaso.tl.queryPIASOmarkerDB(gene="Foxp2", species="Mouse")
+    >>> df = piaso.tl.queryPIASOmarkerDB(gene=["Foxp2", "Syt6", "Tle4"])
     
     Get both DataFrame and marker dictionary:
     
     >>> df, marker_dict = piaso.tl.queryPIASOmarkerDB(
-    ...     study="SEAAD2024_MTG_Subclass",
-    ...     species="Human",
+    ...     study="AllenWholeMouseBrain_isocortex",
+    ...     species="Mouse",
     ...     as_dict=True
     ... )
+    >>> print(f"DataFrame shape: {df.shape}")
+    >>> print(f"Cell types in dict: {len(marker_dict)}")
     
     List available studies:
     
     >>> studies = piaso.tl.queryPIASOmarkerDB(list_studies=True)
-    >>> studies = piaso.tl.queryPIASOmarkerDB(list_studies=True, species="Human")
+    >>> print(f"Total studies: {len(studies)}")
     
     List cell types:
     
-    >>> cell_types = piaso.tl.queryPIASOmarkerDB(list_cell_types=True, species="Human")
-    
-    List genes:
-    
-    >>> genes = piaso.tl.queryPIASOmarkerDB(list_genes=True, cell_type="T-cell")
+    >>> cell_types = piaso.tl.queryPIASOmarkerDB(list_cell_types=True, species="Mouse")
     
     See Also
     --------
@@ -1344,7 +1343,7 @@ def analyzeMarkers(
           Returns: pd.DataFrame with analysis results.
           
         - **pd.DataFrame**: Columns are clusters/cell types, rows are genes.
-          Ideal for COSG output: ``pd.DataFrame(adata.uns['cosg']['names'])``.
+          Ideal for COSG output: ``pd.DataFrame(adata.uns['cosg']['names']).head(50)``.
           Returns: tuple (results_dict, top_hits_dict).
           
         - **dict**: ``{cluster_name: [gene_list]}``.
@@ -1391,48 +1390,56 @@ def analyzeMarkers(
     
     Examples
     --------
-    Single gene list:
+    Single gene list (mouse cortex L6 markers):
     
     >>> import piaso
-    >>> df = piaso.tl.analyzeMarkers(["CD3E", "CD8A", "GZMK", "PRF1"])
+    >>> query_genes = ["Syt6", "Tle4", "Hs3st4", "Fezf2", "Foxp2", "Col12a1"]
+    >>> df = piaso.tl.analyzeMarkers(query_genes)
     >>> print(df.head())
+    # Top hit: EN-L6-CT from WangKriegstein2025
     
     With specific study filter:
     
-    >>> df = piaso.tl.analyzeMarkers(
-    ...     ["CD3E", "CD8A", "GZMK"],
-    ...     studies="SEAAD2024_MTG_Subclass"
-    ... )
-    
-    With multiple studies:
-    
-    >>> df = piaso.tl.analyzeMarkers(
-    ...     ["CD3E", "CD8A", "GZMK"],
-    ...     studies=["SEAAD2024_MTG_Subclass", "SilettiLinnarssonWholeHumanBrain2023_class"]
-    ... )
-    
-    COSG output (DataFrame with columns as clusters):
-    
-    >>> import pandas as pd
-    >>> cosg_df = pd.DataFrame(adata.uns['cosg']['names'])
     >>> results, top_hits = piaso.tl.analyzeMarkers(
-    ...     cosg_df,
+    ...     cosg_marker_df,
     ...     n_top_genes=50,
-    ...     species="Human",
-    ...     studies="SEAAD2024_MTG_Subclass"
+    ...     min_genes=5,
+    ...     studies=['AllenWholeMouseBrain_isocortex'],
+    ...     species="Mouse"
     ... )
     >>> print(top_hits)
-    {'Lamp5': 'Lamp5', 'Sst': 'Sst', 'Pvalb': 'Pvalb', ...}
+    {'L2-3 IT': '007 L2/3 IT CTX Glut', 'PV': '052 Pvalb Gaba', ...}
     
-    Dictionary input:
+    Dictionary input (microglia and L6 CT markers):
     
-    >>> results, top_hits = piaso.tl.analyzeMarkers({
-    ...     'Cluster_0': ['CD3E', 'CD8A', 'GZMK'],
-    ...     'Cluster_1': ['MS4A1', 'CD19', 'CD79A'],
-    ...     'Cluster_2': ['LYZ', 'CD14', 'FCGR3A'],
-    ... }, species="Human")
+    >>> gene_sets = {
+    ...     'Cluster_0': ['Cx3cr1', 'P2ry12', 'Tmem119', 'Csf1r', 'Trem2'],
+    ...     'Cluster_1': ['Syt6', 'Tle4', 'Hs3st4', 'Fezf2', 'Foxp2'],
+    ... }
+    >>> results, top_hits = piaso.tl.analyzeMarkers(gene_sets)
     >>> print(top_hits)
-    {'Cluster_0': 'CD8+ T cell', 'Cluster_1': 'B cell', 'Cluster_2': 'Monocyte'}
+    {'Cluster_0': 'Microglia', 'Cluster_1': 'EN-L6-CT'}
+    
+    COSG integration workflow:
+    
+    >>> import cosg
+    >>> import pandas as pd
+    >>> 
+    >>> # Run COSG
+    >>> cosg.cosg(adata, key_added='cosg', groupby='leiden')
+    >>> 
+    >>> # Get top 50 markers per cluster
+    >>> cosg_marker_df = pd.DataFrame(adata.uns['cosg']['names']).head(50)
+    >>> 
+    >>> # Analyze with PIASOmarkerDB
+    >>> results, top_hits = piaso.tl.analyzeMarkers(
+    ...     cosg_marker_df,
+    ...     n_top_genes=50,
+    ...     species="Mouse"
+    ... )
+    >>> 
+    >>> # Add annotations to AnnData
+    >>> adata.obs['cell_type_predicted'] = adata.obs['leiden'].map(top_hits)
     
     See Also
     --------
