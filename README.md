@@ -24,7 +24,7 @@ pip install git+https://github.com/genecell/PIASO.git
 
 ### Citation
 
-If PIASO is useful for your research, please consider citing Wu, S.J., Dai, M. ***et al***. Pyramidal neurons proportionately alter cortical interneuron subtypes. ***Nature*** (2026). https://doi.org/10.1038/s41586-025-09996-8
+If PIASO is useful for your research, please consider citing Wu, S.J., Dai, M. *et al*. Pyramidal neurons proportionately alter cortical interneuron subtypes. *Nature* (2026). https://doi.org/10.1038/s41586-025-09996-8
 
 ### Contact
 Min Dai
