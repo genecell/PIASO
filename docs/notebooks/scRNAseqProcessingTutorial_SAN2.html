@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>Pre-processing CellRanger outputs (single sample, human PBMCs) &#8212; PIASO 0.1.0 documentation</title>
+    <title>Pre-processing CellRanger outputs (single sample, Human PBMCs) &#8212; PIASO 0.1.0 documentation</title>
   
   
   
@@ -50,7 +50,7 @@
     <script src="../_static/sidebar_toggle.js?v=3b053ec6"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Pre-processing CellRanger outputs (single sample, mouse brain)" href="rnaSeqPipelineTutorial_mouse.html" />
+    <link rel="next" title="Pre-processing CellRanger outputs (multiple samples, Human PBMCs)" href="05_scRNAseqProcessingTutorial_SAN1SAN2.html" />
     <link rel="prev" title="GDR: marker Gene-guided Dimensionality Reduction" href="GDR_Tutorial.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
@@ -382,7 +382,7 @@
     
     <li class="breadcrumb-item"><a href="../tutorials.html" class="nav-link">Tutorials</a></li>
     
-    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Pre-processing CellRanger outputs (single sample, human PBMCs)</span></li>
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Pre-processing CellRanger outputs (single sample, Human PBMCs)</span></li>
   </ul>
 </nav>
 </div>
@@ -399,8 +399,8 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section id="Pre-processing-CellRanger-outputs-(single-sample,-human-PBMCs)">
-<h1>Pre-processing CellRanger outputs (single sample, human PBMCs)<a class="headerlink" href="#Pre-processing-CellRanger-outputs-(single-sample,-human-PBMCs)" title="Link to this heading">#</a></h1>
+  <section id="Pre-processing-CellRanger-outputs-(single-sample,-Human-PBMCs)">
+<h1>Pre-processing CellRanger outputs (single sample, Human PBMCs)<a class="headerlink" href="#Pre-processing-CellRanger-outputs-(single-sample,-Human-PBMCs)" title="Link to this heading">#</a></h1>
 <p>This notebook demonstrates the pipeline for processing scRNA-seq data, covering metric computation, normalization, clustering, cell type prediction, and the identification/removal of doublets and low-quality clusters. The final output is pre-processed, annotated scRNA-seq data.</p>
 <div class="nbinput docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[1]:
@@ -501,7 +501,7 @@ AnnData object with n_obs × n_vars = 4360 × 36601
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[6]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata.obs[&#39;Sample&#39;]=&quot;HumamPBMCs&quot;
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata.obs[&#39;Sample&#39;]=&quot;Human_PBMCs&quot;
 </pre></div>
 </div>
 </div>
@@ -667,8 +667,8 @@ AnnData object with n_obs × n_vars = 4360 × 36601
 </section>
 <section id="Quality-Control">
 <h2>Quality Control<a class="headerlink" href="#Quality-Control" title="Link to this heading">#</a></h2>
-<section id="Filter-cells">
-<h3>Filter cells<a class="headerlink" href="#Filter-cells" title="Link to this heading">#</a></h3>
+<section id="Filter-cells-based-on-gene-counts">
+<h3>Filter cells based on gene counts<a class="headerlink" href="#Filter-cells-based-on-gene-counts" title="Link to this heading">#</a></h3>
 <p>Filter out cells with fewer than 200 detected genes.</p>
 <div class="nbinput nblast docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[10]:
@@ -705,7 +705,7 @@ sc.pp.calculate_qc_metrics(adata, qc_vars=[&#39;ribo&#39;], percent_top=None, lo
 </div>
 <div class="output_area stderr docutils container">
 <div class="highlight"><pre>
-/tmp/ipykernel_2039358/3834852883.py:1: FutureWarning: Allowing a non-bool &#39;na&#39; in obj.str.startswith is deprecated and will raise in a future version.
+/tmp/ipykernel_842045/3834852883.py:1: FutureWarning: Allowing a non-bool &#39;na&#39; in obj.str.startswith is deprecated and will raise in a future version.
   adata.var[&#39;ribo&#39;] = adata.var_names.str.startswith(&#39;RPS&#39;,&#39;RPL&#39;)
 </pre></div></div>
 </div>
@@ -723,7 +723,7 @@ sc.pp.calculate_qc_metrics(adata, qc_vars=[&#39;ribo&#39;], percent_top=None, lo
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_22_0.png" class="no-scaled-link" src="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_22_0.png" style="width: 217px; height: 581px;" />
+<img alt="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_21_0.png" class="no-scaled-link" src="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_21_0.png" style="width: 217px; height: 581px;" />
 </div>
 </div>
 </section>
@@ -764,7 +764,7 @@ for experiment in experiments:
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-HumamPBMCs
+Human_PBMCs
 Preprocessing...
 Simulating doublets...
 Embedding transcriptomes using PCA...
@@ -775,7 +775,7 @@ Estimated detectable doublet fraction = 79.6%
 Overall doublet rate:
         Expected   = 10.0%
         Estimated  = 21.4%
-Elapsed time: 6.7 seconds
+Elapsed time: 7.3 seconds
 </pre></div></div>
 </div>
 <div class="nboutput nblast docutils container">
@@ -783,7 +783,7 @@ Elapsed time: 6.7 seconds
 </div>
 <div class="output_area stderr docutils container">
 <div class="highlight"><pre>
-/tmp/ipykernel_2039358/3464195482.py:10: FutureWarning: ChainedAssignmentError: behaviour will change in pandas 3.0!
+/tmp/ipykernel_842045/3464195482.py:10: FutureWarning: ChainedAssignmentError: behaviour will change in pandas 3.0!
 You are setting values through chained assignment. Currently this works in certain cases, but when using Copy-on-Write (which will become the default behaviour in pandas 3.0) this will never work to update the original DataFrame or Series, because the intermediate object on which we are setting values will behave as a copy.
 A typical example is when you are setting values in a column of a DataFrame, like:
 
@@ -794,12 +794,12 @@ Use `df.loc[row_indexer, &#34;col&#34;] = values` instead, to perform the assign
 See the caveats in the documentation: https://pandas.pydata.org/pandas-docs/stable/user_guide/indexing.html#returning-a-view-versus-a-copy
 
   adata.obs[&#39;predicted_doublets&#39;][adatai.obs_names]=predicted_doublets
-/tmp/ipykernel_2039358/3464195482.py:10: SettingWithCopyWarning:
+/tmp/ipykernel_842045/3464195482.py:10: SettingWithCopyWarning:
 A value is trying to be set on a copy of a slice from a DataFrame
 
 See the caveats in the documentation: https://pandas.pydata.org/pandas-docs/stable/user_guide/indexing.html#returning-a-view-versus-a-copy
   adata.obs[&#39;predicted_doublets&#39;][adatai.obs_names]=predicted_doublets
-/tmp/ipykernel_2039358/3464195482.py:12: FutureWarning: ChainedAssignmentError: behaviour will change in pandas 3.0!
+/tmp/ipykernel_842045/3464195482.py:12: FutureWarning: ChainedAssignmentError: behaviour will change in pandas 3.0!
 You are setting values through chained assignment. Currently this works in certain cases, but when using Copy-on-Write (which will become the default behaviour in pandas 3.0) this will never work to update the original DataFrame or Series, because the intermediate object on which we are setting values will behave as a copy.
 A typical example is when you are setting values in a column of a DataFrame, like:
 
@@ -810,12 +810,12 @@ Use `df.loc[row_indexer, &#34;col&#34;] = values` instead, to perform the assign
 See the caveats in the documentation: https://pandas.pydata.org/pandas-docs/stable/user_guide/indexing.html#returning-a-view-versus-a-copy
 
   adata.obs[&#39;scrublet_score&#39;][adatai.obs_names]=doublet_scores
-/tmp/ipykernel_2039358/3464195482.py:12: SettingWithCopyWarning:
+/tmp/ipykernel_842045/3464195482.py:12: SettingWithCopyWarning:
 A value is trying to be set on a copy of a slice from a DataFrame
 
 See the caveats in the documentation: https://pandas.pydata.org/pandas-docs/stable/user_guide/indexing.html#returning-a-view-versus-a-copy
   adata.obs[&#39;scrublet_score&#39;][adatai.obs_names]=doublet_scores
-/tmp/ipykernel_2039358/3464195482.py:12: FutureWarning: Setting an item of incompatible dtype is deprecated and will raise an error in a future version of pandas. Value &#39;[0.07518797 0.29180328 0.03955842 ... 0.13812155 0.07239264 0.06466513]&#39; has dtype incompatible with int64, please explicitly cast to a compatible dtype first.
+/tmp/ipykernel_842045/3464195482.py:12: FutureWarning: Setting an item of incompatible dtype is deprecated and will raise an error in a future version of pandas. Value &#39;[0.07518797 0.29180328 0.03955842 ... 0.13812155 0.07239264 0.06466513]&#39; has dtype incompatible with int64, please explicitly cast to a compatible dtype first.
   adata.obs[&#39;scrublet_score&#39;][adatai.obs_names]=doublet_scores
 </pre></div></div>
 </div>
@@ -834,35 +834,37 @@ See the caveats in the documentation: https://pandas.pydata.org/pandas-docs/stab
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_26_0.png" class="no-scaled-link" src="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_26_0.png" style="width: 189px; height: 270px;" />
+<img alt="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_25_0.png" class="no-scaled-link" src="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_25_0.png" style="width: 189px; height: 274px;" />
 </div>
 </div>
-<p>Remove doublets based on a scrublet score threshold.</p>
+</section>
+</section>
+<section id="log1p-Normalization">
+<h2>log1p Normalization<a class="headerlink" href="#log1p-Normalization" title="Link to this heading">#</a></h2>
 <div class="nbinput docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[17]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata = adata[adata.obs[&#39;scrublet_score&#39;]&lt;0.3].copy()
-adata
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>%%time
+sc.pp.normalize_total(adata, target_sum=1e4)
+sc.pp.log1p(adata)
+
+adata.layers[&#39;log1p&#39;]=adata.X.copy()
 </pre></div>
 </div>
 </div>
 <div class="nboutput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[17]:
-</pre></div>
+<div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-AnnData object with n_obs × n_vars = 4026 × 36601
-    obs: &#39;Sample&#39;, &#39;n_genes&#39;, &#39;n_genes_by_counts&#39;, &#39;total_counts&#39;, &#39;total_counts_mt&#39;, &#39;pct_counts_mt&#39;, &#39;total_counts_ribo&#39;, &#39;pct_counts_ribo&#39;, &#39;scrublet_score&#39;, &#39;predicted_doublets&#39;
-    var: &#39;gene_ids&#39;, &#39;feature_types&#39;, &#39;genome&#39;, &#39;interval&#39;, &#39;mt&#39;, &#39;n_cells_by_counts&#39;, &#39;mean_counts&#39;, &#39;pct_dropout_by_counts&#39;, &#39;total_counts&#39;, &#39;ribo&#39;
-    uns: &#39;Sample_colors&#39;
-    layers: &#39;raw&#39;
+CPU times: user 159 ms, sys: 14.2 ms, total: 173 ms
+Wall time: 143 ms
 </pre></div></div>
 </div>
 </section>
 <section id="INFOG-Normalization">
-<h3>INFOG Normalization<a class="headerlink" href="#INFOG-Normalization" title="Link to this heading">#</a></h3>
+<h2>INFOG Normalization<a class="headerlink" href="#INFOG-Normalization" title="Link to this heading">#</a></h2>
 <p>We use PIASO’s INFOG to normalize the data and identify a highly variable set of genes.</p>
 <div class="nbinput docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[18]:
@@ -887,13 +889,13 @@ piaso.tl.infog(adata,
 The normalized data is saved as `infog` in `adata.layers`.
 The highly variable genes are saved as `highly_variable` in `adata.var`.
 Finished INFOG normalization.
-CPU times: user 361 ms, sys: 67.9 ms, total: 429 ms
-Wall time: 429 ms
+CPU times: user 434 ms, sys: 78.8 ms, total: 513 ms
+Wall time: 513 ms
 </pre></div></div>
 </div>
 </section>
 <section id="Dimensionality-reduction">
-<h3>Dimensionality reduction<a class="headerlink" href="#Dimensionality-reduction" title="Link to this heading">#</a></h3>
+<h2>Dimensionality reduction<a class="headerlink" href="#Dimensionality-reduction" title="Link to this heading">#</a></h2>
 <div class="nbinput docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[19]:
 </pre></div>
@@ -913,8 +915,8 @@ piaso.tl.runSVD(adata,
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-CPU times: user 2.71 s, sys: 342 μs, total: 2.71 s
-Wall time: 438 ms
+CPU times: user 2.95 s, sys: 3.4 ms, total: 2.95 s
+Wall time: 477 ms
 </pre></div></div>
 </div>
 <div class="nbinput docutils container">
@@ -938,8 +940,8 @@ sc.tl.umap(adata)
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-CPU times: user 25.8 s, sys: 285 ms, total: 26.1 s
-Wall time: 23.7 s
+CPU times: user 26.6 s, sys: 107 ms, total: 26.7 s
+Wall time: 24.5 s
 </pre></div></div>
 </div>
 <div class="nbinput docutils container">
@@ -960,12 +962,12 @@ Wall time: 23.7 s
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_34_0.png" class="no-scaled-link" src="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_34_0.png" style="width: 666px; height: 837px;" />
+<img alt="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_33_0.png" class="no-scaled-link" src="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_33_0.png" style="width: 666px; height: 837px;" />
 </div>
 </div>
 </section>
 <section id="Save-the-data">
-<h3>Save the data<a class="headerlink" href="#Save-the-data" title="Link to this heading">#</a></h3>
+<h2>Save the data<a class="headerlink" href="#Save-the-data" title="Link to this heading">#</a></h2>
 <div class="nbinput docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[22]:
 </pre></div>
@@ -1000,8 +1002,8 @@ Wall time: 23.7 s
 </div>
 </div>
 </section>
-<section id="Filtering-cells-based-on-gene-counts">
-<h3>Filtering cells based on gene counts<a class="headerlink" href="#Filtering-cells-based-on-gene-counts" title="Link to this heading">#</a></h3>
+<section id="Filtering-cells">
+<h2>Filtering cells<a class="headerlink" href="#Filtering-cells" title="Link to this heading">#</a></h2>
 <p>Outlier cells of these thresholds are likely low quality cells, so we filter them out before further downstream analysis.</p>
 <div class="nbinput nblast docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[25]:
@@ -1019,8 +1021,33 @@ Wall time: 23.7 s
 </pre></div>
 </div>
 </div>
+<p>Remove doublets based on a scrublet score threshold.</p>
 <div class="nbinput docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[27]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata = adata[adata.obs[&#39;scrublet_score&#39;]&lt;0.3].copy()
+adata
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[27]:
+</pre></div>
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+AnnData object with n_obs × n_vars = 3988 × 36601
+    obs: &#39;Sample&#39;, &#39;n_genes&#39;, &#39;n_genes_by_counts&#39;, &#39;total_counts&#39;, &#39;total_counts_mt&#39;, &#39;pct_counts_mt&#39;, &#39;total_counts_ribo&#39;, &#39;pct_counts_ribo&#39;, &#39;scrublet_score&#39;, &#39;predicted_doublets&#39;
+    var: &#39;gene_ids&#39;, &#39;feature_types&#39;, &#39;genome&#39;, &#39;interval&#39;, &#39;mt&#39;, &#39;n_cells_by_counts&#39;, &#39;mean_counts&#39;, &#39;pct_dropout_by_counts&#39;, &#39;total_counts&#39;, &#39;ribo&#39;, &#39;infog_var&#39;, &#39;highly_variable&#39;
+    uns: &#39;Sample_colors&#39;, &#39;log1p&#39;, &#39;neighbors&#39;, &#39;umap&#39;
+    obsm: &#39;X_svd&#39;, &#39;X_umap&#39;
+    layers: &#39;raw&#39;, &#39;log1p&#39;, &#39;infog&#39;
+    obsp: &#39;distances&#39;, &#39;connectivities&#39;
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[28]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(adata,
@@ -1037,16 +1064,15 @@ Wall time: 23.7 s
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_42_0.png" class="no-scaled-link" src="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_42_0.png" style="width: 666px; height: 837px;" />
+<img alt="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_43_0.png" class="no-scaled-link" src="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_43_0.png" style="width: 666px; height: 837px;" />
 </div>
 </div>
-</section>
 </section>
 <section id="Annotation">
 <h2>Annotation<a class="headerlink" href="#Annotation" title="Link to this heading">#</a></h2>
-<p>We used the precomputed Human PBMC marker gene sets from the <code class="docutils literal notranslate"><span class="pre">AllenHumanImmuneHealthAtlas_L2</span></code> study in <a class="reference external" href="https://piaso.org/piasomarkerdb/">PIASOmarkerDB</a>. The original dataset comes from <a class="reference external" href="https://www.nature.com/articles/s41586-025-09686-5">https://www.nature.com/articles/s41586-025-09686-5</a>.</p>
+<p>We used the precomputed Human PBMC marker gene sets from the <code class="docutils literal notranslate"><span class="pre">AllenHumanImmuneHealthAtlas_L2</span></code> study in PIASOmarkerDB. The original dataset comes from <a class="reference external" href="https://www.nature.com/articles/s41586-025-09686-5">https://www.nature.com/articles/s41586-025-09686-5</a>.</p>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[28]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[29]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>marker_gene_df = pd.read_csv(&quot;/n/scratch/users/v/vas744/Data/Public/10x_Human_PBMC/PIASOmarkerDB_AllenHumanImmuneHealthAtlas_L2_251219.csv&quot;)
@@ -1055,7 +1081,7 @@ marker_gene_df
 </div>
 </div>
 <div class="nboutput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[28]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[29]:
 </pre></div>
 </div>
 <div class="output_area rendered_html docutils container">
@@ -1206,7 +1232,7 @@ marker_gene_df
 <h3>Preprocessing cell type-specific marker gene sets<a class="headerlink" href="#Preprocessing-cell-type-specific-marker-gene-sets" title="Link to this heading">#</a></h3>
 <p>PIASO’s predictCellTypeByMarker expects the marker_gene_list in DataFrame or dict format. So here, we will create a dictionary with each cell type and their respective marker gene lists.</p>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[29]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[30]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>marker_gene_dict = {}
@@ -1220,7 +1246,7 @@ for cell_type in cell_types:
 <section id="1.-INFOG-Normalization">
 <h3>1. INFOG Normalization<a class="headerlink" href="#1.-INFOG-Normalization" title="Link to this heading">#</a></h3>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[30]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[31]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>%%time
@@ -1242,15 +1268,15 @@ piaso.tl.infog(adata,
 The normalized data is saved as `infog` in `adata.layers`.
 The highly variable genes are saved as `highly_variable` in `adata.var`.
 Finished INFOG normalization.
-CPU times: user 355 ms, sys: 43.8 ms, total: 399 ms
-Wall time: 400 ms
+CPU times: user 367 ms, sys: 2.83 ms, total: 369 ms
+Wall time: 370 ms
 </pre></div></div>
 </div>
 </section>
 <section id="id2">
 <h3>Dimensionality reduction<a class="headerlink" href="#id2" title="Link to this heading">#</a></h3>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[31]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[32]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>%%time
@@ -1268,12 +1294,12 @@ piaso.tl.runSVD(adata,
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-CPU times: user 2.6 s, sys: 1.61 ms, total: 2.6 s
-Wall time: 452 ms
+CPU times: user 1.76 s, sys: 1.68 ms, total: 1.76 s
+Wall time: 395 ms
 </pre></div></div>
 </div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[32]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[33]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>%%time
@@ -1293,7 +1319,7 @@ sc.tl.umap(adata)
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-CPU times: user 18 s, sys: 25.9 ms, total: 18.1 s
+CPU times: user 17.6 s, sys: 2.34 ms, total: 17.6 s
 Wall time: 14.4 s
 </pre></div></div>
 </div>
@@ -1302,7 +1328,7 @@ Wall time: 14.4 s
 <h3>Predict cell types based on marker gene sets<a class="headerlink" href="#Predict-cell-types-based-on-marker-gene-sets" title="Link to this heading">#</a></h3>
 <p>Here, we use the <code class="docutils literal notranslate"><span class="pre">use_score</span> <span class="pre">=</span> <span class="pre">False</span></code> to make the predictions based on p-values, but you can also use the gene set scores with <code class="docutils literal notranslate"><span class="pre">use_score</span> <span class="pre">=</span> <span class="pre">True</span></code>.</p>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[33]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[34]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>%%time
@@ -1329,7 +1355,7 @@ Calculating gene set scores using piaso method...
 </div>
 <div class="output_area stderr docutils container">
 <div class="highlight"><pre>
-Scoring gene sets: 100%|██████████| 29/29 [00:18&lt;00:00,  1.59set/s]
+Scoring gene sets: 100%|██████████| 29/29 [00:16&lt;00:00,  1.72set/s]
 </pre></div></div>
 </div>
 <div class="nboutput nblast docutils container">
@@ -1350,12 +1376,12 @@ Cell type prediction completed. Results saved to:
   - adata.obs[&#39;CellTypes_predicted_nlog10pvals&#39;]: maximum -log10(p-values)
   - adata.obs[&#39;CellTypes_predicted_raw&#39;]: original unsmoothed predictions
   - adata.obs[&#39;CellTypes_predicted_confidence_smoothed&#39;]: smoothing confidence scores
-CPU times: user 4.05 s, sys: 141 ms, total: 4.19 s
-Wall time: 23.1 s
+CPU times: user 3.78 s, sys: 91.7 ms, total: 3.87 s
+Wall time: 22 s
 </pre></div></div>
 </div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[34]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[35]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(adata,
@@ -1374,14 +1400,14 @@ Wall time: 23.1 s
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_56_0.png" class="no-scaled-link" src="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_56_0.png" style="width: 478px; height: 277px;" />
+<img alt="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_57_0.png" class="no-scaled-link" src="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_57_0.png" style="width: 478px; height: 277px;" />
 </div>
 </div>
 </section>
 <section id="Clustering">
 <h3>Clustering<a class="headerlink" href="#Clustering" title="Link to this heading">#</a></h3>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[35]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[36]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>%%time
@@ -1404,12 +1430,12 @@ sc.tl.leiden(adata,resolution=2.5,key_added=&#39;Leiden&#39;)
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-CPU times: user 1.71 s, sys: 15 ms, total: 1.73 s
-Wall time: 1.73 s
+CPU times: user 1.77 s, sys: 1.04 ms, total: 1.77 s
+Wall time: 1.77 s
 </pre></div></div>
 </div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[36]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[37]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(adata,
@@ -1428,14 +1454,14 @@ Wall time: 1.73 s
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_59_0.png" class="no-scaled-link" src="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_59_0.png" style="width: 614px; height: 575px;" />
+<img alt="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_60_0.png" class="no-scaled-link" src="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_60_0.png" style="width: 614px; height: 575px;" />
 </div>
 </div>
 </section>
 <section id="Identify-marker-genes-with-COSG">
 <h3>Identify marker genes with COSG<a class="headerlink" href="#Identify-marker-genes-with-COSG" title="Link to this heading">#</a></h3>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[37]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[38]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>%%time
@@ -1457,12 +1483,12 @@ cosg.cosg(adata,
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-CPU times: user 571 ms, sys: 69.8 ms, total: 640 ms
-Wall time: 641 ms
+CPU times: user 577 ms, sys: 1.92 ms, total: 579 ms
+Wall time: 580 ms
 </pre></div></div>
 </div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[38]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[39]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.tl.dendrogram(adata,groupby=&#39;Leiden&#39;,use_rep=&#39;X_svd&#39;)
@@ -1486,11 +1512,11 @@ sc.pl.dotplot(adata,
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_62_0.png" class="no-scaled-link" src="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_62_0.png" style="width: 2130px; height: 752px;" />
+<img alt="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_63_0.png" class="no-scaled-link" src="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_63_0.png" style="width: 2130px; height: 752px;" />
 </div>
 </div>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[39]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[40]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>marker_gene=pd.DataFrame(adata.uns[&#39;cosg&#39;][&#39;names&#39;])
@@ -1502,7 +1528,7 @@ sc.pl.dotplot(adata,
 <h3>Removal of low-quality cells<a class="headerlink" href="#Removal-of-low-quality-cells" title="Link to this heading">#</a></h3>
 <p>Here, we identify and remove some low quality clusters based on cell quality metrics and marker gene sets.</p>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[40]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[41]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>piaso.pl.plot_features_violin(adata,
@@ -1515,14 +1541,14 @@ sc.pl.dotplot(adata,
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_65_0.png" class="no-scaled-link" src="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_65_0.png" style="width: 959px; height: 667px;" />
+<img alt="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_66_0.png" class="no-scaled-link" src="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_66_0.png" style="width: 959px; height: 667px;" />
 </div>
 </div>
 <section id="Remove-low-quality-cells">
 <h4>Remove low quality cells<a class="headerlink" href="#Remove-low-quality-cells" title="Link to this heading">#</a></h4>
 <p>Some of the cells seems to have higher percentage of mitochondrial and ribosomal gene expression, indicating that they are low quality.</p>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[41]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[42]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata = adata[adata.obs[&#39;pct_counts_mt&#39;]&lt;20].copy()
@@ -1530,7 +1556,7 @@ sc.pl.dotplot(adata,
 </div>
 </div>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[42]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[43]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata = adata[adata.obs[&#39;pct_counts_ribo&#39;]&lt;5].copy()
@@ -1538,7 +1564,7 @@ sc.pl.dotplot(adata,
 </div>
 </div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[43]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[44]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(adata,
@@ -1555,11 +1581,11 @@ sc.pl.dotplot(adata,
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_69_0.png" class="no-scaled-link" src="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_69_0.png" style="width: 666px; height: 837px;" />
+<img alt="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_70_0.png" class="no-scaled-link" src="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_70_0.png" style="width: 666px; height: 837px;" />
 </div>
 </div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[44]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[45]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(adata,
@@ -1578,14 +1604,14 @@ sc.pl.dotplot(adata,
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_70_0.png" class="no-scaled-link" src="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_70_0.png" style="width: 363px; height: 288px;" />
+<img alt="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_71_0.png" class="no-scaled-link" src="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_71_0.png" style="width: 363px; height: 288px;" />
 </div>
 </div>
 </section>
 <section id="Checking-potential-low-quality-clusters">
 <h4>Checking potential low quality clusters<a class="headerlink" href="#Checking-potential-low-quality-clusters" title="Link to this heading">#</a></h4>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[45]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[46]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>cluster_check = &#39;12&#39;
@@ -1594,7 +1620,7 @@ marker_gene[cluster_check].values
 </div>
 </div>
 <div class="nboutput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[45]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[46]:
 </pre></div>
 </div>
 <div class="output_area docutils container">
@@ -1607,7 +1633,7 @@ array([&#39;FP236383.3&#39;, &#39;SIGLEC9&#39;, &#39;MTRNR2L8&#39;, &#39;SIRPA&#
 </pre></div></div>
 </div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[46]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[47]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(adata,
@@ -1625,11 +1651,11 @@ array([&#39;FP236383.3&#39;, &#39;SIGLEC9&#39;, &#39;MTRNR2L8&#39;, &#39;SIRPA&#
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_73_0.png" class="no-scaled-link" src="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_73_0.png" style="width: 959px; height: 1124px;" />
+<img alt="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_74_0.png" class="no-scaled-link" src="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_74_0.png" style="width: 954px; height: 1124px;" />
 </div>
 </div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[47]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[48]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.dotplot(adata,
@@ -1646,11 +1672,11 @@ array([&#39;FP236383.3&#39;, &#39;SIGLEC9&#39;, &#39;MTRNR2L8&#39;, &#39;SIRPA&#
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_74_0.png" class="no-scaled-link" src="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_74_0.png" style="width: 869px; height: 737px;" />
+<img alt="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_75_0.png" class="no-scaled-link" src="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_75_0.png" style="width: 869px; height: 737px;" />
 </div>
 </div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[48]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[49]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(adata,
@@ -1670,11 +1696,11 @@ array([&#39;FP236383.3&#39;, &#39;SIGLEC9&#39;, &#39;MTRNR2L8&#39;, &#39;SIRPA&#
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_75_0.png" class="no-scaled-link" src="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_75_0.png" style="width: 313px; height: 277px;" />
+<img alt="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_76_0.png" class="no-scaled-link" src="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_76_0.png" style="width: 313px; height: 277px;" />
 </div>
 </div>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[49]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[50]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata=adata[~adata.obs[&#39;Leiden&#39;].isin([&#39;12&#39;,&#39;13&#39;,&#39;23&#39;,&#39;25&#39;])].copy()
@@ -1687,7 +1713,7 @@ array([&#39;FP236383.3&#39;, &#39;SIGLEC9&#39;, &#39;MTRNR2L8&#39;, &#39;SIRPA&#
 <h3>2. INFOG Normalization<a class="headerlink" href="#2.-INFOG-Normalization" title="Link to this heading">#</a></h3>
 <p>It is important to re-run INFOG normalization and dimensionality reduction after filtering out cells, to accurately capture the current cell population.</p>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[50]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[51]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>%%time
@@ -1709,15 +1735,15 @@ piaso.tl.infog(adata,
 The normalized data is saved as `infog` in `adata.layers`.
 The highly variable genes are saved as `highly_variable` in `adata.var`.
 Finished INFOG normalization.
-CPU times: user 321 ms, sys: 54.8 ms, total: 376 ms
-Wall time: 375 ms
+CPU times: user 310 ms, sys: 113 ms, total: 422 ms
+Wall time: 423 ms
 </pre></div></div>
 </div>
 </section>
 <section id="id4">
 <h3>Dimensionality reduction<a class="headerlink" href="#id4" title="Link to this heading">#</a></h3>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[51]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[52]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>%%time
@@ -1735,12 +1761,12 @@ piaso.tl.runSVD(adata,
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-CPU times: user 2.11 s, sys: 1.75 ms, total: 2.11 s
+CPU times: user 2.08 s, sys: 2.67 ms, total: 2.09 s
 Wall time: 366 ms
 </pre></div></div>
 </div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[52]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[53]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>%%time
@@ -1760,15 +1786,15 @@ sc.tl.umap(adata)
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-CPU times: user 16.4 s, sys: 4.84 ms, total: 16.4 s
-Wall time: 13.2 s
+CPU times: user 14.3 s, sys: 6.15 ms, total: 14.3 s
+Wall time: 11.4 s
 </pre></div></div>
 </div>
 </section>
 <section id="id5">
 <h3>Predict cell types based on marker gene sets<a class="headerlink" href="#id5" title="Link to this heading">#</a></h3>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[53]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[54]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>%%time
@@ -1796,7 +1822,7 @@ Calculating gene set scores using piaso method...
 </div>
 <div class="output_area stderr docutils container">
 <div class="highlight"><pre>
-Scoring gene sets: 100%|██████████| 29/29 [00:21&lt;00:00,  1.33set/s]
+Scoring gene sets: 100%|██████████| 29/29 [00:15&lt;00:00,  1.91set/s]
 </pre></div></div>
 </div>
 <div class="nboutput nblast docutils container">
@@ -1817,12 +1843,12 @@ Cell type prediction completed. Results saved to:
   - adata.obs[&#39;CellTypes_predicted_nlog10pvals&#39;]: maximum -log10(p-values)
   - adata.obs[&#39;CellTypes_predicted_raw&#39;]: original unsmoothed predictions
   - adata.obs[&#39;CellTypes_predicted_confidence_smoothed&#39;]: smoothing confidence scores
-CPU times: user 3.62 s, sys: 138 ms, total: 3.75 s
-Wall time: 26.1 s
+CPU times: user 3.2 s, sys: 73 ms, total: 3.28 s
+Wall time: 19.8 s
 </pre></div></div>
 </div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[54]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[55]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(adata,
@@ -1841,14 +1867,14 @@ Wall time: 26.1 s
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_84_0.png" class="no-scaled-link" src="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_84_0.png" style="width: 478px; height: 277px;" />
+<img alt="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_85_0.png" class="no-scaled-link" src="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_85_0.png" style="width: 478px; height: 277px;" />
 </div>
 </div>
 </section>
 <section id="id6">
 <h3>Identify marker genes with COSG<a class="headerlink" href="#id6" title="Link to this heading">#</a></h3>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[55]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[56]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>%%time
@@ -1870,12 +1896,12 @@ cosg.cosg(adata,
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-CPU times: user 471 ms, sys: 5.97 ms, total: 477 ms
-Wall time: 477 ms
+CPU times: user 449 ms, sys: 1.99 ms, total: 451 ms
+Wall time: 452 ms
 </pre></div></div>
 </div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[56]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[57]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>marker_gene=pd.DataFrame(adata.uns[&#39;cosg&#39;][&#39;names&#39;])
@@ -1884,7 +1910,7 @@ marker_gene
 </div>
 </div>
 <div class="nboutput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[56]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[57]:
 </pre></div>
 </div>
 <div class="output_area rendered_html docutils container">
@@ -2657,7 +2683,7 @@ marker_gene
 </div>
 <p>We can use a dendrogram dot plot to visualize the expression of the top three marker genes of each predicted cell type.</p>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[57]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[58]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.tl.dendrogram(adata,groupby=&#39;CellTypes_predicted&#39;,use_rep=&#39;X_svd&#39;)
@@ -2681,13 +2707,13 @@ sc.pl.dotplot(adata,
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_89_0.png" class="no-scaled-link" src="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_89_0.png" style="width: 1970px; height: 776px;" />
+<img alt="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_90_0.png" class="no-scaled-link" src="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_90_0.png" style="width: 1970px; height: 776px;" />
 </div>
 </div>
 <section id="Marker-genes-for-CD16-monocyte">
 <h4>Marker genes for CD16 monocyte<a class="headerlink" href="#Marker-genes-for-CD16-monocyte" title="Link to this heading">#</a></h4>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[58]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[59]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>cluster_check = &#39;CD16 monocyte&#39;
@@ -2696,7 +2722,7 @@ marker_gene[cluster_check].values
 </div>
 </div>
 <div class="nboutput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[58]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[59]:
 </pre></div>
 </div>
 <div class="output_area docutils container">
@@ -2709,7 +2735,7 @@ array([&#39;AC104809.2&#39;, &#39;CDKN1C&#39;, &#39;LINC02085&#39;, &#39;LYPD2&#
 </pre></div></div>
 </div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[59]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[60]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(adata,
@@ -2727,11 +2753,11 @@ array([&#39;AC104809.2&#39;, &#39;CDKN1C&#39;, &#39;LINC02085&#39;, &#39;LYPD2&#
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_92_0.png" class="no-scaled-link" src="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_92_0.png" style="width: 963px; height: 1402px;" />
+<img alt="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_93_0.png" class="no-scaled-link" src="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_93_0.png" style="width: 954px; height: 1402px;" />
 </div>
 </div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[60]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[61]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.dotplot(adata,
@@ -2748,7 +2774,7 @@ array([&#39;AC104809.2&#39;, &#39;CDKN1C&#39;, &#39;LINC02085&#39;, &#39;LYPD2&#
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_93_0.png" class="no-scaled-link" src="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_93_0.png" style="width: 752px; height: 855px;" />
+<img alt="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_94_0.png" class="no-scaled-link" src="../_images/notebooks_scRNAseqProcessingTutorial_SAN2_94_0.png" style="width: 752px; height: 855px;" />
 </div>
 </div>
 </section>
@@ -2756,8 +2782,39 @@ array([&#39;AC104809.2&#39;, &#39;CDKN1C&#39;, &#39;LINC02085&#39;, &#39;LYPD2&#
 </section>
 <section id="id7">
 <h2>Save the data<a class="headerlink" href="#id7" title="Link to this heading">#</a></h2>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[62]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>np.unique(adata.obs[&#39;CellTypes_predicted&#39;])
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[62]:
+</pre></div>
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+array([&#39;ASDC&#39;, &#39;CD14 monocyte&#39;, &#39;CD16 monocyte&#39;, &#39;CD56bright NK cell&#39;,
+       &#39;CD56dim NK cell&#39;, &#39;CD8aa&#39;, &#39;DN T cell&#39;, &#39;Effector B cell&#39;,
+       &#39;Erythrocyte&#39;, &#39;Intermediate monocyte&#39;, &#39;MAIT&#39;, &#39;Memory B cell&#39;,
+       &#39;Memory CD4 T cell&#39;, &#39;Memory CD8 T cell&#39;, &#39;Naive B cell&#39;,
+       &#39;Naive CD4 T cell&#39;, &#39;Naive CD8 T cell&#39;, &#39;Plasma cell&#39;,
+       &#39;Proliferating NK cell&#39;, &#39;Transitional B cell&#39;, &#39;Treg&#39;, &#39;cDC1&#39;,
+       &#39;cDC2&#39;, &#39;gdT&#39;], dtype=object)
+</pre></div></div>
+</div>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[61]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[63]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata.obs[&#39;Sample&#39;] = 0
+</pre></div>
+</div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[64]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata.write(save_dir + &#39;/&#39; + prefix + &#39;_QC.h5ad&#39;)
@@ -2765,10 +2822,27 @@ array([&#39;AC104809.2&#39;, &#39;CDKN1C&#39;, &#39;LINC02085&#39;, &#39;LYPD2&#
 </div>
 </div>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[62]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[65]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>marker_gene.to_csv(save_dir + &#39;/&#39; + prefix + &#39;CellType_markerGenes.csv&#39;)
+</pre></div>
+</div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[66]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span># adata = sc.read(save_dir + &#39;/&#39; + prefix + &#39;_QC.h5ad&#39;)
+# adata
+</pre></div>
+</div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>
 </pre></div>
 </div>
 </div>
@@ -2795,11 +2869,11 @@ array([&#39;AC104809.2&#39;, &#39;CDKN1C&#39;, &#39;LINC02085&#39;, &#39;LYPD2&#
       </div>
     </a>
     <a class="right-next"
-       href="rnaSeqPipelineTutorial_mouse.html"
+       href="05_scRNAseqProcessingTutorial_SAN1SAN2.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Pre-processing CellRanger outputs (single sample, mouse brain)</p>
+        <p class="prev-next-title">Pre-processing CellRanger outputs (multiple samples, Human PBMCs)</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -2825,15 +2899,16 @@ array([&#39;AC104809.2&#39;, &#39;CDKN1C&#39;, &#39;LINC02085&#39;, &#39;LYPD2&#
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#Download-the-data">Download the data</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#Load-the-data">Load the data</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#Quality-Control">Quality Control</a><ul class="nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#Filter-cells">Filter cells</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#Filter-cells-based-on-gene-counts">Filter cells based on gene counts</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#Calculate-cell-quality-metrics">Calculate cell quality metrics</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#Doublet-prediction">Doublet prediction</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#INFOG-Normalization">INFOG Normalization</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#Dimensionality-reduction">Dimensionality reduction</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#Save-the-data">Save the data</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#Filtering-cells-based-on-gene-counts">Filtering cells based on gene counts</a></li>
 </ul>
 </li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#log1p-Normalization">log1p Normalization</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#INFOG-Normalization">INFOG Normalization</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#Dimensionality-reduction">Dimensionality reduction</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#Save-the-data">Save the data</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#Filtering-cells">Filtering cells</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#Annotation">Annotation</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#Preprocessing-cell-type-specific-marker-gene-sets">Preprocessing cell type-specific marker gene sets</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#1.-INFOG-Normalization">1. INFOG Normalization</a></li>

@@ -20,7 +20,7 @@ pip install git+https://github.com/genecell/PIASO.git
 
 ```
 conda create --name piaso_env python=3.10 -y
-conda activate test_piaso_env
+conda activate piaso_env
 conda install git pip -y
 pip install piaso-tools
 ```

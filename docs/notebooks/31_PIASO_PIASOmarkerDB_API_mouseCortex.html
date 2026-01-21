@@ -1,0 +1,2632 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Python client and API for accessing PIASOmarkerDB &#8212; PIASO 0.1.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../_static/styles/theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+<link href="../_static/styles/pydata-sphinx-theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=362ab14a" />
+    <link rel="stylesheet" type="text/css" href="../_static/nbsphinx-code-cells.css?v=2aa19091" />
+    <link rel="stylesheet" type="text/css" href="../_static/custom.css?v=0330b353" />
+  
+  <!-- So that users can add custom icons -->
+  <script src="../_static/scripts/fontawesome.js?digest=8878045cc6db502f8baf"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf" />
+<link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf" />
+
+    <script src="../_static/documentation_options.js?v=01f34227"></script>
+    <script src="../_static/doctools.js?v=9a2dae69"></script>
+    <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+    <script>window.MathJax = {"tex": {"inlineMath": [["$", "$"], ["\\(", "\\)"]], "processEscapes": true}, "options": {"ignoreHtmlClass": "tex2jax_ignore|mathjax_ignore|document", "processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+    <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'notebooks/31_PIASO_PIASOmarkerDB_API_mouseCortex';</script>
+    <script src="../_static/sidebar_toggle.js?v=3b053ec6"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Running SCALAR on human cortex snRNA-seq data for ligand-receptor interaction analysis" href="67_SCALAR_tutorial_SEA-AD-Updated.html" />
+    <link rel="prev" title="Cell type prediction by GDR" href="GDRPredictCellTypeTutorial.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="" />
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class=" navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../_static/PIASO_logo.png" class="logo__image only-light" alt="PIASO 0.1.0 documentation - Home"/>
+    <img src="../_static/PIASO_logo.png" class="logo__image only-dark pst-js-only" alt="PIASO 0.1.0 documentation - Home"/>
+  
+  
+</a></div>
+    
+  </div>
+  
+  <div class=" navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../installation.html">
+    Installation
+  </a>
+</li>
+
+
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="../tutorials.html">
+    Tutorials
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../modules.html">
+    API
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../references.html">
+    References
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../releaseNotes.html">
+    Release notes
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/genecell/PIASO" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+    </div>
+  
+
+  
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../installation.html">
+    Installation
+  </a>
+</li>
+
+
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="../tutorials.html">
+    Tutorials
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../modules.html">
+    API
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../references.html">
+    References
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../releaseNotes.html">
+    Release notes
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/genecell/PIASO" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+<h3><a href="../index.html">Table of Contents</a></h3>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../tutorials.html">Tutorials</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../modules.html">API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../references.html">References</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../releaseNotes.html">Release notes</a></li>
+</ul>
+</div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
+  </div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../tutorials.html" class="nav-link">Tutorials</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Python client and API for accessing PIASOmarkerDB</span></li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section id="Python-client-and-API-for-accessing-PIASOmarkerDB">
+<h1>Python client and API for accessing PIASOmarkerDB<a class="headerlink" href="#Python-client-and-API-for-accessing-PIASOmarkerDB" title="Link to this heading">#</a></h1>
+<section id="Import-PIASO">
+<h2>Import PIASO<a class="headerlink" href="#Import-PIASO" title="Link to this heading">#</a></h2>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[1]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>import piaso
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+/n/data1/hms/neurobio/fishell/mindai/.conda/envs/nca/lib/python3.10/site-packages/tqdm/auto.py:21: TqdmWarning: IProgress not found. Please update jupyter and ipywidgets. See https://ipywidgets.readthedocs.io/en/stable/user_install.html
+  from .autonotebook import tqdm as notebook_tqdm
+</pre></div></div>
+</div>
+</section>
+<section id="Import-other-packages">
+<h2>Import other packages<a class="headerlink" href="#Import-other-packages" title="Link to this heading">#</a></h2>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[2]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>import numpy as np
+import pandas as pd
+import scanpy as sc
+sc.set_figure_params(dpi=80,dpi_save=300, color_map=&#39;viridis&#39;,facecolor=&#39;white&#39;)
+from matplotlib import rcParams
+# To modify the default figure size, use rcParams.
+rcParams[&#39;figure.figsize&#39;] = 4, 4
+rcParams[&#39;font.sans-serif&#39;] = &quot;Arial&quot;
+rcParams[&#39;font.family&#39;] = &quot;Arial&quot;
+sc.settings.verbosity = 3
+sc.logging.print_header()
+</pre></div>
+</div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+/tmp/ipykernel_4126893/1353975569.py:11: RuntimeWarning: Failed to import dependencies for application/vnd.jupyter.widget-view+json representation. (ModuleNotFoundError: No module named &#39;ipywidgets&#39;)
+  sc.logging.print_header()
+</pre></div></div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[2]:
+</pre></div>
+</div>
+<div class="output_area rendered_html docutils container">
+<table class=table>
+            <thead style="position: sticky; top: 0; background-color: var(--jp-layout-color0, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));">
+        <tr><th>Component</th><th>Info</th></tr>
+    </thead>
+    <tbody>
+        <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>Python</td><td>3.10.19 (main, Oct 21 2025, 16:43:05) [GCC 11.2.0]</td></tr>
+        <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>OS</td><td>Linux-5.14.0-570.23.1.el9_6.x86_64-x86_64-with-glibc2.34</td></tr>
+        <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>CPU</td><td>32 logical CPU cores, x86_64</td></tr>
+        <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>GPU</td><td>No GPU found</td></tr>
+        <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>Updated</td><td>2026-01-20 19:17</td></tr>
+    </tbody>
+        </table>
+
+        <details>
+        <summary>Dependencies</summary>
+                <div style="max-height: min(500px, 80vh); overflow-y: auto;">
+    <table class=table>
+            <thead style="position: sticky; top: 0; background-color: var(--jp-layout-color0, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));">
+    <tr><th>Dependency</th><th>Version</th></tr>
+</thead>
+<tbody>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>h5py</td><td>3.15.1</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>tqdm</td><td>4.67.1</td></tr>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>stack_data</td><td>0.6.3</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>wcwidth</td><td>0.2.13</td></tr>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>pillow</td><td>12.0.0</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>joblib</td><td>1.5.3</td></tr>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>requests</td><td>2.32.5</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>debugpy</td><td>1.8.16</td></tr>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>texttable</td><td>1.7.0</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>kiwisolver</td><td>1.4.9</td></tr>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>asttokens</td><td>3.0.0</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>six</td><td>1.17.0</td></tr>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>natsort</td><td>8.4.0</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>pure_eval</td><td>0.2.3</td></tr>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>charset-normalizer</td><td>3.4.4</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>python-dateutil</td><td>2.9.0.post0</td></tr>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>torch</td><td>2.9.1 (2.9.1+cu128)</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>tornado</td><td>6.5.4</td></tr>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>parso</td><td>0.8.5</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>pytz</td><td>2025.2</td></tr>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>leidenalg</td><td>0.10.2</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>jedi</td><td>0.19.2</td></tr>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>networkx</td><td>3.4.2</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>executing</td><td>2.2.1</td></tr>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>setuptools</td><td>80.9.0</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>cycler</td><td>0.12.1</td></tr>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>igraph</td><td>0.11.9</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>statsmodels</td><td>0.14.6</td></tr>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>ipython</td><td>8.30.0</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>decorator</td><td>5.2.1</td></tr>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>certifi</td><td>2026.1.4 (2026.01.04)</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>patsy</td><td>1.0.2</td></tr>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>psutil</td><td>7.0.0</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>llvmlite</td><td>0.46.0</td></tr>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>prompt_toolkit</td><td>3.0.52</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>numba</td><td>0.63.1</td></tr>
+</tbody>
+    </table>
+</div>
+    </details>
+        <details>
+            <summary>Copyable Markdown</summary>
+            <pre>| Dependency         | Version               |
+| ------------------ | --------------------- |
+| h5py               | 3.15.1                |
+| tqdm               | 4.67.1                |
+| stack_data         | 0.6.3                 |
+| wcwidth            | 0.2.13                |
+| pillow             | 12.0.0                |
+| joblib             | 1.5.3                 |
+| requests           | 2.32.5                |
+| debugpy            | 1.8.16                |
+| texttable          | 1.7.0                 |
+| kiwisolver         | 1.4.9                 |
+| asttokens          | 3.0.0                 |
+| six                | 1.17.0                |
+| natsort            | 8.4.0                 |
+| pure_eval          | 0.2.3                 |
+| charset-normalizer | 3.4.4                 |
+| python-dateutil    | 2.9.0.post0           |
+| torch              | 2.9.1 (2.9.1+cu128)   |
+| tornado            | 6.5.4                 |
+| parso              | 0.8.5                 |
+| pytz               | 2025.2                |
+| leidenalg          | 0.10.2                |
+| jedi               | 0.19.2                |
+| networkx           | 3.4.2                 |
+| executing          | 2.2.1                 |
+| setuptools         | 80.9.0                |
+| cycler             | 0.12.1                |
+| igraph             | 0.11.9                |
+| statsmodels        | 0.14.6                |
+| ipython            | 8.30.0                |
+| decorator          | 5.2.1                 |
+| certifi            | 2026.1.4 (2026.01.04) |
+| patsy              | 1.0.2                 |
+| psutil             | 7.0.0                 |
+| llvmlite           | 0.46.0                |
+| prompt_toolkit     | 3.0.52                |
+| numba              | 0.63.1                |
+
+| Component | Info                                                     |
+| --------- | -------------------------------------------------------- |
+| Python    | 3.10.19 (main, Oct 21 2025, 16:43:05) [GCC 11.2.0]       |
+| OS        | Linux-5.14.0-570.23.1.el9_6.x86_64-x86_64-with-glibc2.34 |
+| CPU       | 32 logical CPU cores, x86_64                             |
+| GPU       | No GPU found                                             |
+| Updated   | 2026-01-20 19:17                                         |</pre>
+        </details></div>
+</div>
+</section>
+<section id="Setting-paths">
+<h2>Setting paths<a class="headerlink" href="#Setting-paths" title="Link to this heading">#</a></h2>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[3]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>path = &#39;/home/mid166/Analysis/Jupyter/Python/Longitudinal/Integration&#39;
+import sys
+sys.path.append(path)
+from env_settings import *
+sc.set_figure_params(dpi=80,dpi_save=300, color_map=&#39;viridis&#39;,facecolor=&#39;white&#39;)
+rcParams[&#39;figure.figsize&#39;] = 4, 4
+save_dir=&#39;/n/scratch/users/m/mid166/Result/single-cell/Methods/COSG/Database&#39;
+### Create the save_dir if not existed
+!mkdir -p {save_dir}
+</pre></div>
+</div>
+</div>
+</section>
+<section id="Load-the-adult-mouse-cortex-RNA">
+<h2>Load the adult mouse cortex RNA<a class="headerlink" href="#Load-the-adult-mouse-cortex-RNA" title="Link to this heading">#</a></h2>
+<p>Google Drive link: <a class="reference external" href="https://drive.google.com/file/d/1bEyWNjGvoA9kz3J6jnbXRKgAIytb555W">https://drive.google.com/file/d/1bEyWNjGvoA9kz3J6jnbXRKgAIytb555W</a></p>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>mkdir -p /n/scratch/users/m/mid166/Result/single-cell/Enhancer/AdultCortexMultiome
+cd /n/scratch/users/m/mid166/Result/single-cell/Enhancer/AdultCortexMultiome
+gdrive files download 1bEyWNjGvoA9kz3J6jnbXRKgAIytb555W
+</pre></div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[4]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata=sc.read(&#39;/n/scratch/users/m/mid166/Result/single-cell/Enhancer/AdultCortexMultiome/AdultCortexMultiomeRNA_integrated_anno.h5ad&#39;)
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[5]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(adata,
+           color=[&#39;CellTypes&#39;],
+           palette=self_palette2,
+           # legend_loc=&#39;on data&#39;,
+           legend_fontoutline=2,
+           legend_fontweight=5,
+           cmap=&#39;Spectral_r&#39;,
+           ncols=3,
+           size=10,
+           frameon=False)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_31_PIASO_PIASOmarkerDB_API_mouseCortex_11_0.png" class="no-scaled-link" src="../_images/notebooks_31_PIASO_PIASOmarkerDB_API_mouseCortex_11_0.png" style="width: 510px; height: 277px;" />
+</div>
+</div>
+</section>
+<section id="PIASOmarkerDB-API">
+<h2>PIASOmarkerDB API<a class="headerlink" href="#PIASOmarkerDB-API" title="Link to this heading">#</a></h2>
+<p>PIASOmarkerDB is accessible via <a class="reference external" href="https://piaso.org/piasomarkerdb/">https://piaso.org/piasomarkerdb/</a>.</p>
+<section id="Query-by-gene">
+<h3>Query by gene<a class="headerlink" href="#Query-by-gene" title="Link to this heading">#</a></h3>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[6]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>marker_df = piaso.tl.queryPIASOmarkerDB(gene=&quot;Fezf2&quot;)
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[7]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>marker_df.head(10)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[7]:
+</pre></div>
+</div>
+<div class="output_area rendered_html docutils container">
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>cell_type</th>
+      <th>condition</th>
+      <th>gene</th>
+      <th>species</th>
+      <th>specificity_score</th>
+      <th>study_publication</th>
+      <th>tissue</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>119 SI-MA-LPO-LHA Skor1 Glut</td>
+      <td>normal</td>
+      <td>Fezf2</td>
+      <td>Mouse</td>
+      <td>6.785830</td>
+      <td>AllenWholeMouseBrain_GABA</td>
+      <td>brain</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>131 LHA-AHN-PVH Otp Trh Glut</td>
+      <td>normal</td>
+      <td>Fezf2</td>
+      <td>Mouse</td>
+      <td>6.384136</td>
+      <td>AllenWholeMouseBrain_GABA</td>
+      <td>brain</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>032 L5 NP CTX Glut</td>
+      <td>normal</td>
+      <td>Fezf2</td>
+      <td>Mouse</td>
+      <td>5.638977</td>
+      <td>AllenWholeMouseBrain_Neuron</td>
+      <td>brain</td>
+    </tr>
+    <tr>
+      <th>3</th>
+      <td>Ex_Fezf2</td>
+      <td>normal</td>
+      <td>Fezf2</td>
+      <td>Mouse</td>
+      <td>5.496620</td>
+      <td>MacoskoWholeMouseBrain_nuclei_Neuron_AnnoL2</td>
+      <td>brain</td>
+    </tr>
+    <tr>
+      <th>4</th>
+      <td>023 SUB-ProS Glut</td>
+      <td>normal</td>
+      <td>Fezf2</td>
+      <td>Mouse</td>
+      <td>5.360841</td>
+      <td>AllenWholeMouseBrain_Neuron</td>
+      <td>brain</td>
+    </tr>
+    <tr>
+      <th>5</th>
+      <td>022 L5 ET CTX Glut</td>
+      <td>normal</td>
+      <td>Fezf2</td>
+      <td>Mouse</td>
+      <td>5.340233</td>
+      <td>AllenWholeMouseBrain_Neuron</td>
+      <td>brain</td>
+    </tr>
+    <tr>
+      <th>6</th>
+      <td>319 Astro-TE NN</td>
+      <td>normal</td>
+      <td>Fezf2</td>
+      <td>Mouse</td>
+      <td>5.327042</td>
+      <td>AllenWholeMouseBrain_NonNeuron</td>
+      <td>brain</td>
+    </tr>
+    <tr>
+      <th>7</th>
+      <td>Ex_Vwc2l</td>
+      <td>normal</td>
+      <td>Fezf2</td>
+      <td>Mouse</td>
+      <td>4.739503</td>
+      <td>MacoskoWholeMouseBrain_nuclei_Neuron_AnnoL2</td>
+      <td>brain</td>
+    </tr>
+    <tr>
+      <th>8</th>
+      <td>SUB-ProS Glut_3</td>
+      <td>normal; ageing</td>
+      <td>Fezf2</td>
+      <td>Mouse</td>
+      <td>4.675560</td>
+      <td>AllenAgeingBrainAtlas2025_supertype</td>
+      <td>brain</td>
+    </tr>
+    <tr>
+      <th>9</th>
+      <td>033 NP SUB Glut</td>
+      <td>normal</td>
+      <td>Fezf2</td>
+      <td>Mouse</td>
+      <td>4.618183</td>
+      <td>AllenWholeMouseBrain_Neuron</td>
+      <td>brain</td>
+    </tr>
+  </tbody>
+</table>
+</div></div>
+</div>
+</section>
+<section id="Query-by-multiple-genes">
+<h3>Query by multiple genes<a class="headerlink" href="#Query-by-multiple-genes" title="Link to this heading">#</a></h3>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[8]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>marker_df = piaso.tl.queryPIASOmarkerDB(gene=[&quot;Fezf2&quot;, &quot;Satb2&quot;, &quot;Tbr1&quot;])
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[9]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>marker_df.head(10)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[9]:
+</pre></div>
+</div>
+<div class="output_area rendered_html docutils container">
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>cell_type</th>
+      <th>condition</th>
+      <th>gene</th>
+      <th>species</th>
+      <th>specificity_score</th>
+      <th>study_publication</th>
+      <th>tissue</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>Fibro_Vdr</td>
+      <td>normal</td>
+      <td>Satb2</td>
+      <td>Mouse</td>
+      <td>13.416058</td>
+      <td>MacoskoWholeMouseBrain_nuclei_NonNeuron_AnnoL2</td>
+      <td>brain</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>112 GPi Tbr1 Cngb3 Gaba-Glut</td>
+      <td>normal</td>
+      <td>Tbr1</td>
+      <td>Mouse</td>
+      <td>9.910396</td>
+      <td>AllenWholeMouseBrain_GABA</td>
+      <td>brain</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>Ng_Lhx1</td>
+      <td>normal</td>
+      <td>Tbr1</td>
+      <td>Mouse</td>
+      <td>9.585728</td>
+      <td>MacoskoWholeMouseBrain_nuclei_NonNeuron_AnnoL2</td>
+      <td>brain</td>
+    </tr>
+    <tr>
+      <th>3</th>
+      <td>119 SI-MA-LPO-LHA Skor1 Glut</td>
+      <td>normal</td>
+      <td>Tbr1</td>
+      <td>Mouse</td>
+      <td>9.344679</td>
+      <td>AllenWholeMouseBrain_GABA</td>
+      <td>brain</td>
+    </tr>
+    <tr>
+      <th>4</th>
+      <td>088 BST Tac2 Gaba</td>
+      <td>normal</td>
+      <td>Satb2</td>
+      <td>Mouse</td>
+      <td>7.589609</td>
+      <td>AllenWholeMouseBrain_GABA</td>
+      <td>brain</td>
+    </tr>
+    <tr>
+      <th>5</th>
+      <td>099 SBPV-PVa Six6 Satb2 Gaba</td>
+      <td>normal</td>
+      <td>Satb2</td>
+      <td>Mouse</td>
+      <td>6.996956</td>
+      <td>AllenWholeMouseBrain_GABA</td>
+      <td>brain</td>
+    </tr>
+    <tr>
+      <th>6</th>
+      <td>large intestine goblet cell</td>
+      <td>normal</td>
+      <td>SATB2</td>
+      <td>Human</td>
+      <td>6.796177</td>
+      <td>TabulaSapiens_10X</td>
+      <td>multiple</td>
+    </tr>
+    <tr>
+      <th>7</th>
+      <td>enterocyte of epithelium of large intestine</td>
+      <td>normal</td>
+      <td>SATB2</td>
+      <td>Human</td>
+      <td>6.786366</td>
+      <td>TabulaSapiens_10X</td>
+      <td>multiple</td>
+    </tr>
+    <tr>
+      <th>8</th>
+      <td>119 SI-MA-LPO-LHA Skor1 Glut</td>
+      <td>normal</td>
+      <td>Fezf2</td>
+      <td>Mouse</td>
+      <td>6.785830</td>
+      <td>AllenWholeMouseBrain_GABA</td>
+      <td>brain</td>
+    </tr>
+    <tr>
+      <th>9</th>
+      <td>038 DG-PIR Ex IMN</td>
+      <td>normal</td>
+      <td>Tbr1</td>
+      <td>Mouse</td>
+      <td>6.649887</td>
+      <td>AllenWholeMouseBrain_NonNeuron</td>
+      <td>brain</td>
+    </tr>
+  </tbody>
+</table>
+</div></div>
+</div>
+</section>
+<section id="Query-by-study">
+<h3>Query by study<a class="headerlink" href="#Query-by-study" title="Link to this heading">#</a></h3>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[10]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>marker_df = piaso.tl.queryPIASOmarkerDB(
+        study=&quot;AllenWholeMouseBrain_isocortex&quot;,
+        species=&quot;mouse&quot;,
+        # limit=10
+)
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[11]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>marker_df
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[11]:
+</pre></div>
+</div>
+<div class="output_area rendered_html docutils container">
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>cell_type</th>
+      <th>condition</th>
+      <th>gene</th>
+      <th>species</th>
+      <th>specificity_score</th>
+      <th>study_publication</th>
+      <th>tissue</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>056 Sst Chodl Gaba</td>
+      <td>normal</td>
+      <td>Chodl</td>
+      <td>Mouse</td>
+      <td>14.086876</td>
+      <td>AllenWholeMouseBrain_isocortex</td>
+      <td>brain; cortex</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>056 Sst Chodl Gaba</td>
+      <td>normal</td>
+      <td>Krt18</td>
+      <td>Mouse</td>
+      <td>13.081692</td>
+      <td>AllenWholeMouseBrain_isocortex</td>
+      <td>brain; cortex</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>051 Pvalb chandelier Gaba</td>
+      <td>normal</td>
+      <td>Vmn1r209</td>
+      <td>Mouse</td>
+      <td>12.826864</td>
+      <td>AllenWholeMouseBrain_isocortex</td>
+      <td>brain; cortex</td>
+    </tr>
+    <tr>
+      <th>3</th>
+      <td>330 VLMC NN</td>
+      <td>normal</td>
+      <td>Slc22a6</td>
+      <td>Mouse</td>
+      <td>11.932269</td>
+      <td>AllenWholeMouseBrain_isocortex</td>
+      <td>brain; cortex</td>
+    </tr>
+    <tr>
+      <th>4</th>
+      <td>335 BAM NN</td>
+      <td>normal</td>
+      <td>F13a1</td>
+      <td>Mouse</td>
+      <td>11.871344</td>
+      <td>AllenWholeMouseBrain_isocortex</td>
+      <td>brain; cortex</td>
+    </tr>
+    <tr>
+      <th>...</th>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+    </tr>
+    <tr>
+      <th>1295</th>
+      <td>005 L5 IT CTX Glut</td>
+      <td>normal</td>
+      <td>Phex</td>
+      <td>Mouse</td>
+      <td>1.709302</td>
+      <td>AllenWholeMouseBrain_isocortex</td>
+      <td>brain; cortex</td>
+    </tr>
+    <tr>
+      <th>1296</th>
+      <td>005 L5 IT CTX Glut</td>
+      <td>normal</td>
+      <td>Lynx1</td>
+      <td>Mouse</td>
+      <td>1.699085</td>
+      <td>AllenWholeMouseBrain_isocortex</td>
+      <td>brain; cortex</td>
+    </tr>
+    <tr>
+      <th>1297</th>
+      <td>005 L5 IT CTX Glut</td>
+      <td>normal</td>
+      <td>Gm2694</td>
+      <td>Mouse</td>
+      <td>1.677627</td>
+      <td>AllenWholeMouseBrain_isocortex</td>
+      <td>brain; cortex</td>
+    </tr>
+    <tr>
+      <th>1298</th>
+      <td>005 L5 IT CTX Glut</td>
+      <td>normal</td>
+      <td>A2ml1</td>
+      <td>Mouse</td>
+      <td>1.676827</td>
+      <td>AllenWholeMouseBrain_isocortex</td>
+      <td>brain; cortex</td>
+    </tr>
+    <tr>
+      <th>1299</th>
+      <td>005 L5 IT CTX Glut</td>
+      <td>normal</td>
+      <td>Gm50304</td>
+      <td>Mouse</td>
+      <td>1.671815</td>
+      <td>AllenWholeMouseBrain_isocortex</td>
+      <td>brain; cortex</td>
+    </tr>
+  </tbody>
+</table>
+<p>1300 rows × 7 columns</p>
+</div></div>
+</div>
+</section>
+<section id="Query-with-score-filter">
+<h3>Query with score filter<a class="headerlink" href="#Query-with-score-filter" title="Link to this heading">#</a></h3>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[12]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>marker_df = piaso.tl.queryPIASOmarkerDB(
+    species=&quot;Human&quot;,
+    min_score=8.0,
+    limit=100
+)
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[13]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>marker_df.head(20)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[13]:
+</pre></div>
+</div>
+<div class="output_area rendered_html docutils container">
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>cell_type</th>
+      <th>condition</th>
+      <th>gene</th>
+      <th>species</th>
+      <th>specificity_score</th>
+      <th>study_publication</th>
+      <th>tissue</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>Neut</td>
+      <td>normal</td>
+      <td>CEACAM8</td>
+      <td>Human</td>
+      <td>22.576055</td>
+      <td>YayonTeichmann2023Thymus_broad</td>
+      <td>thymus</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>Neut</td>
+      <td>normal</td>
+      <td>PGLYRP1</td>
+      <td>Human</td>
+      <td>22.467628</td>
+      <td>YayonTeichmann2023Thymus_broad</td>
+      <td>thymus</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>Neut</td>
+      <td>normal</td>
+      <td>CAMP</td>
+      <td>Human</td>
+      <td>22.386975</td>
+      <td>YayonTeichmann2023Thymus_broad</td>
+      <td>thymus</td>
+    </tr>
+    <tr>
+      <th>3</th>
+      <td>Neut</td>
+      <td>normal</td>
+      <td>MMP8</td>
+      <td>Human</td>
+      <td>22.354010</td>
+      <td>YayonTeichmann2023Thymus_broad</td>
+      <td>thymus</td>
+    </tr>
+    <tr>
+      <th>4</th>
+      <td>Neut</td>
+      <td>normal</td>
+      <td>TCN1</td>
+      <td>Human</td>
+      <td>22.239567</td>
+      <td>YayonTeichmann2023Thymus_broad</td>
+      <td>thymus</td>
+    </tr>
+    <tr>
+      <th>5</th>
+      <td>Neut</td>
+      <td>normal</td>
+      <td>DEFA3</td>
+      <td>Human</td>
+      <td>22.141212</td>
+      <td>YayonTeichmann2023Thymus_broad</td>
+      <td>thymus</td>
+    </tr>
+    <tr>
+      <th>6</th>
+      <td>Neut</td>
+      <td>normal</td>
+      <td>BPI</td>
+      <td>Human</td>
+      <td>21.663849</td>
+      <td>YayonTeichmann2023Thymus_broad</td>
+      <td>thymus</td>
+    </tr>
+    <tr>
+      <th>7</th>
+      <td>Myelocyte</td>
+      <td>normal</td>
+      <td>DEFA3</td>
+      <td>Human</td>
+      <td>21.135054</td>
+      <td>YayonTeichmann2023Thymus</td>
+      <td>thymus</td>
+    </tr>
+    <tr>
+      <th>8</th>
+      <td>erythrocyte</td>
+      <td>normal</td>
+      <td>ALAS2</td>
+      <td>Human</td>
+      <td>21.131534</td>
+      <td>TabulaSapiens_10X</td>
+      <td>multiple</td>
+    </tr>
+    <tr>
+      <th>9</th>
+      <td>erythrocyte</td>
+      <td>normal</td>
+      <td>ENSG00000290010.1</td>
+      <td>Human</td>
+      <td>21.073169</td>
+      <td>TabulaSapiens_10X</td>
+      <td>multiple</td>
+    </tr>
+    <tr>
+      <th>10</th>
+      <td>erythrocyte</td>
+      <td>normal</td>
+      <td>HBM</td>
+      <td>Human</td>
+      <td>20.988997</td>
+      <td>TabulaSapiens_10X</td>
+      <td>multiple</td>
+    </tr>
+    <tr>
+      <th>11</th>
+      <td>Neut</td>
+      <td>normal</td>
+      <td>ARG1</td>
+      <td>Human</td>
+      <td>20.970731</td>
+      <td>YayonTeichmann2023Thymus_broad</td>
+      <td>thymus</td>
+    </tr>
+    <tr>
+      <th>12</th>
+      <td>erythrocyte</td>
+      <td>normal</td>
+      <td>SLC4A1</td>
+      <td>Human</td>
+      <td>20.866775</td>
+      <td>TabulaSapiens_10X</td>
+      <td>multiple</td>
+    </tr>
+    <tr>
+      <th>13</th>
+      <td>erythrocyte</td>
+      <td>normal</td>
+      <td>IFIT1B</td>
+      <td>Human</td>
+      <td>20.742300</td>
+      <td>TabulaSapiens_10X</td>
+      <td>multiple</td>
+    </tr>
+    <tr>
+      <th>14</th>
+      <td>erythrocyte</td>
+      <td>normal</td>
+      <td>HBQ1</td>
+      <td>Human</td>
+      <td>20.688987</td>
+      <td>TabulaSapiens_10X</td>
+      <td>multiple</td>
+    </tr>
+    <tr>
+      <th>15</th>
+      <td>Neut</td>
+      <td>normal</td>
+      <td>CRISP3</td>
+      <td>Human</td>
+      <td>20.649712</td>
+      <td>YayonTeichmann2023Thymus_broad</td>
+      <td>thymus</td>
+    </tr>
+    <tr>
+      <th>16</th>
+      <td>acinar cell</td>
+      <td>normal</td>
+      <td>LCN1P1</td>
+      <td>Human</td>
+      <td>20.612447</td>
+      <td>TabulaSapiens_10X</td>
+      <td>multiple</td>
+    </tr>
+    <tr>
+      <th>17</th>
+      <td>erythrocyte</td>
+      <td>normal</td>
+      <td>ENSG00000290038.1</td>
+      <td>Human</td>
+      <td>20.544104</td>
+      <td>TabulaSapiens_10X</td>
+      <td>multiple</td>
+    </tr>
+    <tr>
+      <th>18</th>
+      <td>erythrocyte</td>
+      <td>normal</td>
+      <td>EPB42</td>
+      <td>Human</td>
+      <td>20.501436</td>
+      <td>TabulaSapiens_10X</td>
+      <td>multiple</td>
+    </tr>
+    <tr>
+      <th>19</th>
+      <td>erythrocyte</td>
+      <td>normal</td>
+      <td>AHSP</td>
+      <td>Human</td>
+      <td>20.452516</td>
+      <td>TabulaSapiens_10X</td>
+      <td>multiple</td>
+    </tr>
+  </tbody>
+</table>
+</div></div>
+</div>
+</section>
+<section id="Get-Markers-as-Dictionary">
+<h3>Get Markers as Dictionary<a class="headerlink" href="#Get-Markers-as-Dictionary" title="Link to this heading">#</a></h3>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[14]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>marker_df, marker_dict = piaso.tl.queryPIASOmarkerDB(
+    study=&#39;AllenWholeMouseBrain_isocortex&#39;,
+        # species=&quot;Human&quot;,
+        # min_score=3.0,
+        # limit=500,
+    as_dict=True
+)
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[15]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>print(f&quot;DataFrame shape: {marker_df.shape}&quot;)
+print(f&quot;Cell types in dict: {len(marker_dict)}&quot;)
+
+# Show sample
+for ct, genes in list(marker_dict.items())[:3]:
+    print(f&quot;\n  {ct}:&quot;)
+    print(f&quot;    Markers: {genes[:5]}...&quot;)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+DataFrame shape: (1300, 7)
+Cell types in dict: 26
+
+  056 Sst Chodl Gaba:
+    Markers: [&#39;Chodl&#39;, &#39;Krt18&#39;, &#39;P2rx2&#39;, &#39;4930545L08Rik&#39;, &#39;Tacr1&#39;]...
+
+  051 Pvalb chandelier Gaba:
+    Markers: [&#39;Vmn1r209&#39;, &#39;Vmn1r207-ps&#39;, &#39;Dbhos&#39;, &#39;Nkx2-1&#39;, &#39;Sfta3-ps&#39;]...
+
+  330 VLMC NN:
+    Markers: [&#39;Slc22a6&#39;, &#39;Aldh1a2&#39;, &#39;Slc13a4&#39;, &#39;Fam180a&#39;, &#39;Lum&#39;]...
+</pre></div></div>
+</div>
+</section>
+<section id="List-available-studies">
+<h3>List available studies<a class="headerlink" href="#List-available-studies" title="Link to this heading">#</a></h3>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[16]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>studies = piaso.tl.queryPIASOmarkerDB(list_studies=True)
+print(f&quot;Total studies: {len(studies)}&quot;)
+print(&quot;First 10 studies:&quot;)
+for study in studies[:10]:
+    print(f&quot;  - {study}&quot;)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Total studies: 36
+First 10 studies:
+  - AllenAgeingBrainAtlas2025_supertype
+  - AllenDevVisualCortex2025_RNA
+  - AllenHumanImmuneHealthAtlas_L2
+  - AllenHumanImmuneHealthAtlas_L3
+  - AllenWholeMouseBrain_GABA
+  - AllenWholeMouseBrain_Neuron
+  - AllenWholeMouseBrain_NonNeuron
+  - AllenWholeMouseBrain_isocortex
+  - AsianImmuneDiversityAtlasPhase1v2_5prime
+  - DiBellaArlotta2021
+</pre></div></div>
+</div>
+</section>
+<section id="Analyze-single-gene-list">
+<h3>Analyze single gene list<a class="headerlink" href="#Analyze-single-gene-list" title="Link to this heading">#</a></h3>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[17]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>def example_analyze_single_list():
+    &quot;&quot;&quot;Demonstrate single gene list analysis.&quot;&quot;&quot;
+    print(&quot;\n&quot; + &quot;=&quot;*60)
+    print(&quot;Example 4: Analyze Single Gene List&quot;)
+    print(&quot;=&quot;*60)
+
+    # T-cell marker genes
+    t_cell_genes = [&quot;CD3E&quot;, &quot;CD3D&quot;, &quot;CD8A&quot;, &quot;GZMK&quot;, &quot;PRF1&quot;, &quot;IFNG&quot;]
+
+    print(f&quot;\n--- Analyzing genes: {t_cell_genes} ---&quot;)
+    df = piaso.tl.analyzeMarkers(t_cell_genes, species=&quot;Human&quot;)
+
+    print(f&quot;Found {len(df)} cell type matches&quot;)
+    if len(df) &gt; 0:
+        print(&quot;\nTop 5 matches:&quot;)
+        print(df[[&#39;cell_type&#39;, &#39;matched_gene_count&#39;, &#39;avg_specificity&#39;]].head())
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[18]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>query_genes = [&quot;Syt6&quot;, &quot;Tle4&quot;, &quot;Hs3st4&quot;, &quot;Col6a1&quot;, &quot;Zfpm2&quot;, &quot;Sema5a&quot;, &quot;Bcl11b&quot;, &quot;Fezf2&quot;, &quot;Foxp2&quot;, &quot;Col12a1&quot;]
+print(f&quot;\n--- Analyzing genes: {query_genes} ---&quot;)
+marker_df = piaso.tl.analyzeMarkers(query_genes)
+marker_df.head()
+</pre></div>
+</div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+
+--- Analyzing genes: [&#39;Syt6&#39;, &#39;Tle4&#39;, &#39;Hs3st4&#39;, &#39;Col6a1&#39;, &#39;Zfpm2&#39;, &#39;Sema5a&#39;, &#39;Bcl11b&#39;, &#39;Fezf2&#39;, &#39;Foxp2&#39;, &#39;Col12a1&#39;] ---
+</pre></div></div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[18]:
+</pre></div>
+</div>
+<div class="output_area rendered_html docutils container">
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>cell_type</th>
+      <th>study_publication</th>
+      <th>species</th>
+      <th>tissue</th>
+      <th>condition</th>
+      <th>matched_gene_count</th>
+      <th>matched_genes</th>
+      <th>avg_specificity</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>EN-L6-CT</td>
+      <td>WangKriegstein2025</td>
+      <td>Human</td>
+      <td>brain</td>
+      <td>normal</td>
+      <td>6</td>
+      <td>SYT6,HS3ST4,FOXP2,TLE4,FEZF2,ZFPM2</td>
+      <td>2.981403</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>CThPN</td>
+      <td>DiBellaArlotta2021</td>
+      <td>Mouse</td>
+      <td>brain; cortex</td>
+      <td>normal</td>
+      <td>5</td>
+      <td>Hs3st4,Syt6,Tle4,Zfpm2,Foxp2</td>
+      <td>4.958002</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>439_L6 CT CTX Glut_1</td>
+      <td>AllenDevVisualCortex2025_RNA</td>
+      <td>Mouse</td>
+      <td>iscortex; brain</td>
+      <td>normal; developmental</td>
+      <td>5</td>
+      <td>Syt6,Foxp2,Tle4,Hs3st4,Zfpm2</td>
+      <td>3.561619</td>
+    </tr>
+    <tr>
+      <th>3</th>
+      <td>437_L6 CT CTX Glut_1</td>
+      <td>AllenDevVisualCortex2025_RNA</td>
+      <td>Mouse</td>
+      <td>iscortex; brain</td>
+      <td>normal; developmental</td>
+      <td>5</td>
+      <td>Syt6,Foxp2,Zfpm2,Hs3st4,Tle4</td>
+      <td>2.928945</td>
+    </tr>
+    <tr>
+      <th>4</th>
+      <td>440_L6 CT CTX Glut_1</td>
+      <td>AllenDevVisualCortex2025_RNA</td>
+      <td>Mouse</td>
+      <td>iscortex; brain</td>
+      <td>normal; developmental</td>
+      <td>5</td>
+      <td>Fezf2,Tle4,Col12a1,Hs3st4,Foxp2</td>
+      <td>2.678869</td>
+    </tr>
+  </tbody>
+</table>
+</div></div>
+</div>
+</section>
+</section>
+<section id="Analyze-Multiple-Gene-Sets-(Dictionary)">
+<h2>Analyze Multiple Gene Sets (Dictionary)<a class="headerlink" href="#Analyze-Multiple-Gene-Sets-(Dictionary)" title="Link to this heading">#</a></h2>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[19]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>gene_sets = {
+    &#39;Cluster_0&#39;: [&#39;Cx3cr1&#39;, &#39;P2ry12&#39;, &#39;Teme119&#39;, &#39;Csf1r&#39;, &#39;Itgam&#39;, &#39;Aif1&#39;, &#39;Trem2&#39;],
+    &#39;Cluster_1&#39;: [&quot;Syt6&quot;, &quot;Tle4&quot;, &quot;Hs3st4&quot;, &quot;Col6a1&quot;, &quot;Zfpm2&quot;, &quot;Sema5a&quot;, &quot;Bcl11b&quot;, &quot;Fezf2&quot;, &quot;Foxp2&quot;, &quot;Col12a1&quot;],
+}
+
+print(&quot;\n--- Input Gene Sets ---&quot;)
+for name, genes in gene_sets.items():
+    print(f&quot;  {name}: {genes}&quot;)
+
+print(&quot;\n--- Analyzing... ---&quot;)
+# results, top_hits = piaso.tl.analyzeMarkers(gene_sets, species=&quot;Mouse&quot;)
+results, top_hits = piaso.tl.analyzeMarkers(gene_sets)
+
+print(&quot;\nCell Type Predictions:&quot;)
+for cluster, cell_type in top_hits.items():
+    print(f&quot;  {cluster}: {cell_type}&quot;)
+
+# Show detailed results
+print(f&quot;\n--- Detailed results for Cluster_0 ---&quot;)
+if &#39;Cluster_0&#39; in results and len(results[&#39;Cluster_0&#39;]) &gt; 0:
+    print(results[&#39;Cluster_0&#39;][[&#39;cell_type&#39;, &#39;matched_gene_count&#39;,  &#39;avg_specificity&#39;,  &#39;study_publication&#39;]].head())
+
+print(f&quot;\n--- Detailed results for Cluster_1 ---&quot;)
+if &#39;Cluster_0&#39; in results and len(results[&#39;Cluster_1&#39;]) &gt; 0:
+    print(results[&#39;Cluster_1&#39;][[&#39;cell_type&#39;, &#39;matched_gene_count&#39;,  &#39;avg_specificity&#39;,  &#39;study_publication&#39;]].head())
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+
+--- Input Gene Sets ---
+  Cluster_0: [&#39;Cx3cr1&#39;, &#39;P2ry12&#39;, &#39;Teme119&#39;, &#39;Csf1r&#39;, &#39;Itgam&#39;, &#39;Aif1&#39;, &#39;Trem2&#39;]
+  Cluster_1: [&#39;Syt6&#39;, &#39;Tle4&#39;, &#39;Hs3st4&#39;, &#39;Col6a1&#39;, &#39;Zfpm2&#39;, &#39;Sema5a&#39;, &#39;Bcl11b&#39;, &#39;Fezf2&#39;, &#39;Foxp2&#39;, &#39;Col12a1&#39;]
+
+--- Analyzing... ---
+
+Cell Type Predictions:
+  Cluster_0: Microglia
+  Cluster_1: EN-L6-CT
+
+--- Detailed results for Cluster_0 ---
+             cell_type  matched_gene_count  avg_specificity  \
+0            Microglia                   5        13.000120
+1                Mgl_9                   5         7.875872
+2  5312_Microglia NN_1                   4         8.265331
+3    P2RY12+ microglia                   4         7.782557
+4               Mgl_11                   4         7.375123
+
+                              study_publication
+0                            DiBellaArlotta2021
+1  SilettiLinnarssonWholeHumanBrain2023_subtype
+2                  AllenDevVisualCortex2025_RNA
+3          XuTeichmann2023_HippocampalFormation
+4  SilettiLinnarssonWholeHumanBrain2023_subtype
+
+--- Detailed results for Cluster_1 ---
+              cell_type  matched_gene_count  avg_specificity  \
+0              EN-L6-CT                   6         2.981403
+1                 CThPN                   5         4.958002
+2  439_L6 CT CTX Glut_1                   5         3.561619
+3  437_L6 CT CTX Glut_1                   5         2.928945
+4  440_L6 CT CTX Glut_1                   5         2.678869
+
+              study_publication
+0            WangKriegstein2025
+1            DiBellaArlotta2021
+2  AllenDevVisualCortex2025_RNA
+3  AllenDevVisualCortex2025_RNA
+4  AllenDevVisualCortex2025_RNA
+</pre></div></div>
+</div>
+<section id="COSG-integration">
+<h3>COSG integration<a class="headerlink" href="#COSG-integration" title="Link to this heading">#</a></h3>
+<p>The piaso.tl.analyzeMarkers function will infer the cell types for each cluster or cell group based on the top marker genes identified by the marker gene identification method <a class="reference external" href="https://github.com/genecell/COSG">COSG</a> and the cell type marker genes collected in <a class="reference external" href="https://piaso.org/piasomarkerdb">PIASOmarkerDB</a>.</p>
+<section id="Run-COSG">
+<h4>Run COSG<a class="headerlink" href="#Run-COSG" title="Link to this heading">#</a></h4>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[20]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>import cosg
+</pre></div>
+</div>
+</div>
+<p>You could set groupby to <code class="docutils literal notranslate"><span class="pre">Leiden</span></code>, here is using the manually annotated cell type column as a demo:</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[21]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>%%time
+groupby=&#39;CellTypes&#39;
+cosg.cosg(adata,
+    key_added=&#39;cosg&#39;,
+    use_raw=False, layer=&#39;log1p&#39;, ## e.g., if you want to use the log1p layer in adata
+    mu=100,
+    expressed_pct=0.1,
+    remove_lowly_expressed=True,
+    n_genes_user=adata.n_vars, ### Use all the genes, to enable the calculation of transformed COSG scores
+    # n_genes_user=100,
+    groupby=groupby,
+    return_by_group=True,
+    verbosity=1
+)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Finished identifying marker genes by COSG, and the results are in adata.uns[&#39;cosg&#39;].
+CPU times: user 2.54 s, sys: 366 ms, total: 2.9 s
+Wall time: 2.91 s
+</pre></div></div>
+</div>
+<p>Here, we take the top 50 marker genes for each group:</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[22]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>cosg_marker_df=pd.DataFrame(adata.uns[&#39;cosg&#39;][&#39;names&#39;]).head(50)
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[23]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>cosg_marker_df.head()
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[23]:
+</pre></div>
+</div>
+<div class="output_area rendered_html docutils container">
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>L2-3 IT</th>
+      <th>L4 IT</th>
+      <th>L4-5 IT</th>
+      <th>L5 IT</th>
+      <th>L5 NP</th>
+      <th>L5 PT</th>
+      <th>L6 IT</th>
+      <th>L6 IT Car3</th>
+      <th>L6 CT</th>
+      <th>L6b</th>
+      <th>PV</th>
+      <th>SST</th>
+      <th>VIP</th>
+      <th>LAMP5</th>
+      <th>Astrocyte</th>
+      <th>OPC</th>
+      <th>Oligodendrocyte</th>
+      <th>Microglia</th>
+      <th>Macrophage</th>
+      <th>Endothelial</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>Otof</td>
+      <td>Rspo1</td>
+      <td>Scn7a</td>
+      <td>Deptor</td>
+      <td>Trhr</td>
+      <td>Gm42705</td>
+      <td>Slc26a4</td>
+      <td>Gm6602</td>
+      <td>Foxp2</td>
+      <td>Nxph4</td>
+      <td>Adamts15</td>
+      <td>Sst</td>
+      <td>Vip</td>
+      <td>Ndnf</td>
+      <td>Gja1</td>
+      <td>Pdgfra</td>
+      <td>St18</td>
+      <td>Selplg</td>
+      <td>F13a1</td>
+      <td>Slco1a4</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>Ccbe1</td>
+      <td>Gm40331</td>
+      <td>Tnnc1</td>
+      <td>Il1rapl2</td>
+      <td>Myzap</td>
+      <td>Shoc1</td>
+      <td>Bmp3</td>
+      <td>Car3</td>
+      <td>Col5a1</td>
+      <td>Ccn2</td>
+      <td>Pvalb</td>
+      <td>Pdyn</td>
+      <td>Htr3a</td>
+      <td>Pde11a</td>
+      <td>Gli3</td>
+      <td>Cspg4</td>
+      <td>Prr5l</td>
+      <td>Siglech</td>
+      <td>Ms4a4a</td>
+      <td>Cldn5</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>Evc2</td>
+      <td>Gm42953</td>
+      <td>BC006965</td>
+      <td>Rxfp2</td>
+      <td>Slc17a8</td>
+      <td>Gm42707</td>
+      <td>Dnah14</td>
+      <td>Gm49272</td>
+      <td>Syt6</td>
+      <td>Gm41414</td>
+      <td>6330411D24Rik</td>
+      <td>Hpse</td>
+      <td>Tac2</td>
+      <td>Ltbp2</td>
+      <td>Gjb6</td>
+      <td>C1ql1</td>
+      <td>Mog</td>
+      <td>Tmem119</td>
+      <td>Pf4</td>
+      <td>Adgrl4</td>
+    </tr>
+    <tr>
+      <th>3</th>
+      <td>B230216N24Rik</td>
+      <td>Cbln4</td>
+      <td>Hgf</td>
+      <td>Fras1</td>
+      <td>Mirt1</td>
+      <td>L3mbtl4</td>
+      <td>Rspo2</td>
+      <td>Oprk1</td>
+      <td>Cpa6</td>
+      <td>Cplx3</td>
+      <td>Tac1</td>
+      <td>Tnni3k</td>
+      <td>Grpr</td>
+      <td>Myo3a</td>
+      <td>Ntsr2</td>
+      <td>Tmem255b</td>
+      <td>Cldn11</td>
+      <td>Gm2629</td>
+      <td>Cd163</td>
+      <td>Flt1</td>
+    </tr>
+    <tr>
+      <th>4</th>
+      <td>Efcab1</td>
+      <td>Col8a1</td>
+      <td>1700047F07Rik</td>
+      <td>Tmem91</td>
+      <td>Hmga2</td>
+      <td>Gm6260</td>
+      <td>Galnt14</td>
+      <td>BB557941</td>
+      <td>Rprm</td>
+      <td>Clic5</td>
+      <td>Gm26633</td>
+      <td>Crhbp</td>
+      <td>Npy2r</td>
+      <td>Myo3b</td>
+      <td>Gm6145</td>
+      <td>Neu4</td>
+      <td>Mobp</td>
+      <td>Olfml3</td>
+      <td>Aoah</td>
+      <td>Abcb1a</td>
+    </tr>
+  </tbody>
+</table>
+</div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[24]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>%%time
+results, top_hits = piaso.tl.analyzeMarkers(
+        cosg_marker_df,
+        n_top_genes=50,
+        species=&quot;mouse&quot;,
+)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+CPU times: user 576 ms, sys: 19.5 ms, total: 596 ms
+Wall time: 3.56 s
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[25]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>print(&quot;\nCell Type Predictions:&quot;)
+for cluster, cell_type in top_hits.items():
+    print(f&quot;  {cluster}: {cell_type}&quot;)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+
+Cell Type Predictions:
+  L2-3 IT: 007 L2/3 IT CTX Glut
+  L4 IT: 100_L4/5 IT CTX Glut_6
+  L4-5 IT: L4/5 IT CTX Glut_4
+  L5 IT: 005 L5 IT CTX Glut
+  L5 NP: 032 L5 NP CTX Glut
+  L5 PT: 022 L5 ET CTX Glut
+  L6 IT: 004 L6 IT CTX Glut
+  L6 IT Car3: 001 CLA-EPd-CTX Car3 Glut
+  L6 CT: 437_L6 CT CTX Glut_1
+  L6b: 029 L6b CTX Glut
+  PV: 052 Pvalb Gaba
+  SST: Sst Gaba_7
+  VIP: 046 Vip Gaba
+  LAMP5: 049 Lamp5 Gaba
+  Astrocyte: 319 Astro-TE NN
+  OPC: OPC NN_1
+  Oligodendrocyte: 327 Oligo NN
+  Microglia: 334 Microglia NN
+  Macrophage: 335 BAM NN
+  Endothelial: Endo_Flt1
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[26]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>results[&#39;L2-3 IT&#39;].head(5)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[26]:
+</pre></div>
+</div>
+<div class="output_area rendered_html docutils container">
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>cell_type</th>
+      <th>study_publication</th>
+      <th>species</th>
+      <th>tissue</th>
+      <th>condition</th>
+      <th>matched_gene_count</th>
+      <th>matched_genes</th>
+      <th>avg_specificity</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>007 L2/3 IT CTX Glut</td>
+      <td>AllenWholeMouseBrain_isocortex</td>
+      <td>Mouse</td>
+      <td>brain; cortex</td>
+      <td>normal</td>
+      <td>22</td>
+      <td>Otof,Efcab1,Gm10754,Evc2,Ccbe1,B230216N24Rik,F...</td>
+      <td>3.148077</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>007 L2/3 IT CTX Glut</td>
+      <td>AllenWholeMouseBrain_Neuron</td>
+      <td>Mouse</td>
+      <td>brain</td>
+      <td>normal</td>
+      <td>16</td>
+      <td>Gm48530,Evc2,Igfn1,A830009L08Rik,Lamp5,Gm20063...</td>
+      <td>3.244823</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>L2/3 IT CTX Glut_2</td>
+      <td>AllenAgeingBrainAtlas2025_supertype</td>
+      <td>Mouse</td>
+      <td>brain</td>
+      <td>normal; ageing</td>
+      <td>11</td>
+      <td>Clec18a,Igfn1,Ccbe1,Gm48530,Lamp5,Gm20063,E130...</td>
+      <td>3.554956</td>
+    </tr>
+    <tr>
+      <th>3</th>
+      <td>L2/3 IT CTX Glut_1</td>
+      <td>AllenAgeingBrainAtlas2025_supertype</td>
+      <td>Mouse</td>
+      <td>brain</td>
+      <td>normal; ageing</td>
+      <td>11</td>
+      <td>Ccbe1,Gm48530,Otof,Itga8,Evc2,E130304I02Rik,Du...</td>
+      <td>3.502616</td>
+    </tr>
+    <tr>
+      <th>4</th>
+      <td>110_L2/3 IT CTX Glut_2</td>
+      <td>AllenDevVisualCortex2025_RNA</td>
+      <td>Mouse</td>
+      <td>iscortex; brain</td>
+      <td>normal; developmental</td>
+      <td>11</td>
+      <td>Glra3,Ccbe1,Ccn3,6530403H02Rik,Gm42722,Greb1l,...</td>
+      <td>2.801682</td>
+    </tr>
+  </tbody>
+</table>
+</div></div>
+</div>
+</section>
+</section>
+<section id="Check-the-prediction-results">
+<h3>Check the prediction results<a class="headerlink" href="#Check-the-prediction-results" title="Link to this heading">#</a></h3>
+<p>Add annotations to AnnData:</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[27]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata.obs[&#39;Tophits_piasomarkerdb&#39;]=adata.obs[&#39;CellTypes&#39;].map(top_hits)
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[28]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(adata,
+           color=[&#39;Tophits_piasomarkerdb&#39;],
+           palette=piaso.pl.color.d_color10,
+           # legend_loc=&#39;on data&#39;,
+           legend_fontoutline=2,
+           legend_fontweight=5,
+           cmap=&#39;Spectral_r&#39;,
+           ncols=3,
+           size=10,
+           frameon=False)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_31_PIASO_PIASOmarkerDB_API_mouseCortex_51_0.png" class="no-scaled-link" src="../_images/notebooks_31_PIASO_PIASOmarkerDB_API_mouseCortex_51_0.png" style="width: 635px; height: 277px;" />
+</div>
+</div>
+<p>The mannual annotation:</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[29]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(adata,
+           color=[&#39;CellTypes&#39;],
+           palette=piaso.pl.color.d_color4,
+           # legend_loc=&#39;on data&#39;,
+           legend_fontoutline=2,
+           legend_fontweight=5,
+           cmap=&#39;Spectral_r&#39;,
+           ncols=3,
+           size=10,
+           frameon=False)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_31_PIASO_PIASOmarkerDB_API_mouseCortex_53_0.png" class="no-scaled-link" src="../_images/notebooks_31_PIASO_PIASOmarkerDB_API_mouseCortex_53_0.png" style="width: 510px; height: 277px;" />
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[30]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>piaso.pl.plotConfusionMatrix(adata, &#39;Tophits_piasomarkerdb&#39;, &#39;CellTypes&#39;, figsize=(10, 8))
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_31_PIASO_PIASOmarkerDB_API_mouseCortex_54_0.png" class="no-scaled-link" src="../_images/notebooks_31_PIASO_PIASOmarkerDB_API_mouseCortex_54_0.png" style="width: 793px; height: 620px;" />
+</div>
+</div>
+</section>
+<section id="Specify-which-study-or-studies-to-use-in-piaso.tl.analyzeMarkers">
+<h3>Specify which study or studies to use in <code class="docutils literal notranslate"><span class="pre">piaso.tl.analyzeMarkers</span></code><a class="headerlink" href="#Specify-which-study-or-studies-to-use-in-piaso.tl.analyzeMarkers" title="Link to this heading">#</a></h3>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[31]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>%%time
+results, top_hits = piaso.tl.analyzeMarkers(
+        cosg_marker_df,
+        n_top_genes=50,
+        min_genes=5,
+        studies=[&#39;AllenWholeMouseBrain_isocortex&#39;],
+        species=&quot;mouse&quot;
+)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+CPU times: user 461 ms, sys: 7.07 ms, total: 469 ms
+Wall time: 3.58 s
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[32]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>top_hits
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[32]:
+</pre></div>
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+{&#39;L2-3 IT&#39;: &#39;007 L2/3 IT CTX Glut&#39;,
+ &#39;L4 IT&#39;: &#39;006 L4/5 IT CTX Glut&#39;,
+ &#39;L4-5 IT&#39;: &#39;006 L4/5 IT CTX Glut&#39;,
+ &#39;L5 IT&#39;: &#39;005 L5 IT CTX Glut&#39;,
+ &#39;L5 NP&#39;: &#39;032 L5 NP CTX Glut&#39;,
+ &#39;L5 PT&#39;: &#39;022 L5 ET CTX Glut&#39;,
+ &#39;L6 IT&#39;: &#39;004 L6 IT CTX Glut&#39;,
+ &#39;L6 IT Car3&#39;: &#39;001 CLA-EPd-CTX Car3 Glut&#39;,
+ &#39;L6 CT&#39;: &#39;030 L6 CT CTX Glut&#39;,
+ &#39;L6b&#39;: &#39;029 L6b CTX Glut&#39;,
+ &#39;PV&#39;: &#39;052 Pvalb Gaba&#39;,
+ &#39;SST&#39;: &#39;053 Sst Gaba&#39;,
+ &#39;VIP&#39;: &#39;046 Vip Gaba&#39;,
+ &#39;LAMP5&#39;: &#39;049 Lamp5 Gaba&#39;,
+ &#39;Astrocyte&#39;: &#39;319 Astro-TE NN&#39;,
+ &#39;OPC&#39;: &#39;326 OPC NN&#39;,
+ &#39;Oligodendrocyte&#39;: &#39;327 Oligo NN&#39;,
+ &#39;Microglia&#39;: &#39;334 Microglia NN&#39;,
+ &#39;Macrophage&#39;: &#39;335 BAM NN&#39;,
+ &#39;Endothelial&#39;: &#39;333 Endo NN&#39;}
+</pre></div></div>
+</div>
+<p>Add annotations to AnnData:</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[33]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata.obs[&#39;Tophits_piasomarkerdb_AllenWholeMouseBrain_isocortex&#39;]=adata.obs[&#39;CellTypes&#39;].map(top_hits)
+</pre></div>
+</div>
+</div>
+<p>We can see the predicted annotation on the L4/5 IT is different, it’s because in the <code class="docutils literal notranslate"><span class="pre">AllenWholeMouseBrain_isocortex</span></code> study’s annotation, the L4/5 IT and L4 IT are not distinguished at that annotation resolution:</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[34]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(adata,
+           color=[
+               &#39;Tophits_piasomarkerdb_AllenWholeMouseBrain_isocortex&#39;,
+               &#39;Tophits_piasomarkerdb&#39;
+                 ],
+           palette=piaso.pl.color.d_color10,
+           # legend_loc=&#39;on data&#39;,
+           legend_fontoutline=2,
+           legend_fontweight=5,
+           cmap=&#39;Spectral_r&#39;,
+           ncols=1,
+           size=10,
+           frameon=False)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_31_PIASO_PIASOmarkerDB_API_mouseCortex_61_0.png" class="no-scaled-link" src="../_images/notebooks_31_PIASO_PIASOmarkerDB_API_mouseCortex_61_0.png" style="width: 725px; height: 558px;" />
+</div>
+</div>
+<p>The mannual annotation:</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[35]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(adata,
+           color=[&#39;CellTypes&#39;],
+           palette=piaso.pl.color.d_color4,
+           # legend_loc=&#39;on data&#39;,
+           legend_fontoutline=2,
+           legend_fontweight=5,
+           cmap=&#39;Spectral_r&#39;,
+           ncols=3,
+           size=10,
+           frameon=False)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_31_PIASO_PIASOmarkerDB_API_mouseCortex_63_0.png" class="no-scaled-link" src="../_images/notebooks_31_PIASO_PIASOmarkerDB_API_mouseCortex_63_0.png" style="width: 510px; height: 277px;" />
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[36]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>piaso.pl.plotConfusionMatrix(adata, &#39;Tophits_piasomarkerdb_AllenWholeMouseBrain_isocortex&#39;, &#39;CellTypes&#39;, figsize=(10, 8))
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_31_PIASO_PIASOmarkerDB_API_mouseCortex_64_0.png" class="no-scaled-link" src="../_images/notebooks_31_PIASO_PIASOmarkerDB_API_mouseCortex_64_0.png" style="width: 793px; height: 620px;" />
+</div>
+</div>
+</section>
+</section>
+<section id="Client-Usage">
+<h2>Client Usage<a class="headerlink" href="#Client-Usage" title="Link to this heading">#</a></h2>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[37]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>client = piaso.tl.PIASOmarkerDB()
+print(f&quot;\nClient: {client}&quot;)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+
+Client: PIASOmarkerDB(base_url=&#39;https://piaso.org/piasomarkerdb&#39;)
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[38]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span># Get all markers with pagination
+print(&quot;\n--- Get all markers for a gene (with pagination) ---&quot;)
+df = client.getAllMarkers(gene=&quot;Chrna2&quot;, verbose=True)
+print(f&quot;Total Chrna2 entries: {len(df)}&quot;)
+df.head(10)
+</pre></div>
+</div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+
+--- Get all markers for a gene (with pagination) ---
+Fetching markers... batch 1 (32 records)
+Total: 32 markers
+Total Chrna2 entries: 32
+</pre></div></div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[38]:
+</pre></div>
+</div>
+<div class="output_area rendered_html docutils container">
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>cell_type</th>
+      <th>condition</th>
+      <th>gene</th>
+      <th>species</th>
+      <th>specificity_score</th>
+      <th>study_publication</th>
+      <th>tissue</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>214 IPN Otp Crisp1 Gaba</td>
+      <td>normal</td>
+      <td>Chrna2</td>
+      <td>Mouse</td>
+      <td>11.105208</td>
+      <td>AllenWholeMouseBrain_Neuron</td>
+      <td>brain</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>214 IPN Otp Crisp1 Gaba</td>
+      <td>normal</td>
+      <td>Chrna2</td>
+      <td>Mouse</td>
+      <td>9.941944</td>
+      <td>AllenWholeMouseBrain_GABA</td>
+      <td>brain</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>IPN Otp Crisp1 Gaba_2</td>
+      <td>normal; ageing</td>
+      <td>Chrna2</td>
+      <td>Mouse</td>
+      <td>9.447727</td>
+      <td>AllenAgeingBrainAtlas2025_supertype</td>
+      <td>brain</td>
+    </tr>
+    <tr>
+      <th>3</th>
+      <td>Inh_Lmo2</td>
+      <td>normal</td>
+      <td>Chrna2</td>
+      <td>Mouse</td>
+      <td>9.027516</td>
+      <td>MacoskoWholeMouseBrain_nuclei_Neuron_AnnoL2</td>
+      <td>brain</td>
+    </tr>
+    <tr>
+      <th>4</th>
+      <td>VIP InN</td>
+      <td>normal</td>
+      <td>CHRNA2</td>
+      <td>Human</td>
+      <td>8.613732</td>
+      <td>XuTeichmann2023_HippocampalFormation</td>
+      <td>hippocampal formation</td>
+    </tr>
+    <tr>
+      <th>5</th>
+      <td>IN-CGE-VIP</td>
+      <td>normal</td>
+      <td>CHRNA2</td>
+      <td>Human</td>
+      <td>7.967901</td>
+      <td>WangKriegstein2025</td>
+      <td>brain</td>
+    </tr>
+    <tr>
+      <th>6</th>
+      <td>Vip</td>
+      <td>normal; Alzheimer's disease</td>
+      <td>CHRNA2</td>
+      <td>Human</td>
+      <td>7.771841</td>
+      <td>SEAAD2024_MTG_Subclass</td>
+      <td>brain; cortex</td>
+    </tr>
+    <tr>
+      <th>7</th>
+      <td>779_Sst Gaba_4</td>
+      <td>normal; developmental</td>
+      <td>Chrna2</td>
+      <td>Mouse</td>
+      <td>7.725675</td>
+      <td>AllenDevVisualCortex2025_RNA</td>
+      <td>iscortex; brain</td>
+    </tr>
+    <tr>
+      <th>8</th>
+      <td>780_Sst Gaba_4</td>
+      <td>normal; developmental</td>
+      <td>Chrna2</td>
+      <td>Mouse</td>
+      <td>7.495388</td>
+      <td>AllenDevVisualCortex2025_RNA</td>
+      <td>iscortex; brain</td>
+    </tr>
+    <tr>
+      <th>9</th>
+      <td>IPN Otp Crisp1 Gaba_1</td>
+      <td>normal; ageing</td>
+      <td>Chrna2</td>
+      <td>Mouse</td>
+      <td>7.416458</td>
+      <td>AllenAgeingBrainAtlas2025_supertype</td>
+      <td>brain</td>
+    </tr>
+  </tbody>
+</table>
+</div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[39]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span># Get recommended study
+print(&quot;\n--- Recommended Studies ---&quot;)
+for species, tissue in [(&quot;human&quot;, &quot;blood&quot;), (&quot;human&quot;, &quot;brain&quot;), (&quot;human&quot;, &quot;spleen&quot;)]:
+    study = client.getRecommendedStudy(species, tissue)
+    print(f&quot;  {species}/{tissue}: {study}&quot;)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+
+--- Recommended Studies ---
+  human/blood: AllenHumanImmuneHealthAtlas_L2
+  human/brain: SilettiLinnarssonWholeHumanBrain2023_class
+  human/spleen: XuTeichmann2023_Spleen
+</pre></div></div>
+</div>
+</section>
+<section id="Invitation-code-to-download-from-PIASOmarkerDB">
+<h2>Invitation code to download from PIASOmarkerDB<a class="headerlink" href="#Invitation-code-to-download-from-PIASOmarkerDB" title="Link to this heading">#</a></h2>
+<p>The invitation code is <code class="docutils literal notranslate"><span class="pre">PIASO121125</span></code>, and the code will be used during the beta testing phase and will be removed at later stages.</p>
+</section>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="GDRPredictCellTypeTutorial.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Cell type prediction by GDR</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="67_SCALAR_tutorial_SEA-AD-Updated.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Running SCALAR on human cortex snRNA-seq data for ligand-receptor interaction analysis</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#Import-PIASO">Import PIASO</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#Import-other-packages">Import other packages</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#Setting-paths">Setting paths</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#Load-the-adult-mouse-cortex-RNA">Load the adult mouse cortex RNA</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#PIASOmarkerDB-API">PIASOmarkerDB API</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#Query-by-gene">Query by gene</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#Query-by-multiple-genes">Query by multiple genes</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#Query-by-study">Query by study</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#Query-with-score-filter">Query with score filter</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#Get-Markers-as-Dictionary">Get Markers as Dictionary</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#List-available-studies">List available studies</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#Analyze-single-gene-list">Analyze single gene list</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#Analyze-Multiple-Gene-Sets-(Dictionary)">Analyze Multiple Gene Sets (Dictionary)</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#COSG-integration">COSG integration</a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#Run-COSG">Run COSG</a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#Check-the-prediction-results">Check the prediction results</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#Specify-which-study-or-studies-to-use-in-piaso.tl.analyzeMarkers">Specify which study or studies to use in <code class="docutils literal notranslate"><span class="pre">piaso.tl.analyzeMarkers</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#Client-Usage">Client Usage</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#Invitation-code-to-download-from-PIASOmarkerDB">Invitation code to download from PIASOmarkerDB</a></li>
+</ul>
+  </nav></div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf"></script>
+<script defer src="../_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2025, Min Dai.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 7.3.7.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  <!-- # L10n: Setting the PST URL as an argument as this does not need to be localized -->
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.16.1.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>
