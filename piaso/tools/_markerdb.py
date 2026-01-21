@@ -17,7 +17,7 @@ Usage
     
     # Get both DataFrame and marker dict
     df, marker_dict = piaso.tl.queryPIASOmarkerDB(
-        study="HumanPBMC",
+        study="AllenHumanImmuneHealthAtlas_L2",
         species="Human", 
         as_dict=True
     )
@@ -148,8 +148,6 @@ class PIASOmarkerDB:
     DEFAULT_BASE_URL = "https://piaso.org/piasomarkerdb"
     API_VERSION = "v1"
     DEFAULT_TIMEOUT = 30
-    DEFAULT_LIMIT = 3000
-    MAX_LIMIT = 50000
     
     # Return value for no matches
     NO_MATCH_VALUE = "Unassigned"
@@ -309,7 +307,7 @@ class PIASOmarkerDB:
         max_score : float, optional
             Maximum specificity score (must be non-negative).
         limit : int, optional
-            Maximum number of results. Default: 3000, Max: 50000.
+            Maximum number of results. Default: None (no limit).
         offset : int, optional
             Number of results to skip (for pagination). Default: 0.
         as_dict : bool, optional
@@ -367,8 +365,10 @@ class PIASOmarkerDB:
             params['max_score'] = max_score
         
         # Pagination
-        params['limit'] = min(limit or self.DEFAULT_LIMIT, self.MAX_LIMIT)
-        params['offset'] = offset
+        if limit is not None:
+            params['limit'] = limit
+        if offset > 0:
+            params['offset'] = offset
         
         # Make request
         response = self._request('GET', 'markers', params=params)
@@ -1215,7 +1215,7 @@ def queryPIASOmarkerDB(
     max_score : float, optional
         Maximum specificity score (>= 0).
     limit : int, optional
-        Maximum results to return. Default: 3000, Max: 50000.
+        Maximum results to return. Default: None (no limit).
     as_dict : bool, optional
         If True, also return {cell_type: [genes]} dictionary.
         Returns tuple (DataFrame, dict). Default: False.
@@ -1474,6 +1474,4 @@ __all__ = [
     'PIASOmarkerDB',
 ]
 
-__version__ = "1.1.0"
-__author__ = "Min Dai"
-__email__ = "dai@broadinstitute.org"
+__version__ = "1.0.3"

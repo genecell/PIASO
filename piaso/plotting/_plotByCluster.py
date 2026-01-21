@@ -144,3 +144,15 @@ def plot_features_violin(adata,
         fig.savefig(save, bbox_inches='tight')   
         plt.close(fig)   
         print(f'Figure saved to: {save}')
+        
+        
+from functools import wraps
+# Create the alias
+@wraps(plot_features_violin)
+def plotFeaturesViolin(*args, **kwargs):
+    """
+    Alias for :func:`plot_features_violin`.
+    
+    Please refer to the main function for full documentation.
+    """
+    return plot_features_violin(*args, **kwargs)
