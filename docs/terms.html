@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Terms of Use - PIASO</title>
+    <meta name="description" content="Terms of use for PIASO - the Precise Integrative Analysis of Single-cell Omics toolkit.">
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    
+    <style>
+        :root {
+            --bg-primary: #FAF9F7;
+            --bg-secondary: #F5F3F0;
+            --bg-card: #FFFFFF;
+            --text-primary: #1a1a1a;
+            --text-secondary: #5c5c5c;
+            --text-muted: #8c8c8c;
+            --accent-primary: #2E6BB2;
+            --border-color: rgba(0, 0, 0, 0.08);
+            --border-color-strong: rgba(0, 0, 0, 0.12);
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh; line-height: 1.6;
+        }
+        .navbar {
+            position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
+            padding: 0.75rem 2rem;
+            background: rgba(250, 249, 247, 0.85);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border-color);
+        }
+        .nav-container {
+            max-width: 1400px; margin: 0 auto;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .nav-logo { display: flex; align-items: center; text-decoration: none; }
+        .nav-logo-img { height: 36px; width: auto; }
+        .nav-links { display: flex; align-items: center; gap: 2rem; }
+        .nav-link {
+            color: var(--text-secondary); text-decoration: none;
+            font-size: 0.9rem; font-weight: 500; transition: color 0.2s ease;
+        }
+        .nav-link:hover { color: var(--text-primary); }
+        .nav-actions { display: flex; align-items: center; gap: 0.75rem; }
+        .nav-icon-btn {
+            width: 36px; height: 36px; border-radius: 8px;
+            border: 1px solid var(--border-color); background: transparent;
+            color: var(--text-secondary);
+            display: flex; align-items: center; justify-content: center;
+            text-decoration: none; font-size: 1.1rem;
+        }
+        .nav-icon-btn:hover { border-color: var(--border-color-strong); color: var(--text-primary); background: var(--bg-card); }
+        .nav-btn-primary {
+            padding: 0.5rem 1rem; border-radius: 8px; border: none;
+            background: var(--accent-primary); color: white;
+            font-weight: 600; font-size: 0.85rem;
+            text-decoration: none; display: flex; align-items: center; gap: 0.4rem;
+        }
+        .nav-btn-primary:hover { background: #245a96; }
+
+        .page-header {
+            padding: 8rem 2rem 3rem;
+            background: var(--bg-secondary);
+        }
+        .page-header-container { max-width: 800px; margin: 0 auto; }
+        .page-title {
+            font-family: 'Source Serif 4', Georgia, serif;
+            font-size: 2.5rem; font-weight: 400; margin-bottom: 0.5rem;
+        }
+        .page-updated { font-size: 0.9rem; color: var(--text-muted); }
+
+        .content-section { padding: 3rem 2rem 4rem; }
+        .content-container { max-width: 800px; margin: 0 auto; }
+        .content-container h2 {
+            font-family: 'Source Serif 4', Georgia, serif;
+            font-size: 1.5rem; font-weight: 400;
+            margin: 2rem 0 1rem; color: var(--text-primary);
+        }
+        .content-container h2:first-child { margin-top: 0; }
+        .content-container p {
+            color: var(--text-secondary); margin-bottom: 1rem; line-height: 1.8;
+        }
+        .content-container ul {
+            color: var(--text-secondary); margin: 1rem 0 1rem 1.5rem; line-height: 1.8;
+        }
+        .content-container li { margin-bottom: 0.5rem; }
+        .content-container a { color: var(--accent-primary); text-decoration: none; }
+        .content-container a:hover { text-decoration: underline; }
+
+        .footer {
+            padding: 3rem 2rem 2rem; background: var(--bg-secondary);
+            border-top: 1px solid var(--border-color);
+        }
+        .footer-container { max-width: 1200px; margin: 0 auto; }
+        .footer-content { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1.5rem; }
+        .footer-logo { display: flex; align-items: center; }
+        .footer-logo-img { height: 32px; width: auto; }
+        .footer-info { width: 100%; text-align: center; padding: 1.5rem 0; border-top: 1px solid var(--border-color); margin-top: 1.5rem; }
+        .footer-info-text { font-size: 0.9rem; color: var(--text-secondary); }
+        .footer-info-text a { color: var(--accent-primary); text-decoration: none; }
+        .footer-info-text a:hover { text-decoration: underline; }
+        .footer-institutions { margin-top: 0.75rem; font-size: 0.85rem; color: var(--text-muted); }
+        .footer-links { display: flex; justify-content: center; gap: 1.5rem; margin-top: 1rem; flex-wrap: wrap; }
+        .footer-link { font-size: 0.8rem; color: var(--text-muted); text-decoration: none; }
+        .footer-link:hover { color: var(--accent-primary); }
+        .footer-bottom { margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; }
+        .footer-copyright { font-size: 0.8rem; color: var(--text-muted); }
+
+        @media (max-width: 768px) {
+            .nav-links { display: none; }
+            .page-title { font-size: 2rem; }
+            .footer-content { flex-direction: column; text-align: center; }
+            .footer-links { flex-direction: column; gap: 0.75rem; }
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="index.html" class="nav-logo">
+                <img src="_static/PIASO_logo.png" alt="PIASO" class="nav-logo-img">
+            </a>
+            <div class="nav-links">
+                <a href="installation.html" class="nav-link">Installation</a>
+                <a href="tutorials.html" class="nav-link">Tutorials</a>
+                <a href="modules.html" class="nav-link">API</a>
+                <a href="about.html" class="nav-link">About</a>
+            </div>
+            <div class="nav-actions">
+                <a href="https://github.com/genecell/PIASO" target="_blank" rel="noopener" class="nav-icon-btn" title="GitHub">
+                    <i class="fa-brands fa-github"></i>
+                </a>
+                <a href="installation.html" class="nav-btn-primary">
+                    Get Started <i class="fa-solid fa-arrow-right"></i>
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <header class="page-header">
+        <div class="page-header-container">
+            <h1 class="page-title">Terms of Use</h1>
+            <p class="page-updated">Last updated: January 2025</p>
+        </div>
+    </header>
+
+    <section class="content-section">
+        <div class="content-container">
+            <h2>Acceptance of Terms</h2>
+            <p>
+                By accessing or using PIASO software and documentation, you agree to be bound by these Terms of Use. If you do not agree to these terms, please do not use our software or website.
+            </p>
+
+            <h2>Software License</h2>
+            <p>
+                PIASO is released under the BSD-3-Clause open source license. By using PIASO, you agree to comply with the terms of this license. See the <a href="license.html">License page</a> for complete details.
+            </p>
+
+            <h2>Permitted Use</h2>
+            <p>
+                PIASO is designed for research and educational purposes. You may:
+            </p>
+            <ul>
+                <li>Use PIASO for academic and commercial research</li>
+                <li>Modify the source code for your own use</li>
+                <li>Redistribute PIASO under the terms of the BSD-3-Clause license</li>
+                <li>Incorporate PIASO into your own software projects</li>
+                <li>Use PIASO in publications (with appropriate citation)</li>
+            </ul>
+
+            <h2>Disclaimer of Warranties</h2>
+            <p>
+                PIASO is provided "as is" without warranty of any kind, express or implied, including but not limited to the warranties of merchantability, fitness for a particular purpose, and non-infringement.
+            </p>
+            <p>
+                We do not warrant that PIASO will meet your requirements, operate without interruption, or be error-free. The entire risk as to the quality and performance of the software is with you.
+            </p>
+
+            <h2>Research Use</h2>
+            <p>
+                PIASO is a research tool and should not be used as the sole basis for clinical, diagnostic, or treatment decisions. Users are responsible for validating results and ensuring appropriate use in their specific context.
+            </p>
+
+            <h2>Limitation of Liability</h2>
+            <p>
+                In no event shall the authors, contributors, Harvard Medical School, or Broad Institute be liable for any direct, indirect, incidental, special, exemplary, or consequential damages arising from the use of PIASO.
+            </p>
+
+            <h2>Citation Requirements</h2>
+            <p>
+                If you use PIASO in your research, we request that you cite our work appropriately. See the <a href="index.html#citation">Citation section</a> on our homepage for the recommended citation.
+            </p>
+
+            <h2>Contributions</h2>
+            <p>
+                If you contribute code, documentation, or other materials to PIASO, you agree that your contributions will be licensed under the same BSD-3-Clause license as the project.
+            </p>
+
+            <h2>Modifications to Terms</h2>
+            <p>
+                We reserve the right to modify these terms at any time. Changes will be posted on this page. Continued use of PIASO after changes constitutes acceptance of the new terms.
+            </p>
+
+            <h2>Contact</h2>
+            <p>
+                For questions about these terms, please contact:
+            </p>
+            <p>
+                <strong>Min Dai, PhD</strong><br>
+                Broad Institute of MIT and Harvard<br>
+                Email: <a href="mailto:dai@broadinstitute.org">dai@broadinstitute.org</a>
+            </p>
+        </div>
+    </section>
+
+    <footer class="footer">
+        <div class="footer-container">
+            <div class="footer-content">
+                <div class="footer-logo">
+                    <img src="_static/PIASO_logo.png" alt="PIASO" class="footer-logo-img">
+                </div>
+            </div>
+            <div class="footer-info">
+                <p class="footer-info-text">
+                    PIASO is developed and maintained by the <a href="https://fishelllab.hms.harvard.edu/" target="_blank" rel="noopener"><strong>Gord Fishell Laboratory</strong></a>
+                </p>
+                <p class="footer-institutions">Developed at Harvard Medical School • Broad Institute of MIT and Harvard</p>
+                <div class="footer-links">
+                    <a href="about.html" class="footer-link">About</a>
+                    <a href="privacy.html" class="footer-link">Privacy Policy</a>
+                    <a href="terms.html" class="footer-link">Terms of Use</a>
+                    <a href="license.ht

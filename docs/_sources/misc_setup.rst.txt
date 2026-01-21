@@ -1,8 +1,0 @@
-Miscellaneous setup
-=====================================================================
-
-.. toctree::
-   :maxdepth: 1
-
-   gdrive_setup
-   env_setup

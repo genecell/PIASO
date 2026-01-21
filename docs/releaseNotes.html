@@ -394,6 +394,78 @@
                   
   <section id="release-notes">
 <h1>Release notes<a class="headerlink" href="#release-notes" title="Link to this heading">#</a></h1>
+<section id="release-1-0-3-released-january-20-2026">
+<h2>Release 1.0.3 (released January 20, 2026)<a class="headerlink" href="#release-1-0-3-released-january-20-2026" title="Link to this heading">#</a></h2>
+<p><strong>PIASOmarkerDB client and API</strong></p>
+<ul class="simple">
+<li><dl class="simple">
+<dt>New Features</dt><dd><ul>
+<li><p>PIASOmarkerDB Python Client: This release introduces the PIASOmarkerDB Python client, providing programmatic access to PIASOmarkerDB - our comprehensive database of cell type marker genes with standardized specificity scores across studies, tissues, species and conditions.</p></li>
+</ul>
+</dd>
+</dl>
+</li>
+<li><dl class="simple">
+<dt>Key Features</dt><dd><ul>
+<li><p>Query marker genes by gene, cell type, study, species, and tissue</p></li>
+<li><p>Analyze gene lists to infer cell types from marker genes</p></li>
+<li><p>COSG integration for automated cell type annotation workflows</p></li>
+<li><p>Study filtering to restrict analysis to specific reference studies</p></li>
+<li><p>Download markers directly to CSV files</p></li>
+</ul>
+</dd>
+</dl>
+</li>
+<li><dl class="simple">
+<dt>Documentation</dt><dd><ul>
+<li><p>Tutorial: <a class="reference external" href="https://piaso.org/notebooks/31_PIASO_PIASOmarkerDB_API_mouseCortex.html">PIASOmarkerDB API - Mouse Cortex</a></p></li>
+<li><p>PIASOmarkerDB website: <a class="reference external" href="https://piaso.org/piasomarkerdb/">https://piaso.org/piasomarkerdb/</a></p></li>
+</ul>
+</dd>
+</dl>
+</li>
+</ul>
+</section>
+<section id="release-1-0-2-released-november-22-2025">
+<h2>Release 1.0.2 (released November 22, 2025)<a class="headerlink" href="#release-1-0-2-released-november-22-2025" title="Link to this heading">#</a></h2>
+<p><strong>SCALAR, StitchSpace &amp; Parallel Stability</strong></p>
+<ul class="simple">
+<li><dl class="simple">
+<dt>New Features</dt><dd><ul>
+<li><p>Ligand-Receptor Analysis: Added piaso.tl.runSCALAR for single-cell L-R inference.</p></li>
+<li><p>Dataset Integration: Added piaso.tl.stitchSpace for integrating datasets.</p></li>
+<li><p>Preprocessing: Added utility for 2D coordinate rotation in piaso.pp.</p></li>
+</ul>
+</dd>
+</dl>
+</li>
+<li><dl class="simple">
+<dt>Visualization</dt><dd><ul>
+<li><p>SCALAR Plots: Added piaso.pl.plotLigandReceptorInteraction and piaso.pl.plotLigandReceptorLollipop.</p></li>
+<li><p>Metrics: Added piaso.pl.plotConfusionMatrix.</p></li>
+</ul>
+</dd>
+</dl>
+</li>
+<li><dl class="simple">
+<dt>Critical Stability</dt><dd><ul>
+<li><p>Fixed “Unsafe Fork” Crash: Switched ProcessPoolExecutor to use the ‘spawn’ start method. This resolves Terminating: fork() called from a process already using GNU OpenMP errors on Linux/macOS.</p></li>
+<li><p>Strict Seeding: random_seed is now enforced across internal steps (Neighbors, Leiden).</p></li>
+<li><p>Race Condition Resolved: Fixed a logic error in parallel functions where results were processed by completion order rather than batch order. Results are now explicitly sorted.</p></li>
+</ul>
+</dd>
+</dl>
+</li>
+<li><dl class="simple">
+<dt>Compatibility &amp; Maintenance</dt><dd><ul>
+<li><p>Updated for Pandas 2.1+ (applymap -&gt; map) and fixed Scanpy/AnnData warnings.</p></li>
+</ul>
+</dd>
+</dl>
+</li>
+</ul>
+<p>Thank you for your feedback and support!</p>
+</section>
 <section id="release-1-0-1-released-march-18-2025">
 <h2>Release 1.0.1 (released March 18, 2025)<a class="headerlink" href="#release-1-0-1-released-march-18-2025" title="Link to this heading">#</a></h2>
 <p><strong>Bug Fixes and Enhancements</strong></p>
@@ -452,6 +524,8 @@
   </div>
   <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#release-1-0-3-released-january-20-2026">Release 1.0.3 (released January 20, 2026)</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#release-1-0-2-released-november-22-2025">Release 1.0.2 (released November 22, 2025)</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#release-1-0-1-released-march-18-2025">Release 1.0.1 (released March 18, 2025)</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#release-1-0-0-released-february-24-2025">Release 1.0.0 (released February 24, 2025)</a></li>
 </ul>

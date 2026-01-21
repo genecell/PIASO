@@ -147,7 +147,7 @@
 </li>
 
 
-<li class="nav-item current active">
+<li class="nav-item ">
   <a class="nav-link nav-internal" href="modules.html">
     API
   </a>
@@ -270,7 +270,7 @@
 </li>
 
 
-<li class="nav-item current active">
+<li class="nav-item ">
   <a class="nav-link nav-internal" href="modules.html">
     API
   </a>
@@ -331,10 +331,10 @@
     <div class="sidebar-primary-items__start sidebar-primary__section">
         <div class="sidebar-primary-item">
 <h3><a href="index.html">Table of Contents</a></h3>
-<ul class="current">
+<ul>
 <li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="tutorials.html">Tutorials</a></li>
-<li class="toctree-l1 current"><a class="reference internal" href="modules.html">API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="modules.html">API</a></li>
 <li class="toctree-l1"><a class="reference internal" href="references.html">References</a></li>
 <li class="toctree-l1"><a class="reference internal" href="releaseNotes.html">Release notes</a></li>
 </ul>
@@ -537,56 +537,84 @@ contain the raw UMI count matrix. Defaults to None.</p></li>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="piaso.tools.calculateScoreParallel">
-<span class="sig-prename descclassname"><span class="pre">piaso.tools.</span></span><span class="sig-name descname"><span class="pre">calculateScoreParallel</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">adata</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">gene_set</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">score_method</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Literal</span><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'scanpy'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'piaso'</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">random_seed</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1927</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">score_layer</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_workers</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">return_pvals</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbosity</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#piaso.tools.calculateScoreParallel" title="Link to this definition">#</a></dt>
+<span class="sig-prename descclassname"><span class="pre">piaso.tools.</span></span><span class="sig-name descname"><span class="pre">calculateScoreParallel</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">adata</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">gene_set</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">list</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">DataFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">score_method</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Literal</span><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'scanpy'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'piaso'</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'piaso'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">random_seed</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1927</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">score_layer</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_workers</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">return_pvals</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbosity</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#piaso.tools.calculateScoreParallel" title="Link to this definition">#</a></dt>
 <dd><p>Compute gene set scores in parallel using shared memory for efficiency.</p>
+<p>This function processes multiple gene sets in parallel, computing enrichment scores
+for each gene set across all cells in the AnnData object. It uses shared memory
+to efficiently pass the expression matrix to worker processes, avoiding costly
+serialization overhead.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>adata</strong> (<em>AnnData</em>) – The input AnnData object.</p></li>
+<li><p><strong>adata</strong> (<em>AnnData</em>) – The input AnnData object containing gene expression data.</p></li>
 <li><p><strong>gene_set</strong> (<em>dict</em><em>, </em><em>list</em><em> of </em><em>lists</em><em>, or </em><em>pandas.DataFrame</em>) – <dl class="simple">
-<dt>A collection of gene sets, where each gene set is either:</dt><dd><ul>
-<li><p>A dictionary: Keys are gene set names, values are lists of genes.</p></li>
-<li><p>A list of lists: Each sublist contains genes in a gene set.</p></li>
-<li><p>A pandas.DataFrame: Each column represents a gene set, and column names are gene set names.</p></li>
+<dt>A collection of gene sets to score. Supported formats:</dt><dd><ul>
+<li><p>dict: Keys are gene set names, values are lists of gene names.</p></li>
+<li><p>list of lists: Each sublist contains gene names for one gene set.
+Gene sets will be named “GeneSet_0”, “GeneSet_1”, etc.</p></li>
+<li><p>pandas.DataFrame: Each column represents a gene set, with column names
+as gene set names and gene names as values.</p></li>
 </ul>
 </dd>
 </dl>
 </p></li>
-<li><p><strong>score_method</strong> (<em>{'scanpy'</em><em>, </em><em>'piaso'}</em><em>, </em><em>optional</em>) – The method used for gene set scoring. Must be either ‘scanpy’ (default) or ‘piaso’.
-- ‘scanpy’: Uses the Scanpy’s built-in gene set scoring method.
-- ‘piaso’: Uses the PIASO’s gene set scoring method, which is more robust to sequencing depth variations.</p></li>
-<li><p><strong>random_seed</strong> (<em>int</em><em>, </em><em>optional</em>) – Random seed for reproducibility. Default is 1927.</p></li>
-<li><p><strong>score_layer</strong> (<em>str</em><em> or </em><em>None</em><em>, </em><em>optional</em>) – Layer of the AnnData object to use. If None, <cite>adata.X</cite> is used.</p></li>
-<li><p><strong>max_workers</strong> (<em>int</em><em> or </em><em>None</em><em>, </em><em>optional</em>) – Number of parallel workers to use. Defaults to the number of CPUs.</p></li>
-<li><p><strong>return_pvals</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether to return -log10 p-values when using ‘piaso’ method. Default is False.</p></li>
-<li><p><strong>verbosity</strong> (<em>int</em><em>, </em><em>optional</em>) – Level of verbosity. Default is 0.</p></li>
+<li><p><strong>score_method</strong> (<em>{'scanpy'</em><em>, </em><em>'piaso'}</em><em>, </em><em>default 'piaso'</em>) – <p>The method used for gene set scoring.
+- ‘scanpy’: Uses Scanpy’s built-in gene set scoring method.
+- ‘piaso’: Uses the PIASO’s gene set scoring method, which is more robust to sequencing</p>
+<blockquote>
+<div><p>depth variations and provides p-values.</p>
+</div></blockquote>
+</p></li>
+<li><p><strong>random_seed</strong> (<em>int</em><em>, </em><em>default 1927</em>) – Random seed for reproducibility.</p></li>
+<li><p><strong>score_layer</strong> (<em>str</em><em> or </em><em>None</em><em>, </em><em>default None</em>) – Layer of the AnnData object to use. If None, <cite>adata.X</cite> is used.</p></li>
+<li><p><strong>max_workers</strong> (<em>int</em><em> or </em><em>None</em><em>, </em><em>default None</em>) – Number of parallel worker processes to use. If None, defaults to the number
+of CPU cores available.</p></li>
+<li><p><strong>return_pvals</strong> (<em>bool</em><em>, </em><em>default False</em>) – Whether to return -log10(p-values) when using ‘piaso’ method. Only applicable
+when score_method=’piaso’. If True, returns a third array containing p-values.</p></li>
+<li><p><strong>verbosity</strong> (<em>int</em><em>, </em><em>default 0</em>) – Level of verbosity for progress reporting.
+- 0: Silent (no progress bar)
+- &gt;0: Show progress bar during parallel computation</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p><dl class="simple">
-<dt>If score_method is ‘scanpy’:</dt><dd><ul class="simple">
-<li><p>np.ndarray: A 2D array where each column contains the scores for a gene set.</p></li>
-<li><p>list: The names of the gene sets.</p></li>
+<dd class="field-even"><p><ul class="simple">
+<li><p><strong>score_matrix</strong> (<em>np.ndarray</em>) – A 2D array of shape (n_cells, n_gene_sets) where each column contains
+the scores for one gene set across all cells.</p></li>
+<li><p><strong>gene_set_names</strong> (<em>list of str</em>) – The names of the gene sets, in the same order as columns in score_matrix.</p></li>
+<li><p><strong>nlog10_pval_matrix</strong> (<em>np.ndarray, optional</em>) – Only returned when score_method=’piaso’ and return_pvals=True.
+A 2D array of shape (n_cells, n_gene_sets) containing -log10(p-values)
+for each gene set score. Returns None if p-values are not available.</p></li>
 </ul>
-</dd>
-<dt>If score_method is ‘piaso’ and return_pvals is True:</dt><dd><ul class="simple">
-<li><p>np.ndarray: A 2D array where each column contains the scores for a gene set.</p></li>
-<li><p>list: The names of the gene sets.</p></li>
-<li><p>np.ndarray: A 2D array where each column contains the -log10(p-values) for a gene set.</p></li>
-</ul>
-</dd>
-<dt>If score_method is ‘piaso’ and return_pvals is False:</dt><dd><ul class="simple">
-<li><p>np.ndarray: A 2D array where each column contains the scores for a gene set.</p></li>
-<li><p>list: The names of the gene sets.</p></li>
-</ul>
-</dd>
-</dl>
 </p>
 </dd>
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p>tuple</p>
-</dd>
 </dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">scanpy</span> <span class="k">as</span> <span class="nn">sc</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">piaso</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Load example data</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">adata</span> <span class="o">=</span> <span class="n">sc</span><span class="o">.</span><span class="n">datasets</span><span class="o">.</span><span class="n">pbmc3k</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Define gene sets</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">gene_sets</span> <span class="o">=</span> <span class="p">{</span>
+<span class="gp">... </span>    <span class="s1">&#39;T_cell_markers&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;CD3D&#39;</span><span class="p">,</span> <span class="s1">&#39;CD3E&#39;</span><span class="p">,</span> <span class="s1">&#39;CD8A&#39;</span><span class="p">],</span>
+<span class="gp">... </span>    <span class="s1">&#39;B_cell_markers&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;CD79A&#39;</span><span class="p">,</span> <span class="s1">&#39;CD79B&#39;</span><span class="p">,</span> <span class="s1">&#39;MS4A1&#39;</span><span class="p">]</span>
+<span class="gp">... </span><span class="p">}</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Compute scores using Scanpy method</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">scores</span><span class="p">,</span> <span class="n">names</span> <span class="o">=</span> <span class="n">piaso</span><span class="o">.</span><span class="n">tl</span><span class="o">.</span><span class="n">calculateScoreParallel</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">adata</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">gene_set</span><span class="o">=</span><span class="n">gene_sets</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">score_method</span><span class="o">=</span><span class="s1">&#39;piaso&#39;</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">verbosity</span><span class="o">=</span><span class="mi">1</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Add scores to AnnData object</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">name</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">names</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="n">adata</span><span class="o">.</span><span class="n">obs</span><span class="p">[</span><span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s1">_score&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">scores</span><span class="p">[:,</span> <span class="n">i</span><span class="p">]</span>
+</pre></div>
+</div>
 </dd></dl>
 
 <dl class="py function">
@@ -1183,6 +1211,329 @@ FDR of 1.0.</p></li>
 </dl>
 </dd></dl>
 
+<dl class="py function">
+<dt class="sig sig-object py" id="piaso.tools.queryPIASOmarkerDB">
+<span class="sig-prename descclassname"><span class="pre">piaso.tools.</span></span><span class="sig-name descname"><span class="pre">queryPIASOmarkerDB</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">gene</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cell_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">study</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">species</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tissue</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">condition</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">min_score</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_score</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">limit</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">as_dict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">list_studies</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">list_cell_types</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">list_genes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">DataFrame</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">DataFrame</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Dict</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#piaso.tools.queryPIASOmarkerDB" title="Link to this definition">#</a></dt>
+<dd><p>Query PIASOmarkerDB for cell type marker genes.</p>
+<p>This is the main entry point for accessing PIASOmarkerDB through PIASO.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>gene</strong> (<em>str</em><em> or </em><em>list</em><em> of </em><em>str</em><em>, </em><em>optional</em>) – Gene symbol(s) to filter by.</p></li>
+<li><p><strong>cell_type</strong> (<em>str</em><em> or </em><em>list</em><em> of </em><em>str</em><em>, </em><em>optional</em>) – Cell type(s) to filter by.</p></li>
+<li><p><strong>study</strong> (<em>str</em><em>, </em><em>optional</em>) – Study/publication to filter by.</p></li>
+<li><p><strong>species</strong> (<em>str</em><em>, </em><em>optional</em>) – Species to filter by (e.g., “Human”, “Mouse”).</p></li>
+<li><p><strong>tissue</strong> (<em>str</em><em>, </em><em>optional</em>) – Tissue to filter by.</p></li>
+<li><p><strong>condition</strong> (<em>str</em><em>, </em><em>optional</em>) – Condition to filter by.</p></li>
+<li><p><strong>min_score</strong> (<em>float</em><em>, </em><em>optional</em>) – Minimum specificity score (&gt;= 0).</p></li>
+<li><p><strong>max_score</strong> (<em>float</em><em>, </em><em>optional</em>) – Maximum specificity score (&gt;= 0).</p></li>
+<li><p><strong>limit</strong> (<em>int</em><em>, </em><em>optional</em>) – Maximum results to return. Default: None (no limit).</p></li>
+<li><p><strong>as_dict</strong> (<em>bool</em><em>, </em><em>optional</em>) – If True, also return {cell_type: [genes]} dictionary.
+Returns tuple (DataFrame, dict). Default: False.</p></li>
+<li><p><strong>list_studies</strong> (<em>bool</em><em>, </em><em>optional</em>) – If True, return list of available study names instead of markers.
+Default: False.</p></li>
+<li><p><strong>list_cell_types</strong> (<em>bool</em><em>, </em><em>optional</em>) – If True, return list of available cell types instead of markers.
+Default: False.</p></li>
+<li><p><strong>list_genes</strong> (<em>bool</em><em>, </em><em>optional</em>) – If True, return list of unique gene symbols instead of markers.
+Default: False.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><ul class="simple">
+<li><p><em>pd.DataFrame</em> – Marker query results (default).</p></li>
+<li><p><em>tuple (pd.DataFrame, dict)</em> – If as_dict=True: (DataFrame, {cell_type: [genes]}).</p></li>
+<li><p><em>list of str</em> – If list_studies=True, list_cell_types=True, or list_genes=True.</p></li>
+</ul>
+</p>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<p>Query marker genes:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">piaso</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">df</span> <span class="o">=</span> <span class="n">piaso</span><span class="o">.</span><span class="n">tl</span><span class="o">.</span><span class="n">queryPIASOmarkerDB</span><span class="p">(</span><span class="n">gene</span><span class="o">=</span><span class="s2">&quot;Foxp2&quot;</span><span class="p">,</span> <span class="n">species</span><span class="o">=</span><span class="s2">&quot;Mouse&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">df</span> <span class="o">=</span> <span class="n">piaso</span><span class="o">.</span><span class="n">tl</span><span class="o">.</span><span class="n">queryPIASOmarkerDB</span><span class="p">(</span><span class="n">gene</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;Foxp2&quot;</span><span class="p">,</span> <span class="s2">&quot;Syt6&quot;</span><span class="p">,</span> <span class="s2">&quot;Tle4&quot;</span><span class="p">])</span>
+</pre></div>
+</div>
+<p>Get both DataFrame and marker dictionary:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">df</span><span class="p">,</span> <span class="n">marker_dict</span> <span class="o">=</span> <span class="n">piaso</span><span class="o">.</span><span class="n">tl</span><span class="o">.</span><span class="n">queryPIASOmarkerDB</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">study</span><span class="o">=</span><span class="s2">&quot;AllenWholeMouseBrain_isocortex&quot;</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">species</span><span class="o">=</span><span class="s2">&quot;Mouse&quot;</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">as_dict</span><span class="o">=</span><span class="kc">True</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;DataFrame shape: </span><span class="si">{</span><span class="n">df</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Cell types in dict: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">marker_dict</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>List available studies:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">studies</span> <span class="o">=</span> <span class="n">piaso</span><span class="o">.</span><span class="n">tl</span><span class="o">.</span><span class="n">queryPIASOmarkerDB</span><span class="p">(</span><span class="n">list_studies</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Total studies: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">studies</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>List cell types:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">cell_types</span> <span class="o">=</span> <span class="n">piaso</span><span class="o">.</span><span class="n">tl</span><span class="o">.</span><span class="n">queryPIASOmarkerDB</span><span class="p">(</span><span class="n">list_cell_types</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">species</span><span class="o">=</span><span class="s2">&quot;Mouse&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="admonition seealso">
+<p class="admonition-title">See also</p>
+<dl class="simple">
+<dt><a class="reference internal" href="#piaso.tools.analyzeMarkers" title="piaso.tools.analyzeMarkers"><code class="xref py py-obj docutils literal notranslate"><span class="pre">analyzeMarkers</span></code></a></dt><dd><p>Analyze gene lists for cell type inference</p>
+</dd>
+<dt><a class="reference internal" href="#piaso.tools.PIASOmarkerDB" title="piaso.tools.PIASOmarkerDB"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PIASOmarkerDB</span></code></a></dt><dd><p>Client class for advanced usage</p>
+</dd>
+</dl>
+</div>
+<p class="rubric">Notes</p>
+<p>PIASOmarkerDB website: <a class="reference external" href="https://piaso.org/piasomarkerdb/">https://piaso.org/piasomarkerdb/</a></p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="piaso.tools.getMarkers">
+<span class="sig-prename descclassname"><span class="pre">piaso.tools.</span></span><span class="sig-name descname"><span class="pre">getMarkers</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">gene</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cell_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">study</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">species</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tissue</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">condition</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">min_score</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_score</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">limit</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">as_dict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">list_studies</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">list_cell_types</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">list_genes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">DataFrame</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">DataFrame</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Dict</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#piaso.tools.getMarkers" title="Link to this definition">#</a></dt>
+<dd><p>Query PIASOmarkerDB for cell type marker genes.</p>
+<p>This is the main entry point for accessing PIASOmarkerDB through PIASO.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>gene</strong> (<em>str</em><em> or </em><em>list</em><em> of </em><em>str</em><em>, </em><em>optional</em>) – Gene symbol(s) to filter by.</p></li>
+<li><p><strong>cell_type</strong> (<em>str</em><em> or </em><em>list</em><em> of </em><em>str</em><em>, </em><em>optional</em>) – Cell type(s) to filter by.</p></li>
+<li><p><strong>study</strong> (<em>str</em><em>, </em><em>optional</em>) – Study/publication to filter by.</p></li>
+<li><p><strong>species</strong> (<em>str</em><em>, </em><em>optional</em>) – Species to filter by (e.g., “Human”, “Mouse”).</p></li>
+<li><p><strong>tissue</strong> (<em>str</em><em>, </em><em>optional</em>) – Tissue to filter by.</p></li>
+<li><p><strong>condition</strong> (<em>str</em><em>, </em><em>optional</em>) – Condition to filter by.</p></li>
+<li><p><strong>min_score</strong> (<em>float</em><em>, </em><em>optional</em>) – Minimum specificity score (&gt;= 0).</p></li>
+<li><p><strong>max_score</strong> (<em>float</em><em>, </em><em>optional</em>) – Maximum specificity score (&gt;= 0).</p></li>
+<li><p><strong>limit</strong> (<em>int</em><em>, </em><em>optional</em>) – Maximum results to return. Default: None (no limit).</p></li>
+<li><p><strong>as_dict</strong> (<em>bool</em><em>, </em><em>optional</em>) – If True, also return {cell_type: [genes]} dictionary.
+Returns tuple (DataFrame, dict). Default: False.</p></li>
+<li><p><strong>list_studies</strong> (<em>bool</em><em>, </em><em>optional</em>) – If True, return list of available study names instead of markers.
+Default: False.</p></li>
+<li><p><strong>list_cell_types</strong> (<em>bool</em><em>, </em><em>optional</em>) – If True, return list of available cell types instead of markers.
+Default: False.</p></li>
+<li><p><strong>list_genes</strong> (<em>bool</em><em>, </em><em>optional</em>) – If True, return list of unique gene symbols instead of markers.
+Default: False.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><ul class="simple">
+<li><p><em>pd.DataFrame</em> – Marker query results (default).</p></li>
+<li><p><em>tuple (pd.DataFrame, dict)</em> – If as_dict=True: (DataFrame, {cell_type: [genes]}).</p></li>
+<li><p><em>list of str</em> – If list_studies=True, list_cell_types=True, or list_genes=True.</p></li>
+</ul>
+</p>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<p>Query marker genes:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">piaso</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">df</span> <span class="o">=</span> <span class="n">piaso</span><span class="o">.</span><span class="n">tl</span><span class="o">.</span><span class="n">queryPIASOmarkerDB</span><span class="p">(</span><span class="n">gene</span><span class="o">=</span><span class="s2">&quot;Foxp2&quot;</span><span class="p">,</span> <span class="n">species</span><span class="o">=</span><span class="s2">&quot;Mouse&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">df</span> <span class="o">=</span> <span class="n">piaso</span><span class="o">.</span><span class="n">tl</span><span class="o">.</span><span class="n">queryPIASOmarkerDB</span><span class="p">(</span><span class="n">gene</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;Foxp2&quot;</span><span class="p">,</span> <span class="s2">&quot;Syt6&quot;</span><span class="p">,</span> <span class="s2">&quot;Tle4&quot;</span><span class="p">])</span>
+</pre></div>
+</div>
+<p>Get both DataFrame and marker dictionary:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">df</span><span class="p">,</span> <span class="n">marker_dict</span> <span class="o">=</span> <span class="n">piaso</span><span class="o">.</span><span class="n">tl</span><span class="o">.</span><span class="n">queryPIASOmarkerDB</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">study</span><span class="o">=</span><span class="s2">&quot;AllenWholeMouseBrain_isocortex&quot;</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">species</span><span class="o">=</span><span class="s2">&quot;Mouse&quot;</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">as_dict</span><span class="o">=</span><span class="kc">True</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;DataFrame shape: </span><span class="si">{</span><span class="n">df</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Cell types in dict: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">marker_dict</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>List available studies:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">studies</span> <span class="o">=</span> <span class="n">piaso</span><span class="o">.</span><span class="n">tl</span><span class="o">.</span><span class="n">queryPIASOmarkerDB</span><span class="p">(</span><span class="n">list_studies</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Total studies: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">studies</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>List cell types:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">cell_types</span> <span class="o">=</span> <span class="n">piaso</span><span class="o">.</span><span class="n">tl</span><span class="o">.</span><span class="n">queryPIASOmarkerDB</span><span class="p">(</span><span class="n">list_cell_types</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">species</span><span class="o">=</span><span class="s2">&quot;Mouse&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="admonition seealso">
+<p class="admonition-title">See also</p>
+<dl class="simple">
+<dt><a class="reference internal" href="#piaso.tools.analyzeMarkers" title="piaso.tools.analyzeMarkers"><code class="xref py py-obj docutils literal notranslate"><span class="pre">analyzeMarkers</span></code></a></dt><dd><p>Analyze gene lists for cell type inference</p>
+</dd>
+<dt><a class="reference internal" href="#piaso.tools.PIASOmarkerDB" title="piaso.tools.PIASOmarkerDB"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PIASOmarkerDB</span></code></a></dt><dd><p>Client class for advanced usage</p>
+</dd>
+</dl>
+</div>
+<p class="rubric">Notes</p>
+<p>PIASOmarkerDB website: <a class="reference external" href="https://piaso.org/piasomarkerdb/">https://piaso.org/piasomarkerdb/</a></p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="piaso.tools.analyzeMarkers">
+<span class="sig-prename descclassname"><span class="pre">piaso.tools.</span></span><span class="sig-name descname"><span class="pre">analyzeMarkers</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">genes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">DataFrame</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_top_genes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">50</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">species</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tissue</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">studies</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">min_genes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">exclude_cell_types</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">exclude_studies</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">DataFrame</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">DataFrame</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#piaso.tools.analyzeMarkers" title="Link to this definition">#</a></dt>
+<dd><p>Analyze gene list(s) to infer potential cell types.</p>
+<p>This function queries PIASOmarkerDB to find which cell types are associated
+with the input genes, ranking results by matched gene count and specificity.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>genes</strong> (<em>list</em><em> of </em><em>str</em><em>, </em><em>pd.DataFrame</em><em>, or </em><em>dict</em>) – <p>Gene input. Supports three formats:</p>
+<ul>
+<li><p><strong>list of str</strong>: Single list of gene symbols.
+Returns: pd.DataFrame with analysis results.</p></li>
+<li><p><strong>pd.DataFrame</strong>: Columns are clusters/cell types, rows are genes.
+Ideal for COSG output: <code class="docutils literal notranslate"><span class="pre">pd.DataFrame(adata.uns['cosg']['names']).head(50)</span></code>.
+Returns: tuple (results_dict, top_hits_dict).</p></li>
+<li><p><strong>dict</strong>: <code class="docutils literal notranslate"><span class="pre">{cluster_name:</span> <span class="pre">[gene_list]}</span></code>.
+Returns: tuple (results_dict, top_hits_dict).</p></li>
+</ul>
+</p></li>
+<li><p><strong>n_top_genes</strong> (<em>int</em><em>, </em><em>optional</em>) – For DataFrame/dict input: only use top N genes per column/key.
+Default: 50. Useful for COSG results which may rank many genes.</p></li>
+<li><p><strong>species</strong> (<em>str</em><em>, </em><em>optional</em>) – Filter results by species (e.g., “Human”, “Mouse”).</p></li>
+<li><p><strong>tissue</strong> (<em>str</em><em>, </em><em>optional</em>) – Filter results by tissue.</p></li>
+<li><p><strong>studies</strong> (<em>str</em><em> or </em><em>list</em><em> of </em><em>str</em><em>, </em><em>optional</em>) – Study/studies to include in analysis. Only cell types from these
+studies will be considered. Study names are validated against
+PIASOmarkerDB. Cannot overlap with exclude_studies.
+Default: None (use all studies).</p></li>
+<li><p><strong>min_genes</strong> (<em>int</em><em>, </em><em>optional</em>) – Minimum number of genes that must match a cell type. Default: 1.</p></li>
+<li><p><strong>exclude_cell_types</strong> (<em>list</em><em> of </em><em>str</em><em>, </em><em>optional</em>) – Cell types to exclude from results.</p></li>
+<li><p><strong>exclude_studies</strong> (<em>list</em><em> of </em><em>str</em><em>, </em><em>optional</em>) – Studies to exclude from results. Cannot overlap with studies.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><ul class="simple">
+<li><p><em>pd.DataFrame</em> – For single list input: DataFrame with columns:
+cell_type, study_publication, species, tissue, condition,
+matched_gene_count, matched_genes, avg_specificity.</p></li>
+<li><p><em>tuple (dict, dict)</em> – For DataFrame or dict input:</p>
+<ul>
+<li><p><strong>results_dict</strong>: <code class="docutils literal notranslate"><span class="pre">{cluster_name:</span> <span class="pre">result_DataFrame}</span></code></p></li>
+<li><p><strong>top_hits_dict</strong>: <code class="docutils literal notranslate"><span class="pre">{cluster_name:</span> <span class="pre">&quot;predicted_cell_type&quot;}</span></code>
+(or “Unassigned” if no matches found)</p></li>
+</ul>
+</li>
+</ul>
+</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>ValidationError</strong> – If studies parameter contains invalid study names, or if
+    studies and exclude_studies have overlapping values.</p>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<p>Single gene list (mouse cortex L6 markers):</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">piaso</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">query_genes</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;Syt6&quot;</span><span class="p">,</span> <span class="s2">&quot;Tle4&quot;</span><span class="p">,</span> <span class="s2">&quot;Hs3st4&quot;</span><span class="p">,</span> <span class="s2">&quot;Fezf2&quot;</span><span class="p">,</span> <span class="s2">&quot;Foxp2&quot;</span><span class="p">,</span> <span class="s2">&quot;Col12a1&quot;</span><span class="p">]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">df</span> <span class="o">=</span> <span class="n">piaso</span><span class="o">.</span><span class="n">tl</span><span class="o">.</span><span class="n">analyzeMarkers</span><span class="p">(</span><span class="n">query_genes</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">df</span><span class="o">.</span><span class="n">head</span><span class="p">())</span>
+<span class="go"># Top hit: EN-L6-CT from WangKriegstein2025</span>
+</pre></div>
+</div>
+<p>With specific study filter:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">results</span><span class="p">,</span> <span class="n">top_hits</span> <span class="o">=</span> <span class="n">piaso</span><span class="o">.</span><span class="n">tl</span><span class="o">.</span><span class="n">analyzeMarkers</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">cosg_marker_df</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">n_top_genes</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">min_genes</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">studies</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;AllenWholeMouseBrain_isocortex&#39;</span><span class="p">],</span>
+<span class="gp">... </span>    <span class="n">species</span><span class="o">=</span><span class="s2">&quot;Mouse&quot;</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">top_hits</span><span class="p">)</span>
+<span class="go">{&#39;L2-3 IT&#39;: &#39;007 L2/3 IT CTX Glut&#39;, &#39;PV&#39;: &#39;052 Pvalb Gaba&#39;, ...}</span>
+</pre></div>
+</div>
+<p>Dictionary input (microglia and L6 CT markers):</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">gene_sets</span> <span class="o">=</span> <span class="p">{</span>
+<span class="gp">... </span>    <span class="s1">&#39;Cluster_0&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;Cx3cr1&#39;</span><span class="p">,</span> <span class="s1">&#39;P2ry12&#39;</span><span class="p">,</span> <span class="s1">&#39;Tmem119&#39;</span><span class="p">,</span> <span class="s1">&#39;Csf1r&#39;</span><span class="p">,</span> <span class="s1">&#39;Trem2&#39;</span><span class="p">],</span>
+<span class="gp">... </span>    <span class="s1">&#39;Cluster_1&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;Syt6&#39;</span><span class="p">,</span> <span class="s1">&#39;Tle4&#39;</span><span class="p">,</span> <span class="s1">&#39;Hs3st4&#39;</span><span class="p">,</span> <span class="s1">&#39;Fezf2&#39;</span><span class="p">,</span> <span class="s1">&#39;Foxp2&#39;</span><span class="p">],</span>
+<span class="gp">... </span><span class="p">}</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">results</span><span class="p">,</span> <span class="n">top_hits</span> <span class="o">=</span> <span class="n">piaso</span><span class="o">.</span><span class="n">tl</span><span class="o">.</span><span class="n">analyzeMarkers</span><span class="p">(</span><span class="n">gene_sets</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">top_hits</span><span class="p">)</span>
+<span class="go">{&#39;Cluster_0&#39;: &#39;Microglia&#39;, &#39;Cluster_1&#39;: &#39;EN-L6-CT&#39;}</span>
+</pre></div>
+</div>
+<p>COSG integration workflow:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">cosg</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Run COSG</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">cosg</span><span class="o">.</span><span class="n">cosg</span><span class="p">(</span><span class="n">adata</span><span class="p">,</span> <span class="n">key_added</span><span class="o">=</span><span class="s1">&#39;cosg&#39;</span><span class="p">,</span> <span class="n">groupby</span><span class="o">=</span><span class="s1">&#39;leiden&#39;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Get top 50 markers per cluster</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">cosg_marker_df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">adata</span><span class="o">.</span><span class="n">uns</span><span class="p">[</span><span class="s1">&#39;cosg&#39;</span><span class="p">][</span><span class="s1">&#39;names&#39;</span><span class="p">])</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="mi">50</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Analyze with PIASOmarkerDB</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">results</span><span class="p">,</span> <span class="n">top_hits</span> <span class="o">=</span> <span class="n">piaso</span><span class="o">.</span><span class="n">tl</span><span class="o">.</span><span class="n">analyzeMarkers</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">cosg_marker_df</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">n_top_genes</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">species</span><span class="o">=</span><span class="s2">&quot;Mouse&quot;</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Add annotations to AnnData</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">adata</span><span class="o">.</span><span class="n">obs</span><span class="p">[</span><span class="s1">&#39;cell_type_predicted&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">adata</span><span class="o">.</span><span class="n">obs</span><span class="p">[</span><span class="s1">&#39;leiden&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="n">top_hits</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="admonition seealso">
+<p class="admonition-title">See also</p>
+<dl class="simple">
+<dt><a class="reference internal" href="#piaso.tools.queryPIASOmarkerDB" title="piaso.tools.queryPIASOmarkerDB"><code class="xref py py-obj docutils literal notranslate"><span class="pre">queryPIASOmarkerDB</span></code></a></dt><dd><p>Direct marker queries</p>
+</dd>
+</dl>
+</div>
+<p class="rubric">Notes</p>
+<p>For COSG results, the DataFrame columns are cluster/cell type names and
+rows contain the ranked marker genes. Only the top <code class="docutils literal notranslate"><span class="pre">n_top_genes</span></code> genes
+per column are used for analysis.</p>
+<p>When <code class="docutils literal notranslate"><span class="pre">studies</span></code> is provided, study names are validated against PIASOmarkerDB.
+If an invalid study name is provided, a ValidationError is raised with
+instructions to list available studies.</p>
+<p>PIASOmarkerDB website: <a class="reference external" href="https://piaso.org/piasomarkerdb/">https://piaso.org/piasomarkerdb/</a></p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="piaso.tools.PIASOmarkerDB">
+<span class="sig-prename descclassname"><span class="pre">piaso.tools.</span></span><span class="sig-name descname"><span class="pre">PIASOmarkerDB</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">base_url</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">timeout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cache_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Path</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#piaso.tools.PIASOmarkerDB" title="Link to this definition">#</a></dt>
+<dd><p>Python client for accessing PIASOmarkerDB.</p>
+<p>PIASOmarkerDB is a comprehensive database of cell type marker genes with
+specificity scores across various tissues, species, studies, and conditions,
+powered by PIASO (Precise Integrative Analysis of Single-cell Omics) methodologies.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>base_url</strong> (<em>str</em><em>, </em><em>optional</em>) – Base URL for the PIASOmarkerDB API.
+Default: “<a class="reference external" href="https://piaso.org/piasomarkerdb">https://piaso.org/piasomarkerdb</a>”</p></li>
+<li><p><strong>timeout</strong> (<em>int</em><em>, </em><em>optional</em>) – Request timeout in seconds. Default: 30</p></li>
+<li><p><strong>cache_dir</strong> (<em>str</em><em> or </em><em>Path</em><em>, </em><em>optional</em>) – Directory for caching downloaded markers.
+Default: ~/.piaso/markers</p></li>
+</ul>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<p>Basic usage:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">piaso.tools</span> <span class="kn">import</span> <span class="n">PIASOmarkerDB</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">client</span> <span class="o">=</span> <span class="n">PIASOmarkerDB</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Query markers</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">df</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">getMarkers</span><span class="p">(</span><span class="n">gene</span><span class="o">=</span><span class="s2">&quot;Foxp2&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Get as dict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">df</span><span class="p">,</span> <span class="n">marker_dict</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">getMarkers</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">study</span><span class="o">=</span><span class="s2">&quot;AllenWholeMouseBrain_isocortex&quot;</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">as_dict</span><span class="o">=</span><span class="kc">True</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Download markers</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">client</span><span class="o">.</span><span class="n">downloadMarkers</span><span class="p">(</span><span class="s2">&quot;markers.csv&quot;</span><span class="p">,</span> <span class="n">species</span><span class="o">=</span><span class="s2">&quot;Mouse&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="admonition seealso">
+<p class="admonition-title">See also</p>
+<dl class="simple">
+<dt><code class="xref py py-obj docutils literal notranslate"><span class="pre">piaso.tl.queryPIASOmarkerDB</span></code></dt><dd><p>Main query function</p>
+</dd>
+<dt><code class="xref py py-obj docutils literal notranslate"><span class="pre">piaso.tl.analyzeMarkers</span></code></dt><dd><p>Gene list analysis</p>
+</dd>
+</dl>
+</div>
+<p class="rubric">Notes</p>
+<p>PIASOmarkerDB provides marker genes with specificity scores computed using
+PIASO’s standardized methodology across multiple single-cell RNA-seq studies.</p>
+<p>Website: <a class="reference external" href="https://piaso.org/piasomarkerdb/">https://piaso.org/piasomarkerdb/</a></p>
+</dd></dl>
+
 </section>
 
 
@@ -1247,6 +1598,10 @@ FDR of 1.0.</p></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#piaso.tools.predictCellTypeByMarker"><code class="docutils literal notranslate"><span class="pre">predictCellTypeByMarker()</span></code></a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#piaso.tools.stitchSpace"><code class="docutils literal notranslate"><span class="pre">stitchSpace()</span></code></a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#piaso.tools.runSCALAR"><code class="docutils literal notranslate"><span class="pre">runSCALAR()</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#piaso.tools.queryPIASOmarkerDB"><code class="docutils literal notranslate"><span class="pre">queryPIASOmarkerDB()</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#piaso.tools.getMarkers"><code class="docutils literal notranslate"><span class="pre">getMarkers()</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#piaso.tools.analyzeMarkers"><code class="docutils literal notranslate"><span class="pre">analyzeMarkers()</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#piaso.tools.PIASOmarkerDB"><code class="docutils literal notranslate"><span class="pre">PIASOmarkerDB()</span></code></a></li>
 </ul>
   </nav></div>
 
