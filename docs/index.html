@@ -1,523 +1,838 @@
-
 <!DOCTYPE html>
-
-
-<html lang="en" data-content_root="./" >
-
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
-
-    <title>PIASO: Precise Integrative Analysis of Single-cell Omics &#8212; PIASO 0.1.0 documentation</title>
-  
-  
-  
-  <script data-cfasync="false">
-    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
-    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
-  </script>
-  <!--
-    this give us a css class that will be invisible only if js is disabled
-  -->
-  <noscript>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PIASO - Precise Integrative Analysis of Single-cell Omics</title>
+    <meta name="description" content="PIASO: A comprehensive Python toolkit for precise integrative analysis of single-cell omics data including scRNA-seq, scATAC-seq, and spatial transcriptomics. Developed at Harvard Medical School and Broad Institute.">
+    
+    <!-- JSON-LD Structured Data -->
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "PIASO",
+        "description": "Precise Integrative Analysis of Single-cell Omics - A comprehensive Python toolkit for single-cell omics data analysis",
+        "applicationCategory": "Bioinformatics",
+        "operatingSystem": "Cross-platform",
+        "programmingLanguage": "Python",
+        "license": "https://opensource.org/licenses/BSD-3-Clause",
+        "url": "https://piaso.org",
+        "author": {
+            "@type": "Person",
+            "name": "Min Dai",
+            "jobTitle": "Senior Computational Scientist",
+            "affiliation": {
+                "@type": "Organization",
+                "name": "Broad Institute of MIT and Harvard"
+            },
+            "sameAs": "https://scholar.google.com/citations?user=HtlDMqUAAAAJ"
+        },
+        "sourceOrganization": [
+            {
+                "@type": "Organization",
+                "name": "Fishell Laboratory",
+                "url": "https://fishelllab.hms.harvard.edu/",
+                "parentOrganization": {
+                    "@type": "EducationalOrganization",
+                    "name": "Harvard Medical School",
+                    "url": "https://hms.harvard.edu"
+                }
+            },
+            {
+                "@type": "Organization",
+                "name": "Fishell Laboratory",
+                "url": "https://fishelllab.hms.harvard.edu/",
+                "parentOrganization": {
+                    "@type": "ResearchOrganization",
+                    "name": "Broad Institute of MIT and Harvard",
+                    "url": "https://www.broadinstitute.org"
+                }
+            }
+        ]
+    }
+    </script>
+    
+    <!-- Person Schema for Gord Fishell -->
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "Person",
+        "name": "Gord Fishell",
+        "honorificSuffix": "PhD",
+        "jobTitle": ["Professor of Neurobiology", "Professor"],
+        "affiliation": [
+            {
+                "@type": "EducationalOrganization",
+                "name": "Harvard Medical School",
+                "department": "Department of Neurobiology"
+            },
+            {
+                "@type": "ResearchOrganization",
+                "name": "Broad Institute of MIT and Harvard",
+                "department": "Stanley Center for Psychiatric Research"
+            }
+        ],
+        "sameAs": [
+            "https://scholar.google.com/citations?hl=en&user=eTJT9NAAAAAJ",
+            "https://twitter.com/GordFishell",
+            "https://bsky.app/profile/gordfishell.bsky.social",
+            "https://fishelllab.hms.harvard.edu/"
+        ]
+    }
+    </script>
+    
+    <!-- ScholarlyArticle Schema for Citation -->
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "ScholarlyArticle",
+        "name": "Pyramidal neurons proportionately alter cortical interneuron subtypes",
+        "author": [
+            {"@type": "Person", "name": "S.J. Wu"},
+            {"@type": "Person", "name": "M. Dai"}
+        ],
+        "datePublished": "2026",
+        "publisher": {
+            "@type": "Organization",
+            "name": "Nature"
+        },
+        "url": "https://doi.org/10.1038/s41586-025-09996-8",
+        "identifier": {
+            "@type": "PropertyValue",
+            "propertyID": "DOI",
+            "value": "10.1038/s41586-025-09996-8"
+        }
+    }
+    </script>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=Inter:wght@400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    
     <style>
-      .pst-js-only { display: none !important; }
+        :root {
+            --bg-primary: #FAF9F7;
+            --bg-secondary: #F5F3F0;
+            --bg-card: #FFFFFF;
+            --bg-code: #f1f5f9;
+            --text-primary: #1a1a1a;
+            --text-secondary: #5c5c5c;
+            --text-muted: #8c8c8c;
+            --text-code: #334155;
+            --accent-primary: #2E6BB2;
+            --accent-secondary: #7C5CDB;
+            --accent-tertiary: #2E9E6E;
+            --accent-blue: #4A90D9;
+            --accent-warning: #D4A03C;
+            --accent-viz: #E85D75;
+            --border-color: rgba(0, 0, 0, 0.08);
+            --border-color-strong: rgba(0, 0, 0, 0.12);
+            --shadow-sm: 0 1px 2px rgba(0,0,0,0.04);
+            --shadow-md: 0 4px 12px rgba(0,0,0,0.06);
+            --shadow-lg: 0 12px 40px rgba(0,0,0,0.08);
+            --shadow-xl: 0 25px 50px rgba(0,0,0,0.15);
+        }
 
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html { scroll-behavior: smooth; }
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            line-height: 1.6;
+        }
+
+        .navbar {
+            position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
+            padding: 0.75rem 2rem;
+            background: rgba(250, 249, 247, 0.85);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border-color);
+        }
+        .nav-container {
+            max-width: 1400px; margin: 0 auto;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .nav-logo { display: flex; align-items: center; text-decoration: none; }
+        .nav-logo-img { height: 36px; width: auto; }
+        .nav-links { display: flex; align-items: center; gap: 2rem; }
+        .nav-link {
+            color: var(--text-secondary); text-decoration: none;
+            font-size: 0.9rem; font-weight: 500; transition: color 0.2s ease;
+        }
+        .nav-link:hover { color: var(--text-primary); }
+        .nav-actions { display: flex; align-items: center; gap: 0.75rem; }
+        .nav-icon-btn {
+            width: 36px; height: 36px; border-radius: 8px;
+            border: 1px solid var(--border-color); background: transparent;
+            color: var(--text-secondary); cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            transition: all 0.2s ease; text-decoration: none; font-size: 1.1rem;
+        }
+        .nav-icon-btn:hover { border-color: var(--border-color-strong); color: var(--text-primary); background: var(--bg-card); }
+        .nav-btn-primary {
+            padding: 0.5rem 1rem; border-radius: 8px; border: none;
+            background: var(--accent-primary); color: white;
+            font-weight: 600; font-size: 0.85rem; cursor: pointer;
+            transition: all 0.2s ease; display: flex; align-items: center; gap: 0.4rem;
+        }
+        .nav-btn-primary:hover { background: #245a96; transform: translateY(-1px); }
+        .mobile-menu-btn { display: none; background: none; border: none; color: var(--text-primary); font-size: 1.25rem; cursor: pointer; }
+
+        .hero { padding: 8rem 2rem 4rem; max-width: 1400px; margin: 0 auto; }
+        .hero-content { display: grid; grid-template-columns: 1fr 1fr; gap: 4rem; align-items: center; }
+        .hero-text { max-width: 560px; }
+        .hero-badge {
+            display: inline-flex; align-items: center; gap: 0.4rem;
+            padding: 0.35rem 0.85rem; background: rgba(46, 107, 178, 0.1);
+            border-radius: 100px; font-size: 0.8rem;
+            color: var(--accent-primary); font-weight: 600; margin-bottom: 1.25rem;
+        }
+        .hero-title {
+            font-family: 'Source Serif 4', Georgia, serif;
+            font-size: clamp(2.25rem, 4vw, 3.25rem);
+            font-weight: 400; line-height: 1.15; margin-bottom: 1.25rem;
+        }
+        .hero-title-highlight { color: var(--accent-primary); font-style: italic; }
+        .hero-subtitle {
+            font-size: 1.15rem; color: var(--text-secondary);
+            margin-bottom: 2rem; line-height: 1.7; font-style: italic;
+        }
+        .hero-buttons { display: flex; gap: 0.75rem; flex-wrap: wrap; }
+        .btn {
+            padding: 0.75rem 1.5rem; border-radius: 8px; font-weight: 600;
+            font-size: 0.9rem; text-decoration: none;
+            display: inline-flex; align-items: center; gap: 0.5rem;
+            transition: all 0.2s ease; cursor: pointer;
+        }
+        .btn-primary { background: var(--accent-primary); color: white; border: none; }
+        .btn-primary:hover {
+            background: #245a96; transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(46, 107, 178, 0.25);
+        }
+        .btn-secondary {
+            background: var(--bg-card); color: var(--text-primary);
+            border: 1px solid var(--border-color-strong);
+        }
+        .btn-secondary:hover { border-color: var(--text-muted); box-shadow: var(--shadow-sm); }
+
+        .hero-visual { display: flex; justify-content: center; align-items: center; }
+        .hero-hex-grid {
+            display: grid; grid-template-columns: repeat(4, 1fr);
+            gap: 12px; max-width: 420px;
+        }
+        .hero-hex-item {
+            aspect-ratio: 1; background: var(--bg-card);
+            border: 1px solid var(--border-color); border-radius: 12px;
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center; padding: 1rem;
+            transition: all 0.3s ease; animation: float 4s ease-in-out infinite;
+            text-decoration: none; color: inherit; cursor: pointer;
+        }
+        .hero-hex-item:nth-child(1) { animation-delay: 0s; }
+        .hero-hex-item:nth-child(2) { animation-delay: 0.5s; }
+        .hero-hex-item:nth-child(3) { animation-delay: 1s; }
+        .hero-hex-item:nth-child(4) { animation-delay: 1.5s; }
+        .hero-hex-item:nth-child(5) { animation-delay: 0.25s; }
+        .hero-hex-item:nth-child(6) { animation-delay: 0.75s; }
+        .hero-hex-item:nth-child(7) { animation-delay: 1.25s; }
+        .hero-hex-item:nth-child(8) { animation-delay: 1.75s; }
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-8px); }
+        }
+        .hero-hex-item:hover {
+            transform: translateY(-4px) scale(1.05);
+            box-shadow: var(--shadow-md); border-color: var(--accent-primary);
+            animation-play-state: paused;
+        }
+        .hero-hex-icon { font-size: 1.5rem; margin-bottom: 0.5rem; }
+        .hero-hex-label {
+            font-size: 0.7rem; font-weight: 600;
+            color: var(--text-secondary); text-align: center;
+        }
+
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.4); backdrop-filter: blur(4px);
+            z-index: 2000; display: none;
+            align-items: center; justify-content: center; padding: 1rem;
+        }
+        .modal-overlay.open { display: flex; }
+        .modal {
+            background: var(--bg-card); border-radius: 16px;
+            max-width: 560px; width: 100%;
+            box-shadow: var(--shadow-xl); animation: modalIn 0.3s ease;
+        }
+        @keyframes modalIn {
+            from { opacity: 0; transform: scale(0.95) translateY(10px); }
+            to { opacity: 1; transform: scale(1) translateY(0); }
+        }
+        .modal-header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 1.5rem 1.5rem 1rem; border-bottom: 1px solid var(--border-color);
+        }
+        .modal-title {
+            font-size: 1.25rem; font-weight: 600;
+            display: flex; align-items: center; gap: 0.5rem;
+        }
+        .modal-title i { color: var(--accent-primary); }
+        .modal-close {
+            width: 32px; height: 32px; border-radius: 8px; border: none;
+            background: transparent; color: var(--text-muted); cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            transition: all 0.2s ease; font-size: 1.1rem;
+        }
+        .modal-close:hover { background: var(--bg-secondary); color: var(--text-primary); }
+        .modal-body { padding: 1.5rem; }
+        .install-option { margin-bottom: 1.5rem; }
+        .install-option:last-child { margin-bottom: 0; }
+        .install-label {
+            font-size: 0.9rem; font-weight: 500; color: var(--text-secondary);
+            margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.4rem;
+        }
+        .install-label i { font-size: 0.8rem; }
+        .code-block {
+            background: var(--bg-code); border: 1px solid var(--border-color);
+            border-radius: 10px; padding: 1rem 1.25rem; position: relative; overflow-x: auto;
+        }
+        .code-block code {
+            font-family: 'Fira Code', monospace; font-size: 0.875rem;
+            color: var(--text-code); line-height: 1.5;
+        }
+        .code-block .copy-btn {
+            position: absolute; top: 0.75rem; right: 0.75rem;
+            width: 32px; height: 32px; border-radius: 6px;
+            border: 1px solid var(--border-color); background: var(--bg-card);
+            color: var(--text-muted); cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            transition: all 0.2s ease; font-size: 0.875rem;
+        }
+        .code-block .copy-btn:hover {
+            background: var(--bg-secondary); color: var(--text-primary);
+            border-color: var(--border-color-strong);
+        }
+        .code-block .copy-btn.copied { color: var(--accent-tertiary); border-color: var(--accent-tertiary); }
+        .modal-footer {
+            padding: 1rem 1.5rem 1.5rem; display: flex;
+            justify-content: flex-end; gap: 0.75rem;
+        }
+        .modal-footer .btn { padding: 0.6rem 1.25rem; }
+
+        .modules-section { padding: 4rem 2rem 6rem; background: var(--bg-secondary); }
+        .modules-container { max-width: 1400px; margin: 0 auto; }
+        .section-header { text-align: center; margin-bottom: 3rem; }
+        .section-title {
+            font-family: 'Source Serif 4', Georgia, serif;
+            font-size: clamp(1.75rem, 3vw, 2.5rem);
+            font-weight: 400; margin-bottom: 0.75rem;
+        }
+        .section-subtitle {
+            font-size: 1rem; color: var(--text-secondary);
+            max-width: 500px; margin: 0 auto;
+        }
+        .category-filter {
+            display: flex; justify-content: center; flex-wrap: wrap;
+            gap: 0.5rem; margin-bottom: 2.5rem;
+        }
+        .filter-btn {
+            padding: 0.45rem 1rem; border-radius: 100px;
+            border: 1px solid var(--border-color); background: var(--bg-card);
+            color: var(--text-secondary); font-size: 0.85rem; font-weight: 500;
+            cursor: pointer; transition: all 0.2s ease;
+        }
+        .filter-btn:hover { border-color: var(--border-color-strong); color: var(--text-primary); }
+        .filter-btn.active {
+            background: var(--accent-primary);
+            border-color: var(--accent-primary); color: white;
+        }
+        .module-grid-wrapper { position: relative; overflow: hidden; margin: 0 -2rem; padding: 2rem; }
+        .module-grid {
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem;
+        }
+        .module-card {
+            background: var(--bg-card); border: 1px solid var(--border-color);
+            border-radius: 12px; padding: 1.5rem; transition: all 0.3s ease;
+            cursor: pointer; text-decoration: none; color: inherit;
+            display: block; position: relative; overflow: hidden;
+        }
+        .module-card::before {
+            content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+            background: var(--card-accent, var(--accent-primary)); opacity: 0; transition: opacity 0.3s ease;
+        }
+        .module-card:hover {
+            transform: translateY(-4px); box-shadow: var(--shadow-lg); border-color: transparent;
+        }
+        .module-card:hover::before { opacity: 1; }
+        .module-card.coming-soon { opacity: 0.7; }
+        .module-card.coming-soon:hover { transform: none; box-shadow: none; cursor: default; }
+        .module-header {
+            display: flex; align-items: flex-start;
+            justify-content: space-between; margin-bottom: 0.75rem;
+        }
+        .module-icon {
+            width: 40px; height: 40px; border-radius: 10px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.1rem; flex-shrink: 0;
+        }
+        .module-icon.scrna { background: rgba(46, 107, 178, 0.12); color: var(--accent-primary); }
+        .module-icon.integration { background: rgba(124, 92, 219, 0.12); color: var(--accent-secondary); }
+        .module-icon.annotation { background: rgba(46, 158, 110, 0.12); color: var(--accent-tertiary); }
+        .module-icon.spatial { background: rgba(74, 144, 217, 0.12); color: var(--accent-blue); }
+        .module-icon.visualization { background: rgba(232, 93, 117, 0.12); color: var(--accent-viz); }
+        .module-icon.scatac { background: rgba(212, 160, 60, 0.12); color: var(--accent-warning); }
+        .module-icon.coming { background: rgba(140, 140, 140, 0.12); color: var(--text-muted); }
+        .module-status {
+            font-size: 0.7rem; font-weight: 600; padding: 0.2rem 0.6rem;
+            border-radius: 100px; text-transform: uppercase; letter-spacing: 0.03em;
+        }
+        .module-status.available { background: rgba(46, 158, 110, 0.1); color: var(--accent-tertiary); }
+        .module-status.coming { background: rgba(212, 160, 60, 0.15); color: #B8860B; }
+        .module-name { font-size: 1rem; font-weight: 600; margin-bottom: 0.5rem; }
+        .module-desc { font-size: 0.875rem; color: var(--text-secondary); line-height: 1.5; }
+        .module-categories { margin-top: 1rem; display: flex; flex-wrap: wrap; gap: 0.35rem; }
+        .module-category-tag {
+            font-size: 0.7rem; color: var(--text-muted); font-weight: 500;
+            padding: 0.15rem 0.5rem; background: var(--bg-secondary); border-radius: 100px;
+        }
+
+        .citation-section { padding: 4rem 2rem; background: var(--bg-primary); }
+        .citation-container { max-width: 800px; margin: 0 auto; }
+        .citation-card {
+            background: var(--bg-card); border: 1px solid var(--border-color);
+            border-radius: 16px; padding: 2.5rem;
+        }
+        .citation-label {
+            display: inline-flex; align-items: center; gap: 0.4rem;
+            font-size: 0.8rem; color: var(--accent-primary); font-weight: 600;
+            margin-bottom: 1rem; text-transform: uppercase; letter-spacing: 0.04em;
+        }
+        .citation-text { font-size: 1rem; color: var(--text-secondary); line-height: 1.8; }
+        .citation-text a { color: var(--text-secondary); text-decoration: none; transition: color 0.2s ease; }
+        .citation-text a:hover { color: var(--accent-primary); text-decoration: underline; }
+        .citation-doi {
+            display: inline-flex; align-items: center; gap: 0.4rem;
+            margin-top: 1rem; padding: 0.4rem 0.8rem;
+            background: rgba(46, 107, 178, 0.1); border-radius: 6px;
+            font-size: 0.85rem; color: var(--accent-primary);
+            text-decoration: none; transition: all 0.2s ease;
+        }
+        .citation-doi:hover { background: rgba(46, 107, 178, 0.15); }
+
+        .footer { padding: 3rem 2rem 2rem; background: var(--bg-secondary); border-top: 1px solid var(--border-color); }
+        .footer-container { max-width: 1200px; margin: 0 auto; }
+        .footer-content {
+            display: flex; justify-content: space-between;
+            align-items: center; flex-wrap: wrap; gap: 1.5rem;
+        }
+        .footer-logo { display: flex; align-items: center; }
+        .footer-logo-img { height: 32px; width: auto; }
+        .footer-social { display: flex; gap: 0.75rem; }
+        .footer-social-link {
+            width: 32px; height: 32px; border-radius: 6px;
+            border: 1px solid var(--border-color);
+            display: flex; align-items: center; justify-content: center;
+            color: var(--text-secondary); text-decoration: none;
+            transition: all 0.2s ease; background: var(--bg-card);
+        }
+        .footer-social-link:hover { border-color: var(--border-color-strong); color: var(--text-primary); }
+        .footer-info {
+            width: 100%; text-align: center; padding: 1.5rem 0;
+            border-top: 1px solid var(--border-color); margin-top: 1.5rem;
+        }
+        .footer-info-text { font-size: 0.9rem; color: var(--text-secondary); line-height: 1.7; }
+        .footer-info-text a { color: var(--accent-primary); text-decoration: none; }
+        .footer-info-text a:hover { text-decoration: underline; }
+        .footer-institutions { margin-top: 0.75rem; font-size: 0.85rem; color: var(--text-muted); }
+        .footer-links {
+            display: flex; justify-content: center; gap: 1.5rem;
+            margin-top: 1rem; flex-wrap: wrap;
+        }
+        .footer-link {
+            font-size: 0.8rem; color: var(--text-muted);
+            text-decoration: none; transition: color 0.2s ease;
+        }
+        .footer-link:hover { color: var(--accent-primary); }
+        .footer-bottom {
+            margin-top: 1.5rem; padding-top: 1.5rem;
+            border-top: 1px solid var(--border-color);
+            display: flex; justify-content: space-between;
+            align-items: center; flex-wrap: wrap; gap: 1rem;
+        }
+        .footer-copyright { font-size: 0.8rem; color: var(--text-muted); }
+        .footer-version {
+            font-size: 0.8rem; color: var(--text-muted);
+            display: flex; align-items: center; gap: 0.4rem;
+        }
+        .footer-version-badge {
+            padding: 0.15rem 0.5rem; background: rgba(46, 107, 178, 0.1);
+            border-radius: 100px; font-size: 0.7rem;
+            color: var(--accent-primary); font-weight: 600;
+        }
+
+        .mobile-nav {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: var(--bg-primary); z-index: 999;
+            padding: 5rem 2rem 2rem; display: none; flex-direction: column; gap: 0.5rem;
+        }
+        .mobile-nav.open { display: flex; }
+        .mobile-nav-link {
+            color: var(--text-primary); text-decoration: none;
+            font-size: 1.25rem; padding: 0.75rem 0;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .mobile-nav-close {
+            position: absolute; top: 1rem; right: 1.5rem;
+            background: none; border: none; color: var(--text-primary);
+            font-size: 1.5rem; cursor: pointer;
+        }
+
+        @media (max-width: 1024px) {
+            .hero-content { grid-template-columns: 1fr; text-align: center; }
+            .hero-text { max-width: 100%; }
+            .hero-buttons { justify-content: center; }
+            .hero-visual { order: -1; margin-bottom: 2rem; }
+            .hero-hex-grid { max-width: 320px; }
+        }
+        @media (max-width: 768px) {
+            .nav-links { display: none; }
+            .mobile-menu-btn { display: block; }
+            .hero { padding: 6rem 1.5rem 3rem; }
+            .modules-section, .citation-section { padding: 3rem 1.5rem; }
+            .module-grid { grid-template-columns: 1fr; }
+            .footer-content { flex-direction: column; text-align: center; }
+            .modal { margin: 1rem; }
+            .footer-links { flex-direction: column; gap: 0.75rem; }
+        }
     </style>
-  </noscript>
-  
-  <!-- Loaded before other Sphinx assets -->
-  <link href="_static/styles/theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
-<link href="_static/styles/pydata-sphinx-theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
-
-    <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=362ab14a" />
-    <link rel="stylesheet" type="text/css" href="_static/custom.css?v=0330b353" />
-  
-  <!-- So that users can add custom icons -->
-  <script src="_static/scripts/fontawesome.js?digest=8878045cc6db502f8baf"></script>
-  <!-- Pre-loaded scripts that we'll load fully later -->
-  <link rel="preload" as="script" href="_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf" />
-<link rel="preload" as="script" href="_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf" />
-
-    <script src="_static/documentation_options.js?v=01f34227"></script>
-    <script src="_static/doctools.js?v=9a2dae69"></script>
-    <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
-    <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
-    <script>window.MathJax = {"tex": {"inlineMath": [["$", "$"], ["\\(", "\\)"]], "processEscapes": true}, "options": {"ignoreHtmlClass": "tex2jax_ignore|mathjax_ignore|document", "processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
-    <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
-    <script>DOCUMENTATION_OPTIONS.pagename = 'index';</script>
-    <script src="_static/sidebar_toggle.js?v=3b053ec6"></script>
-    <link rel="index" title="Index" href="genindex.html" />
-    <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="Installation" href="installation.html" />
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="" />
-  </head>
-  
-  
-  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
-
-  
-  
-  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
-  
-  <div id="pst-scroll-pixel-helper"></div>
-  
-  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
-    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
-
-  
-  <dialog id="pst-search-dialog">
-    
-<form class="bd-search d-flex align-items-center"
-      action="search.html"
-      method="get">
-  <i class="fa-solid fa-magnifying-glass"></i>
-  <input type="search"
-         class="form-control"
-         name="q"
-         placeholder="Search the docs ..."
-         aria-label="Search the docs ..."
-         autocomplete="off"
-         autocorrect="off"
-         autocapitalize="off"
-         spellcheck="false"/>
-  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
-</form>
-  </dialog>
-
-  <div class="pst-async-banner-revealer d-none">
-  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
-</div>
-
-  
-    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
-<div class="bd-header__inner bd-page-width">
-  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
-    <span class="fa-solid fa-bars"></span>
-  </button>
-  
-  
-  <div class=" navbar-header-items__start">
-    
-      <div class="navbar-item">
-
-  
-    
-  
-
-<a class="navbar-brand logo" href="#">
-  
-  
-  
-  
-  
-    
-    
-      
-    
-    
-    <img src="_static/PIASO_logo.png" class="logo__image only-light" alt="PIASO 0.1.0 documentation - Home"/>
-    <img src="_static/PIASO_logo.png" class="logo__image only-dark pst-js-only" alt="PIASO 0.1.0 documentation - Home"/>
-  
-  
-</a></div>
-    
-  </div>
-  
-  <div class=" navbar-header-items">
-    
-    <div class="me-auto navbar-header-items__center">
-      
-        <div class="navbar-item">
-<nav>
-  <ul class="bd-navbar-elements navbar-nav">
-    
-<li class="nav-item ">
-  <a class="nav-link nav-internal" href="installation.html">
-    Installation
-  </a>
-</li>
-
-
-<li class="nav-item ">
-  <a class="nav-link nav-internal" href="tutorials.html">
-    Tutorials
-  </a>
-</li>
-
-
-<li class="nav-item ">
-  <a class="nav-link nav-internal" href="modules.html">
-    API
-  </a>
-</li>
-
-
-<li class="nav-item ">
-  <a class="nav-link nav-internal" href="references.html">
-    References
-  </a>
-</li>
-
-
-<li class="nav-item ">
-  <a class="nav-link nav-internal" href="releaseNotes.html">
-    Release notes
-  </a>
-</li>
-
-  </ul>
-</nav></div>
-      
-    </div>
-    
-    
-    <div class="navbar-header-items__end">
-      
-        <div class="navbar-item navbar-persistent--container">
-          
-
-<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
- <i class="fa-solid fa-magnifying-glass"></i>
- <span class="search-button__default-text">Search</span>
- <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
-</button>
-        </div>
-      
-      
-        <div class="navbar-item">
-
-<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
-  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
-  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
-  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
-</button></div>
-      
-        <div class="navbar-item"><ul class="navbar-icon-links"
-    aria-label="Icon Links">
-        <li class="nav-item">
-          
-          
-          
-          
-          
-          
-          
-          
-          <a href="https://github.com/genecell/PIASO" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i>
-            <span class="sr-only">GitHub</span></a>
-        </li>
-</ul></div>
-      
-    </div>
-    
-  </div>
-  
-  
-    <div class="navbar-persistent--mobile">
-
-<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
- <i class="fa-solid fa-magnifying-glass"></i>
- <span class="search-button__default-text">Search</span>
- <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
-</button>
-    </div>
-  
-
-  
-    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
-      <span class="fa-solid fa-outdent"></span>
-    </button>
-  
-</div>
-
-    </header>
-  
-
-  <div class="bd-container">
-    <div class="bd-container__inner bd-page-width">
-      
-      
-      
-        
-      
-      <dialog id="pst-primary-sidebar-modal"></dialog>
-      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
-        
-
-  
-  <div class="sidebar-header-items sidebar-primary__section">
-    
-    
-      <div class="sidebar-header-items__center">
-        
-          
-          
-            <div class="navbar-item">
-<nav>
-  <ul class="bd-navbar-elements navbar-nav">
-    
-<li class="nav-item ">
-  <a class="nav-link nav-internal" href="installation.html">
-    Installation
-  </a>
-</li>
-
-
-<li class="nav-item ">
-  <a class="nav-link nav-internal" href="tutorials.html">
-    Tutorials
-  </a>
-</li>
-
-
-<li class="nav-item ">
-  <a class="nav-link nav-internal" href="modules.html">
-    API
-  </a>
-</li>
-
-
-<li class="nav-item ">
-  <a class="nav-link nav-internal" href="references.html">
-    References
-  </a>
-</li>
-
-
-<li class="nav-item ">
-  <a class="nav-link nav-internal" href="releaseNotes.html">
-    Release notes
-  </a>
-</li>
-
-  </ul>
-</nav></div>
-          
-        
-      </div>
-    
-    
-    
-      <div class="sidebar-header-items__end">
-        
-          <div class="navbar-item">
-
-<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
-  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
-  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
-  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
-</button></div>
-        
-          <div class="navbar-item"><ul class="navbar-icon-links"
-    aria-label="Icon Links">
-        <li class="nav-item">
-          
-          
-          
-          
-          
-          
-          
-          
-          <a href="https://github.com/genecell/PIASO" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i>
-            <span class="sr-only">GitHub</span></a>
-        </li>
-</ul></div>
-        
-      </div>
-    
-  </div>
-  
-    <div class="sidebar-primary-items__start sidebar-primary__section">
-        <div class="sidebar-primary-item">
-<h3><a href="#">Table of Contents</a></h3>
-<ul>
-<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
-<li class="toctree-l1"><a class="reference internal" href="tutorials.html">Tutorials</a></li>
-<li class="toctree-l1"><a class="reference internal" href="modules.html">API</a></li>
-<li class="toctree-l1"><a class="reference internal" href="references.html">References</a></li>
-<li class="toctree-l1"><a class="reference internal" href="releaseNotes.html">Release notes</a></li>
-</ul>
-</div>
-    </div>
-  
-  
-  <div class="sidebar-primary-items__end sidebar-primary__section">
-      <div class="sidebar-primary-item">
-<div id="ethical-ad-placement"
-      class="flat"
-      data-ea-publisher="readthedocs"
-      data-ea-type="readthedocs-sidebar"
-      data-ea-manual="true">
-</div></div>
-  </div>
-
-
-      </div>
-      
-      <main id="main-content" class="bd-main" role="main">
-        
-        
-          <div class="bd-content">
-            <div class="bd-article-container">
-              
-              <div class="bd-header-article d-print-none"></div>
-              
-              
-              
-                
-<div id="searchbox"></div>
-                <article class="bd-article">
-                  
-  <section id="piaso-precise-integrative-analysis-of-single-cell-omics">
-<h1>PIASO: Precise Integrative Analysis of Single-cell Omics<a class="headerlink" href="#piaso-precise-integrative-analysis-of-single-cell-omics" title="Link to this heading">#</a></h1>
-<p>Current available functionalities include:</p>
-<ul class="simple">
-<li><p>perform dimensionality reduction with GDR</p></li>
-<li><p>integration of scRNA-seq datasets with GDR</p></li>
-<li><p>integration of scRNA-seq data and MERFISH/Xenium data with GDR</p></li>
-<li><p>normalization of scRNA-seq data with INFOG</p></li>
-<li><p>selection of highly-variable genes in scRNA-seq data with INFOG</p></li>
-<li><p>a novel gene set scoring method</p></li>
-<li><p>run clustering on selected cluster(s)</p></li>
-<li><p>side-by-side cell embedding plots, e.g., split by Conditions</p></li>
-<li><p>stacked violin plots for multiple features, including genes and cell metrics</p></li>
-</ul>
-<p>Upcoming functionalities:</p>
-<ul class="simple">
-<li><p>preprocessing of scATAC-seq datasets</p></li>
-<li><p>integration of scRNA-seq and scATAC-seq datasets (not relying on gene activities)</p></li>
-<li><p>inference of cell type-specific gene regulatory networks</p></li>
-</ul>
-<p>and others</p>
-<section id="citation">
-<h2>Citation<a class="headerlink" href="#citation" title="Link to this heading">#</a></h2>
-<p>If PIASO is useful for your research, please consider citing Wu et al., Pyramidal neurons proportionately alter the identity and survival of specific cortical interneuron subtypes, bioRxiv (2024).</p>
-<div class="toctree-wrapper compound">
-<ul>
-<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
-<li class="toctree-l1"><a class="reference internal" href="tutorials.html">Tutorials</a></li>
-<li class="toctree-l1"><a class="reference internal" href="modules.html">API</a></li>
-<li class="toctree-l1"><a class="reference internal" href="references.html">References</a></li>
-<li class="toctree-l1"><a class="reference internal" href="releaseNotes.html">Release notes</a></li>
-</ul>
-</div>
-</section>
-</section>
-<section id="indices-and-tables">
-<h1>Indices and tables<a class="headerlink" href="#indices-and-tables" title="Link to this heading">#</a></h1>
-<ul class="simple">
-<li><p><a class="reference internal" href="genindex.html"><span class="std std-ref">Index</span></a></p></li>
-<li><p><a class="reference internal" href="py-modindex.html"><span class="std std-ref">Module Index</span></a></p></li>
-<li><p><a class="reference internal" href="search.html"><span class="std std-ref">Search Page</span></a></p></li>
-</ul>
-</section>
-
-
-                </article>
-              
-              
-              
-              
-              
-                <footer class="prev-next-footer d-print-none">
-                  
-<div class="prev-next-area">
-    <a class="right-next"
-       href="installation.html"
-       title="next page">
-      <div class="prev-next-info">
-        <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Installation</p>
-      </div>
-      <i class="fa-solid fa-angle-right"></i>
-    </a>
-</div>
-                </footer>
-              
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="index.html" class="nav-logo">
+                <img src="_static/PIASO_logo.png" alt="PIASO" class="nav-logo-img">
+            </a>
+            <div class="nav-links">
+                <a href="installation.html" class="nav-link">Installation</a>
+                <a href="tutorials.html" class="nav-link">Tutorials</a>
+                <a href="modules.html" class="nav-link">API</a>
+                <a href="about.html" class="nav-link">About</a>
+                <a href="references.html" class="nav-link">References</a>
+                <a href="releaseNotes.html" class="nav-link">Release Notes</a>
             </div>
-            
-            
-              
-                <dialog id="pst-secondary-sidebar-modal"></dialog>
-                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+            <div class="nav-actions">
+                <a href="https://github.com/genecell/PIASO" target="_blank" rel="noopener" class="nav-icon-btn" title="GitHub">
+                    <i class="fa-brands fa-github"></i>
+                </a>
+                <button class="nav-btn-primary" onclick="openInstallModal()">
+                    Get Started <i class="fa-solid fa-arrow-right"></i>
+                </button>
+            </div>
+            <button class="mobile-menu-btn" onclick="toggleMobileMenu()">
+                <i class="fa-solid fa-bars"></i>
+            </button>
+        </div>
+    </nav>
 
-
-  <div class="sidebar-secondary-item">
-<div
-    id="pst-page-navigation-heading-2"
-    class="page-toc tocsection onthispage">
-    <i class="fa-solid fa-list"></i> On this page
-  </div>
-  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
-    <ul class="visible nav section-nav flex-column">
-<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#">PIASO: Precise Integrative Analysis of Single-cell Omics</a><ul class="visible nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#citation">Citation</a></li>
-</ul>
-</li>
-<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#indices-and-tables">Indices and tables</a></li>
-</ul>
-
-  </nav></div>
-
-</div></div>
-              
-            
-          </div>
-          <footer class="bd-footer-content">
-            
-          </footer>
-        
-      </main>
+    <div class="mobile-nav" id="mobileNav">
+        <button class="mobile-nav-close" onclick="toggleMobileMenu()">
+            <i class="fa-solid fa-times"></i>
+        </button>
+        <a href="installation.html" class="mobile-nav-link">Installation</a>
+        <a href="tutorials.html" class="mobile-nav-link">Tutorials</a>
+        <a href="modules.html" class="mobile-nav-link">API</a>
+        <a href="about.html" class="mobile-nav-link">About</a>
+        <a href="references.html" class="mobile-nav-link">References</a>
+        <a href="releaseNotes.html" class="mobile-nav-link">Release Notes</a>
+        <a href="https://github.com/genecell/PIASO" target="_blank" class="mobile-nav-link">GitHub</a>
     </div>
-  </div>
-  
-  <!-- Scripts loaded after <body> so the DOM is not blocked -->
-  <script defer src="_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf"></script>
-<script defer src="_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf"></script>
 
-  <footer class="bd-footer">
-<div class="bd-footer__inner bd-page-width">
-  
-    <div class="footer-items__start">
-      
-        <div class="footer-item">
-
-  <p class="copyright">
-    
-      © Copyright 2025, Min Dai.
-      <br/>
-    
-  </p>
-</div>
-      
-        <div class="footer-item">
-
-  <p class="sphinx-version">
-    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 7.3.7.
-    <br/>
-  </p>
-</div>
-      
+    <div class="modal-overlay" id="installModal" onclick="closeInstallModal(event)">
+        <div class="modal" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <div class="modal-title">
+                    <i class="fa-solid fa-download"></i>
+                    Install PIASO
+                </div>
+                <button class="modal-close" onclick="closeInstallModal()">
+                    <i class="fa-solid fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="install-option">
+                    <div class="install-label">
+                        <i class="fa-solid fa-cube"></i>
+                        Install from PyPI (stable release)
+                    </div>
+                    <div class="code-block">
+                        <code>pip install piaso-tools</code>
+                        <button class="copy-btn" onclick="copyCode(this, 'pip install piaso-tools')" title="Copy to clipboard">
+                            <i class="fa-regular fa-copy"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="install-option">
+                    <div class="install-label">
+                        <i class="fa-brands fa-github"></i>
+                        Install from GitHub (latest development version)
+                    </div>
+                    <div class="code-block">
+                        <code>pip install git+https://github.com/genecell/PIASO.git</code>
+                        <button class="copy-btn" onclick="copyCode(this, 'pip install git+https://github.com/genecell/PIASO.git')" title="Copy to clipboard">
+                            <i class="fa-regular fa-copy"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <a href="installation.html" class="btn btn-secondary">
+                    <i class="fa-solid fa-book"></i> Full Installation Guide
+                </a>
+                <button class="btn btn-primary" onclick="closeInstallModal()">Done</button>
+            </div>
+        </div>
     </div>
-  
-  
-  
-    <div class="footer-items__end">
-      
-        <div class="footer-item">
-<p class="theme-version">
-  <!-- # L10n: Setting the PST URL as an argument as this does not need to be localized -->
-  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.16.1.
-</p></div>
-      
-    </div>
-  
-</div>
 
-  </footer>
-  </body>
+    <section class="hero">
+        <div class="hero-content">
+            <div class="hero-text">
+                <div class="hero-badge">
+                    <i class="fa-solid fa-dna"></i>
+                    Python Toolkit for Single-cell Omics
+                </div>
+                <h1 class="hero-title">
+                    The toolkit for <span class="hero-title-highlight">P</span>recise <span class="hero-title-highlight">I</span>ntegrative <span class="hero-title-highlight">A</span>nalysis of <span class="hero-title-highlight">S</span>ingle-cell <span class="hero-title-highlight">O</span>mics
+                </h1>
+                <p class="hero-subtitle">Data analysis support, for your biological insight.</p>
+                <div class="hero-buttons">
+                    <button class="btn btn-primary" onclick="openInstallModal()">
+                        <i class="fa-solid fa-download"></i> Get started
+                    </button>
+                    <a href="tutorials.html" class="btn btn-secondary">
+                        <i class="fa-solid fa-book"></i> Tutorials
+                    </a>
+                    <a href="#modules" class="btn btn-secondary">
+                        <i class="fa-solid fa-grip"></i> Modules
+                    </a>
+                </div>
+            </div>
+            <div class="hero-visual">
+                <div class="hero-hex-grid">
+                    <a href="#module-infog-norm" class="hero-hex-item">
+                        <div class="hero-hex-icon" style="color: var(--accent-primary);"><i class="fa-solid fa-filter"></i></div>
+                        <span class="hero-hex-label">INFOG</span>
+                    </a>
+                    <a href="#module-gdr-dr" class="hero-hex-item">
+                        <div class="hero-hex-icon" style="color: var(--accent-secondary);"><i class="fa-solid fa-compress"></i></div>
+                        <span class="hero-hex-label">GDR</span>
+                    </a>
+                    <a href="#module-cosg" class="hero-hex-item">
+                        <div class="hero-hex-icon" style="color: var(--accent-tertiary);"><i class="fa-solid fa-bullseye"></i></div>
+                        <span class="hero-hex-label">COSG</span>
+                    </a>
+                    <a href="#module-emergene" class="hero-hex-item">
+                        <div class="hero-hex-icon" style="color: var(--accent-blue);"><i class="fa-solid fa-code-compare"></i></div>
+                        <span class="hero-hex-label">Emergene</span>
+                    </a>
+                    <a href="#module-scalar-lr" class="hero-hex-item">
+                        <div class="hero-hex-icon" style="color: var(--accent-primary);"><i class="fa-solid fa-diagram-project"></i></div>
+                        <span class="hero-hex-label">SCALAR</span>
+                    </a>
+                    <a href="#module-laris" class="hero-hex-item">
+                        <div class="hero-hex-icon" style="color: var(--accent-secondary);"><i class="fa-solid fa-map-location-dot"></i></div>
+                        <span class="hero-hex-label">LARIS</span>
+                    </a>
+                    <a href="#module-stitchspace" class="hero-hex-item">
+                        <div class="hero-hex-icon" style="color: var(--accent-tertiary);"><i class="fa-solid fa-arrows-to-circle"></i></div>
+                        <span class="hero-hex-label">stitchSpace</span>
+                    </a>
+                    <a href="#module-marker-db" class="hero-hex-item">
+                        <div class="hero-hex-icon" style="color: var(--accent-warning);"><i class="fa-solid fa-database"></i></div>
+                        <span class="hero-hex-label">PIASOmarkerDB</span>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="modules-section" id="modules">
+        <div class="modules-container">
+            <div class="section-header">
+                <h2 class="section-title">Explore PIASO Modules</h2>
+                <p class="section-subtitle">An efficient and versatile toolkit for analysis of single-cell omics</p>
+            </div>
+            <div class="category-filter">
+                <button class="filter-btn active" data-category="all">All Modules</button>
+                <button class="filter-btn" data-category="scRNA-seq">scRNA-seq</button>
+                <button class="filter-btn" data-category="scATAC-seq">scATAC-seq</button>
+                <button class="filter-btn" data-category="Spatial">Spatial</button>
+                <button class="filter-btn" data-category="Integration">Integration</button>
+                <button class="filter-btn" data-category="Annotation">Annotation</button>
+                <button class="filter-btn" data-category="Visualization">Visualization</button>
+                <button class="filter-btn" data-category="coming">Coming Soon</button>
+            </div>
+            <div class="module-grid-wrapper">
+                <div class="module-grid" id="moduleGrid"></div>
+            </div>
+        </div>
+    </section>
+
+    <section class="citation-section" id="citation">
+        <div class="citation-container">
+            <div class="citation-card">
+                <div class="citation-label"><i class="fa-solid fa-bookmark"></i> Citation</div>
+                <p class="citation-text">
+                    If PIASO is useful for your research, please consider citing:<br><br>
+                    <a href="https://doi.org/10.1038/s41586-025-09996-8" target="_blank" rel="noopener">
+                        Wu, S.J., Dai, M. <em>et al.</em> Pyramidal neurons proportionately alter cortical interneuron subtypes. <em>Nature</em> (2026).
+                    </a>
+                </p>
+                <a href="https://doi.org/10.1038/s41586-025-09996-8" target="_blank" rel="noopener" class="citation-doi">
+                    <i class="fa-solid fa-link"></i> DOI: 10.1038/s41586-025-09996-8
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <footer class="footer">
+        <div class="footer-container">
+            <div class="footer-content">
+                <div class="footer-logo">
+                    <img src="_static/PIASO_logo.png" alt="PIASO" class="footer-logo-img">
+                </div>
+                <div class="footer-social">
+                    <a href="https://github.com/genecell/PIASO" target="_blank" rel="noopener" class="footer-social-link" title="GitHub">
+                        <i class="fa-brands fa-github"></i>
+                    </a>
+                </div>
+            </div>
+            <div class="footer-info">
+                <p class="footer-info-text">
+                    PIASO is developed and maintained by the <a href="https://fishelllab.hms.harvard.edu/" target="_blank" rel="noopener"><strong>Gord Fishell Laboratory</strong></a> at Harvard Medical School and Broad Institute of MIT and Harvard.<br>
+                    Contact: Min Dai - <a href="mailto:dai@broadinstitute.org">dai@broadinstitute.org</a>
+                </p>
+                <p class="footer-institutions">Developed at Harvard Medical School • Broad Institute of MIT and Harvard</p>
+                <div class="footer-links">
+                    <a href="about.html" class="footer-link">About</a>
+                    <a href="privacy.html" class="footer-link">Privacy Policy</a>
+                    <a href="terms.html" class="footer-link">Terms of Use</a>
+                    <a href="license.html" class="footer-link">License (BSD-3-Clause)</a>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p class="footer-copyright">© 2025 PIASO. Built for the single-cell community.</p>
+                <div class="footer-version">Version <span class="footer-version-badge">1.0.3</span></div>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        const modules = [
+            { id: 'infog-norm', name: 'INFOG Normalization', desc: 'An accurate and efficient normalization method for scRNA-seq data', categories: ['scRNA-seq'], status: 'available', icon: 'fa-solid fa-filter', link: 'notebooks/rnaSeqPipelineTutorial.html#INFOG-normalization' },
+            { id: 'infog-hvg', name: 'INFOG HVG Selection', desc: 'Highly variable gene selection using INFOG', categories: ['scRNA-seq'], status: 'available', icon: 'fa-solid fa-chart-simple', link: 'notebooks/rnaSeqPipelineTutorial.html#INFOG-normalization' },
+            { id: 'leiden-local', name: 'LeidenLocal', desc: 'Fine clustering on selected cluster(s)', categories: ['scRNA-seq', 'scATAC-seq', 'Spatial'], status: 'available', icon: 'fa-solid fa-circle-nodes', link: 'notebooks/LeidenLocalTutorial.html' },
+            { id: 'emergene', name: 'Emergene', desc: 'Individual cell-based differential transcriptomic analysis across conditions', categories: ['scRNA-seq', 'scATAC-seq', 'Spatial'], status: 'available', icon: 'fa-solid fa-code-compare', link: 'https://github.com/genecell/Emergene' },
+            { id: 'cosg', name: 'COSG', desc: 'Marker gene/region identification', categories: ['scRNA-seq', 'scATAC-seq', 'Spatial'], status: 'available', icon: 'fa-solid fa-bullseye', link: 'https://github.com/genecell/COSG' },
+            { id: 'gdr-dr', name: 'GDR Dimensionality Reduction', desc: 'Graph-based dimensionality reduction', categories: ['scRNA-seq', 'scATAC-seq', 'Spatial', 'Integration'], status: 'available', icon: 'fa-solid fa-compress', link: 'notebooks/GDR_Tutorial.html' },
+            { id: 'gdr-integration', name: 'GDR Integration', desc: 'Integrate scRNA-seq with MERFISH/Xenium spatial data', categories: ['Integration', 'Spatial'], status: 'available', icon: 'fa-solid fa-object-group', link: 'notebooks/GDR_Tutorial.html' },
+            { id: 'predict-gdr', name: 'predictCellTypeByGDR', desc: 'Cell type annotation using GDR', categories: ['Annotation', 'scRNA-seq', 'Spatial'], status: 'available', icon: 'fa-solid fa-tags', link: 'notebooks/GDRPredictCellTypeTutorial.html' },
+            { id: 'predict-marker', name: 'predictCellTypeByMarker', desc: 'Cell type annotation based on marker genes', categories: ['Annotation', 'scRNA-seq'], status: 'available', icon: 'fa-solid fa-wand-magic-sparkles', link: 'https://piaso.org/notebooks/27_PIASO_markerGeneBasedCellTypePrediction_mouseCortex_updated.html' },
+            { id: 'marker-db', name: 'PIASOmarkerDB', desc: 'Comprehensive catalog of cell type-specific marker genes', categories: ['Annotation'], status: 'available', icon: 'fa-solid fa-database', link: 'https://piaso.org/piasomarkerdb' },
+            { id: 'scalar-lr', name: 'SCALAR L-R Analysis', desc: 'Single-cell analysis of ligands and receptors', categories: ['scRNA-seq'], status: 'available', icon: 'fa-solid fa-diagram-project', link: 'https://piaso.org/notebooks/67_SCALAR_tutorial_SEA-AD-Updated.html' },
+            { id: 'laris', name: 'LARIS', desc: 'Accurate and efficient ligand-receptor interaction analysis in spatial transcriptomics', categories: ['Spatial'], status: 'available', icon: 'fa-solid fa-map-location-dot', link: 'https://github.com/genecell/LARIS' },
+            { id: 'plot-split', name: 'plotEmbeddingsSplit', desc: 'Visualize cell embeddings across conditions side-by-side', categories: ['Visualization', 'scRNA-seq', 'scATAC-seq', 'Spatial'], status: 'available', icon: 'fa-solid fa-table-columns', link: 'notebooks/01_showThePlotFunction.html#Split-the-UMAP-by-condition' },
+            { id: 'gene-scoring', name: 'Improved Gene Set Scoring', desc: 'Novel method for gene set scoring analysis', categories: ['scRNA-seq'], status: 'available', icon: 'fa-solid fa-list-check', link: 'https://piaso.org/piaso.tools.html#piaso.tools.score' },
+            { id: 'stitchspace', name: 'stitchSpace', desc: 'Data integration for scRNA-seq and scATAC-seq datasets', categories: ['Integration', 'scRNA-seq', 'scATAC-seq'], status: 'available', icon: 'fa-solid fa-arrows-to-circle', link: 'https://piaso.org/piaso.tools.html#piaso.tools.stitchSpace' },
+            { id: 'heritability', name: 'Trait Heritability Mapping', desc: 'Trait heritability mapping at cell type level', categories: ['scRNA-seq', 'scATAC-seq'], status: 'coming', icon: 'fa-solid fa-sitemap', link: null },
+            { id: 'atac-preprocess', name: 'scATAC-seq Preprocessing', desc: 'Complete preprocessing pipeline for scATAC-seq data', categories: ['scATAC-seq'], status: 'coming', icon: 'fa-solid fa-gears', link: null },
+            { id: 'peak-calling', name: 'Improved Peak Calling', desc: 'Enhanced peak calling methods for scATAC-seq', categories: ['scATAC-seq'], status: 'coming', icon: 'fa-solid fa-mountain', link: null },
+            { id: 'atac-integration', name: 'scRNA/scATAC Integration', desc: 'Improved integration of scRNA-seq and scATAC-seq datasets', categories: ['scATAC-seq', 'Integration'], status: 'coming', icon: 'fa-solid fa-code-merge', link: null },
+            { id: 'gene-activity', name: 'Gene Activity Imputation', desc: 'Improved gene activity imputation in scATAC-seq', categories: ['scATAC-seq'], status: 'coming', icon: 'fa-solid fa-arrow-up-right-dots', link: null },
+            { id: 'grn', name: 'Gene Regulatory Networks', desc: 'Inference of cell type-specific gene regulatory networks', categories: ['scATAC-seq'], status: 'coming', icon: 'fa-solid fa-diagram-successor', link: null },
+            { id: 'celltype-mapping-atac', name: 'Cell Type Mapping in scATAC-seq', desc: 'Cell type mapping and annotation in scATAC-seq data', categories: ['scATAC-seq', 'Annotation'], status: 'coming', icon: 'fa-solid fa-map', link: null },
+            { id: 'marker-db-regions', name: 'PIASOmarkerDB Genomic Regions', desc: 'Comprehensive catalog of cell type-specific genomic regions', categories: ['scATAC-seq', 'Annotation'], status: 'coming', icon: 'fa-solid fa-layer-group', link: null },
+            { id: 'cisg', name: 'CISG', desc: 'Cell type-specific cis-regulatory element design', categories: ['scATAC-seq'], status: 'coming', icon: 'fa-solid fa-dna', link: null },
+        ];
+
+        const categoryIconClass = {
+            'scRNA-seq': 'scrna', 'scATAC-seq': 'scatac', 'Spatial': 'spatial',
+            'Integration': 'integration', 'Annotation': 'annotation', 'Visualization': 'visualization'
+        };
+
+        function renderModules(filteredModules = modules) {
+            const grid = document.getElementById('moduleGrid');
+            grid.innerHTML = '';
+            filteredModules.forEach((module, index) => {
+                const primaryCategory = module.categories[0];
+                const iconClass = module.status === 'coming' ? 'coming' : (categoryIconClass[primaryCategory] || 'scrna');
+                const card = document.createElement(module.link ? 'a' : 'div');
+                card.className = `module-card ${module.status === 'coming' ? 'coming-soon' : ''}`;
+                card.id = `module-${module.id}`;
+                if (module.link) {
+                    card.href = module.link;
+                    if (module.link.startsWith('http')) { card.target = '_blank'; card.rel = 'noopener'; }
+                }
+                card.style.setProperty('--card-accent', getAccentColor(primaryCategory));
+                const categoryTags = module.categories.map(cat => `<span class="module-category-tag">${cat}</span>`).join('');
+                card.innerHTML = `
+                    <div class="module-header">
+                        <div class="module-icon ${iconClass}"><i class="${module.icon}"></i></div>
+                        <span class="module-status ${module.status}">${module.status === 'coming' ? 'Coming Soon' : 'Available'}</span>
+                    </div>
+                    <h3 class="module-name">${module.name}</h3>
+                    <p class="module-desc">${module.desc}</p>
+                    <div class="module-categories">${categoryTags}</div>
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        function getAccentColor(category) {
+            const colors = {
+                'scRNA-seq': '#2E6BB2', 'scATAC-seq': '#D4A03C', 'Spatial': '#4A90D9',
+                'Integration': '#7C5CDB', 'Annotation': '#2E9E6E', 'Visualization': '#E85D75'
+            };
+            return colors[category] || '#2E6BB2';
+        }
+
+        document.querySelectorAll('.filter-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+                this.classList.add('active');
+                const category = this.dataset.category;
+                let filtered;
+                if (category === 'all') filtered = modules;
+                else if (category === 'coming') filtered = modules.filter(m => m.status === 'coming');
+                else filtered = modules.filter(m => m.categories.includes(category));
+                renderModules(filtered);
+            });
+        });
+
+        function toggleMobileMenu() { document.getElementById('mobileNav').classList.toggle('open'); }
+        function openInstallModal() {
+            document.getElementById('installModal').classList.add('open');
+            document.body.style.overflow = 'hidden';
+        }
+        function closeInstallModal(event) {
+            if (event && event.target !== event.currentTarget) return;
+            document.getElementById('installModal').classList.remove('open');
+            document.body.style.overflow = '';
+        }
+        function copyCode(button, text) {
+            navigator.clipboard.writeText(text).then(() => {
+                button.classList.add('copied');
+                button.innerHTML = '<i class="fa-solid fa-check"></i>';
+                setTimeout(() => { button.classList.remove('copied'); button.innerHTML = '<i class="fa-regular fa-copy"></i>'; }, 2000);
+            });
+        }
+        document.addEventListener('keydown', function(event) { if (event.key === 'Escape') closeInstallModal(); });
+        document.addEventListener('DOMContentLoaded', () => { renderModules(); });
+    </script>
+</body>
 </html>
