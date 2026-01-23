@@ -17,6 +17,12 @@ Install from PyPI (stable release):
 ```bash
 pip install piaso-tools
 ```
+
+Install from bioconda (stable release):
+```bash
+conda install -c conda-forge -c bioconda piaso
+```
+
 Install from GitHub (latest development version):
 ```bash
 pip install git+https://github.com/genecell/PIASO.git
