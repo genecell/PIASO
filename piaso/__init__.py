@@ -6,4 +6,4 @@ from . import preprocessing as pp
 from . import plotting as pl
 
 
-__version__ = "1.0.3"
+__version__ = "1.0.4"
