@@ -290,7 +290,9 @@ def runGDR(
                 if verbosity > 0:
                     print(f"Processing batch {batch_idx+1}/{nbatches}: '{batch_i}'")
 
-                adata_i=adata[adata.obs[batch_key]==batch_i].copy()
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", FutureWarning)
+                    adata_i=adata[adata.obs[batch_key]==batch_i].copy()
 
                 ### Extract marker gene signatures
                 ### Calculate clustering labels if no clustering info was specified
@@ -369,7 +371,9 @@ def runGDR(
 
                 ### Scoring the geneset
                 for batch_u in batch_list:
-                    adata_u=adata[adata.obs[batch_key]==batch_u].copy()
+                    with warnings.catch_warnings():
+                        warnings.simplefilter("ignore", FutureWarning)
+                        adata_u=adata[adata.obs[batch_key]==batch_u].copy()
 
                     if scoring_method == 'piaso':
                         from ._normalization import score as _score
@@ -1062,7 +1066,9 @@ def calculateScoreParallel_multiBatch(
         def _score_one_batch(batch_idx_and_name):
             idx, batch_i = batch_idx_and_name
             batch_mask = adata.obs[batch_key] == batch_i
-            adata_batch = adata[batch_mask].copy()
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", FutureWarning)
+                adata_batch = adata[batch_mask].copy()
 
             score_list, gene_set_names = calculateScoreParallel(
                 adata_batch,
@@ -1829,8 +1835,11 @@ def runGDRParallel(
                 cellbarcode_info.append(adata.obs_names[adata.obs[batch_key]==batch_u].values)
 
                 ### Use parallel computing of the gene set scores
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", FutureWarning)
+                    adata_batch_u = adata[adata.obs[batch_key]==batch_u].copy()
                 score_list, gene_set_names=calculateScoreParallel(
-                    adata[adata.obs[batch_key]==batch_u].copy(),
+                    adata_batch_u,
                     gene_set=marker_gene,
                     score_method=scoring_method,
                     score_layer=score_layer,
