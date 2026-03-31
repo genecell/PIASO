@@ -1537,7 +1537,7 @@ def runGDRParallel(
     scoring_method:str=None,
     key_added:str=None,
     max_workers:int=8,
-    calculate_score_multiBatch:bool=False,
+    calculate_score_multiBatch:bool=True,
     n_concurrent_batches:int=None,
     verbosity: int=0,
     random_seed:int=1927
@@ -1596,7 +1596,7 @@ def runGDRParallel(
         Maximum number of workers to use for parallel computation. Defaults to 8.
 
     calculate_score_multiBatch : bool, optional
-        Whether to calculate gene scores across multiple adata batches (if `batch_key` is specified). Defaults to False.
+        Whether to calculate gene scores across multiple adata batches (if `batch_key` is specified). Defaults to True.
 
     n_concurrent_batches : int, optional
         Number of batches to process concurrently when ``calculate_score_multiBatch=True`` and
