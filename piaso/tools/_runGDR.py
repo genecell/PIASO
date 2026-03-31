@@ -1062,7 +1062,7 @@ def calculateScoreParallel_multiBatch(
         def _score_one_batch(batch_idx_and_name):
             idx, batch_i = batch_idx_and_name
             batch_mask = adata.obs[batch_key] == batch_i
-            adata_batch = adata[batch_mask]
+            adata_batch = adata[batch_mask].copy()
 
             score_list, gene_set_names = calculateScoreParallel(
                 adata_batch,
@@ -1830,7 +1830,7 @@ def runGDRParallel(
 
                 ### Use parallel computing of the gene set scores
                 score_list, gene_set_names=calculateScoreParallel(
-                    adata[adata.obs[batch_key]==batch_u],
+                    adata[adata.obs[batch_key]==batch_u].copy(),
                     gene_set=marker_gene,
                     score_method=scoring_method,
                     score_layer=score_layer,
