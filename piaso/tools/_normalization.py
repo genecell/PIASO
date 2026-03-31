@@ -242,12 +242,20 @@ def _precompute_stats(cellxgene, n_nearest_neighbors=30, leaf_size=40):
     kdt = KDTree(mean_var, leaf_size=leaf_size, metric='euclidean')
     knn_idx = kdt.query(mean_var, k=n_nearest_neighbors + 1, return_distance=False)
 
-    # Remove self-loops
-    mask = knn_idx != np.arange(knn_idx.shape[0])[:, None]
-    knn_idx = np.array([
-        knn_idx[i, mask[i]][:n_nearest_neighbors]
-        for i in range(knn_idx.shape[0])
-    ], dtype=np.int64)
+    # Remove self-loops (vectorized — avoids Python list comprehension)
+    n_genes_knn = knn_idx.shape[0]
+    self_col = np.arange(n_genes_knn)
+    self_mask = (knn_idx == self_col[:, None])
+    # Find which column holds the self-match (first True per row; if none, use last col)
+    has_self = self_mask.any(axis=1)
+    first_self_col = np.argmax(self_mask, axis=1)  # 0 if no self → handled below
+    # Build shifted index: for rows with self-match, skip that column
+    cols = np.arange(knn_idx.shape[1])
+    shift = (cols[None, :] >= first_self_col[:, None]) & has_self[:, None]
+    gather = cols[None, :] + shift.astype(np.intp)
+    # Clamp to valid range
+    np.clip(gather, 0, knn_idx.shape[1] - 1, out=gather)
+    knn_idx = np.take_along_axis(knn_idx, gather, axis=1)[:, :n_nearest_neighbors].astype(np.int64)
 
     return knn_idx
 
@@ -267,6 +275,7 @@ def score(
     chunk_size: int = 10000,
     max_workers: int = 1,
     use_rust: bool = True,
+    precomputed_knn: np.ndarray = None,
     verbosity: int = 0,
 ):
     """
@@ -329,6 +338,11 @@ def score(
     use_rust : bool, optional
         Try Rust fused matmul-reduce backend if available. Default is True.
 
+    precomputed_knn : ndarray, optional
+        Pre-computed KNN indices from ``_precompute_stats()``. If provided,
+        skips the KDTree construction and KNN search. Useful when calling
+        ``score()`` multiple times on the same expression matrix.
+
     verbosity : int, optional
         Level of verbosity. Default is 0.
 
@@ -360,16 +374,26 @@ def score(
     # --- Expression matrix and shared stats ---
     cellxgene = adata.layers[layer] if layer is not None else adata.X
     n_cells, n_genes = cellxgene.shape
-    knn_idx = _precompute_stats(cellxgene, n_nearest_neighbors, leaf_size)
+    if precomputed_knn is not None:
+        knn_idx = precomputed_knn
+    else:
+        knn_idx = _precompute_stats(cellxgene, n_nearest_neighbors, leaf_size)
     var_names_to_idx = {name: idx for idx, name in enumerate(adata.var_names)}
 
     # --- Try Rust backend (multi-set only) ---
     _rust_fmr = None
+    _rust_sc = None
     if use_rust and _multi:
         try:
-            from piaso._piaso_score import fused_matmul_reduce
+            from piaso._piaso_score import fused_matmul_reduce, score_complete
             _rust_fmr = fused_matmul_reduce
+            _rust_sc = score_complete
         except ImportError:
+            try:
+                from piaso._piaso_score import fused_matmul_reduce
+                _rust_fmr = fused_matmul_reduce
+            except ImportError:
+                pass
             if verbosity > 0:
                 print("Rust backend not available. Using Python backend. "
                       "Reinstall with: pip install piaso-tools (requires Rust toolchain for source builds)")
@@ -413,7 +437,40 @@ def score(
         if n_sets == 0:
             raise ValueError("No valid gene sets found.")
 
-        # Build control blocks and query scores
+        # --- Fused Rust path: control sampling + matmul + reduce in one call ---
+        if _rust_sc is not None:
+            cellxgene_csr = cellxgene.tocsr() if not sparse.isspmatrix_csr(cellxgene) else cellxgene
+
+            # Pack gene sets and weights into flat arrays with offsets (CSR-style)
+            gs_flat = []
+            gs_offsets = [0]
+            w_flat = []
+            w_offsets = [0]
+            for gs_idx in range(n_sets):
+                gs_flat.extend(gene_sets_indices[gs_idx])
+                gs_offsets.append(len(gs_flat))
+                w_flat.extend(weights_list[gs_idx].tolist())
+                w_offsets.append(len(w_flat))
+
+            scores_flat, query_flat, sf_flat, pval_flat = _rust_sc(
+                cellxgene_csr.data.astype(np.float64, copy=False),
+                cellxgene_csr.indices.astype(np.int32, copy=False),
+                cellxgene_csr.indptr.astype(np.int32, copy=False),
+                n_cells, n_genes,
+                knn_idx.ravel().astype(np.int64, copy=False),
+                knn_idx.shape[1],
+                np.array(gs_flat, dtype=np.int32),
+                np.array(gs_offsets, dtype=np.int32),
+                np.array(w_flat, dtype=np.float64),
+                np.array(w_offsets, dtype=np.int32),
+                n_ctrl_set, random_seed, chunk_size,
+                max(1, max_workers), compute_pvalues,
+            )
+            score_matrix = scores_flat.reshape(n_cells, n_sets)
+            pval_matrix = pval_flat.reshape(n_cells, n_sets) if pval_flat is not None else None
+            return score_matrix, gene_set_names, pval_matrix
+
+        # --- Python fallback: build control blocks + matmul ---
         all_ctrl_blocks = []
         query_scores = np.zeros((n_cells, n_sets), dtype=np.float64)
         scaling_factors = np.zeros(n_sets, dtype=np.float64)

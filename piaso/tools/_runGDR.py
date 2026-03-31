@@ -13,7 +13,21 @@ import cosg
 
 import warnings
 
+import os
 import multiprocessing
+
+
+def _determine_parallelism(n_batches, max_workers):
+    """Auto-determine (n_concurrent, threads_per_batch) for ThreadPoolExecutor.
+
+    Strategy: prioritize inter-batch concurrency.
+    - For many small batches: maximize concurrent batches, 1T each
+    - For few large batches: moderate concurrency, more threads per batch
+    """
+    n_cores = max_workers if max_workers else (os.cpu_count() or 1)
+    n_concurrent = min(n_batches, n_cores)
+    threads_per_batch = max(1, n_cores // n_concurrent)
+    return n_concurrent, threads_per_batch
 
 def runGDR(
     adata,
@@ -726,6 +740,7 @@ def calculateScoreParallel(
     score_layer: Optional[str] = None,
     max_workers: Optional[int] = None,
     return_pvals: bool = False,
+    precomputed_knn: np.ndarray = None,
     verbosity: int = 0,
 ):
     """
@@ -826,6 +841,7 @@ def calculateScoreParallel(
             compute_pvalues=return_pvals,
             layer=score_layer, random_seed=random_seed,
             n_ctrl_set=100, max_workers=max_workers if max_workers is not None else 1,
+            precomputed_knn=precomputed_knn,
             verbosity=verbosity,
         )
         if return_pvals:
@@ -961,6 +977,8 @@ def _calculateScoreParallel_single_batch(batch_key, shared_data, batch_i, marker
 
 
 from typing import Literal
+from concurrent.futures import ThreadPoolExecutor
+
 def calculateScoreParallel_multiBatch(
     adata: sc.AnnData,
     batch_key: str,
@@ -969,6 +987,7 @@ def calculateScoreParallel_multiBatch(
     score_method: Literal["scanpy", "piaso"],
     score_layer: str = None,
     max_workers: int = 8,
+    n_concurrent_batches: int = None,
     random_seed: int = 1927
 ):
     """
@@ -985,13 +1004,17 @@ def calculateScoreParallel_multiBatch(
     marker_gene_n_groups_indices : list
         Indices specifying the marker gene set group boundaries, used for score normalization within each marker gene set group.
     max_workers : int
-        Maximum number of parallel workers to use.
+        Maximum number of parallel workers to use (total threads).
     score_layer : str
         The layer of `adata` to use for scoring.
     score_method : {'scanpy', 'piaso'}, optional
         The method used for gene set scoring. Must be either 'scanpy' (default) or 'piaso'.
         - 'scanpy': Uses the Scanpy's built-in gene set scoring method.
         - 'piaso': Uses the PIASO's gene set scoring method, which is more robust to sequencing depth variations.
+    n_concurrent_batches : int, optional
+        Number of batches to process concurrently via ThreadPoolExecutor.
+        If None, auto-determined based on max_workers and number of batches.
+        Only used when score_method='piaso'. Default is None.
     random_seed : int, optional
         Random seed for reproducibility. Default is 1927.
 
@@ -1001,7 +1024,7 @@ def calculateScoreParallel_multiBatch(
         - list: A list of normalized score arrays for each batch.
         - list: A list of cell barcodes for each batch.
         - list: A list of gene set names.
-        
+
     Examples
     --------
     >>> import scanpy as sc
@@ -1019,6 +1042,54 @@ def calculateScoreParallel_multiBatch(
     >>> print(cellbarcode_info)
     """
 
+    batch_order_map = {batch: i for i, batch in enumerate(np.unique(adata.obs[batch_key]))}
+    batch_list = list(batch_order_map.keys())
+
+    score_list_collection = [None] * len(batch_list)
+    cellbarcode_info = [None] * len(batch_list)
+    gene_set_names_collection = [None] * len(batch_list)
+
+    # --- Fast parallel path for piaso method ---
+    # Uses ThreadPoolExecutor for inter-batch parallelism. Both sklearn KDTree
+    # and Rust score_complete release the GIL, enabling true parallel execution.
+    if score_method == 'piaso':
+        if n_concurrent_batches is not None:
+            n_concurrent = min(n_concurrent_batches, len(batch_list))
+            threads_per_batch = max(1, (max_workers or os.cpu_count() or 1) // n_concurrent)
+        else:
+            n_concurrent, threads_per_batch = _determine_parallelism(len(batch_list), max_workers)
+
+        def _score_one_batch(batch_idx_and_name):
+            idx, batch_i = batch_idx_and_name
+            batch_mask = adata.obs[batch_key] == batch_i
+            adata_batch = adata[batch_mask]
+
+            score_list, gene_set_names = calculateScoreParallel(
+                adata_batch,
+                gene_set=marker_gene,
+                score_method='piaso',
+                score_layer=score_layer,
+                max_workers=threads_per_batch,
+                random_seed=random_seed,
+            )
+
+            score_list = normalize(score_list, norm="l2", axis=0)
+            for start, end in zip(marker_gene_n_groups_indices[:-1], marker_gene_n_groups_indices[1:]):
+                score_list[:, start:end] = normalize(score_list[:, start:end], norm="l2", axis=1)
+
+            return idx, score_list, adata_batch.obs_names.values, gene_set_names
+
+        with ThreadPoolExecutor(max_workers=n_concurrent) as executor:
+            futures = [executor.submit(_score_one_batch, (i, b)) for i, b in enumerate(batch_list)]
+            for future in tqdm(as_completed(futures), total=len(futures), desc="Calculating cell embeddings/scores", unit="batch"):
+                idx, scores, barcodes, names = future.result()
+                score_list_collection[idx] = scores
+                cellbarcode_info[idx] = barcodes
+                gene_set_names_collection[idx] = names
+
+        return score_list_collection, cellbarcode_info, gene_set_names_collection
+
+    # --- Original ProcessPoolExecutor path (scanpy method) ---
     # Extract gene expression data
     if score_layer is not None:
         gene_expression_data = adata.layers[score_layer]
@@ -1036,18 +1107,10 @@ def calculateScoreParallel_multiBatch(
     shared_data["obs"] = adata.obs[[batch_key]].copy()
     shared_data["var_names"] = adata.var_names.copy()
 
-    # Process batches in parallel
-    batch_order_map = {batch: i for i, batch in enumerate(np.unique(adata.obs[batch_key]))}
-    batch_list = list(batch_order_map.keys())
-    
-    score_list_collection = []
-    cellbarcode_info = []
-    gene_set_names_collection = []
-
     # --- Efficiency Calculation ---
     num_batches = len(batch_list)
     actual_outer_workers = min(num_batches, max_workers)
-    
+
     # Calculate remaining cores for the Inner Loop
     total_cores = multiprocessing.cpu_count()
     # Ensure at least 1 worker
@@ -1059,7 +1122,7 @@ def calculateScoreParallel_multiBatch(
     try:
         # Use spawn context
         ctx = multiprocessing.get_context('spawn')
-        
+
         with ProcessPoolExecutor(max_workers=actual_outer_workers, mp_context=ctx) as executor:
             futures = [
                 executor.submit(
@@ -1074,18 +1137,14 @@ def calculateScoreParallel_multiBatch(
                     random_seed
                 ) for batch_i in batch_list
             ]
-            
+
             # Collect raw results
             raw_results = []
             for future in tqdm(as_completed(futures), total=len(futures), desc="Calculating cell embeddings/scores", unit="batch"):
                 raw_results.append(future.result())
-                # score_list, cell_barcodes, gene_set_names = future.result()
-                # score_list_collection.append(score_list)
-                # cellbarcode_info.append(cell_barcodes)
-                
+
         # Sort results
         raw_results.sort(key=lambda x: batch_order_map[x[0]])
-        
 
         # Unpack safely in the correct order
         for _, score_list, cell_barcodes, gene_names in raw_results:
@@ -1479,6 +1538,7 @@ def runGDRParallel(
     key_added:str=None,
     max_workers:int=8,
     calculate_score_multiBatch:bool=False,
+    n_concurrent_batches:int=None,
     verbosity: int=0,
     random_seed:int=1927
 ):
@@ -1537,6 +1597,12 @@ def runGDRParallel(
 
     calculate_score_multiBatch : bool, optional
         Whether to calculate gene scores across multiple adata batches (if `batch_key` is specified). Defaults to False.
+
+    n_concurrent_batches : int, optional
+        Number of batches to process concurrently when ``calculate_score_multiBatch=True`` and
+        ``scoring_method='piaso'``. Uses ThreadPoolExecutor for inter-batch parallelism (both
+        sklearn KDTree and Rust score_complete release the GIL). If None, auto-determined from
+        ``max_workers`` and the number of batches. Default is None.
 
     verbosity : int, optional
         Verbosity level of the function. Higher values provide more detailed logs. Defaults to 0.
@@ -1743,6 +1809,7 @@ def runGDRParallel(
                 marker_gene_n_groups_indices=batch_n_groups_indices,
                 score_layer=score_layer,
                 max_workers=max_workers,
+                n_concurrent_batches=n_concurrent_batches,
                 score_method=scoring_method,
                 random_seed=random_seed
             )
