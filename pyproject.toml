@@ -1,10 +1,10 @@
 [build-system]
-build-backend = "hatchling.build"
-requires = [ "hatchling"]
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
 
 [project]
 name = "piaso-tools"
-version = "1.0.4"
+version = "1.1.0"
 description = "Precise Integrative Analysis of Single-cell Omics."
 requires-python = ">=3.9"
 license = "BSD-3-clause"
@@ -62,15 +62,6 @@ dev = [
     "pre-commit", # static checking
 ]
 
-[tool.hatch.build]
-exclude = [
-  "docs",
-  "docs/",
-  ".github",
-  ".git",
-  "*.pdf", 
-  "*.html"
-]
-
-[tool.hatch.build.targets.wheel]
-packages = [ "piaso" ]
+[tool.maturin]
+features = ["pyo3/extension-module"]
+module-name = "piaso._piaso_score"

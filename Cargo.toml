@@ -1,0 +1,15 @@
+[package]
+name = "piaso-score"
+version = "0.1.0"
+edition = "2021"
+license = "BSD-3-Clause"
+description = "Rust-accelerated fused sparse matmul-reduce for PIASO gene set scoring"
+
+[lib]
+name = "_piaso_score"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.22", features = ["extension-module"] }
+numpy = "0.22"
+rayon = "1.10"

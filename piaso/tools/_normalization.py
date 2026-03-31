@@ -204,225 +204,17 @@ import numpy as np
 from sklearn.neighbors import KDTree
 from scipy import sparse
 
-#### Gene Set Scoring Method
-def score(
-    adata,
-    gene_list,
-    gene_weights=None,
-    precomputed=None,
-    n_nearest_neighbors: int=30,
-    leaf_size: int=40,
-    layer: str='infog',
-    random_seed: int=1927,
-    n_ctrl_set:int=100,
-    key_added:str=None,
-    verbosity: int=0
-):
-    """
-    For a given gene set, compute gene expression enrichment scores and P values for all the cells.
+
+def _precompute_stats(cellxgene, n_nearest_neighbors=30, leaf_size=40):
+    """Compute KDTree-based KNN indices for control gene sampling.
+
+    Uses CSR sharing trick for variance computation (reuses indices/indptr,
+    only allocates data**2).
 
     Parameters
     ----------
-    adata : AnnData
-        The AnnData object for the gene expression matrix.
-
-    gene_list : list of str
-        A list of gene names for which the score will be computed.
-
-    gene_weights : list of floats, optional
-        A list of weights corresponding to the genes in `gene_list`. The length of
-        `gene_weights` must match the length of `gene_list`. If None, all genes in
-        `gene_list` are weighted equally. Default is None.
-
-    precomputed : dict, optional
-        Precomputed gene-level statistics from ``precompute_score_stats()``.
-        If provided, skips the expensive mean/variance/KDTree computation.
-        Useful when calling score() in a loop for multiple gene sets.
-
-    n_nearest_neighbors : int, optional
-        Number of nearest neighbors to consider for randomly selecting control gene sets based on the similarity of genes' mean and variance among all cells.
-        Default is 30.
-
-    leaf_size : int, optional
-        Leaf size for the KD-tree or Ball-tree used in nearest neighbor calculations. Default is 40.
-
-    layer : str, optional
-        The name of the layer in `adata.layers` to use for gene expression values. Default is 'infog'.
-
-    random_seed : int, optional
-        Random seed for reproducibility. Default is 1927.
-
-    n_ctrl_set : int, optional
-        Number of control gene sets to be used for calculating P values. Default is 100.
-
-    key_added : str, optional
-        If provided, the computed scores will be stored in `adata.obs[key_added]`. The scores and P values will be stored in `adata.uns[key_added]` as well.
-        Default is None, and the `INFOG_score` will be used as the key.
-    verbosity : int, optional (default: 0)
-        Level of verbosity for logging information.
-
-    Returns
-    -------
-    None
-        Modifies the `adata` object in-place, see `key_added`.
-    """
-    ### Set the random seed
-    np.random.seed(random_seed)
-
-    # Ensure gene_weights is correctly initialized
-    if gene_weights is None:
-        gene_weights = np.ones(len(gene_list), dtype=float)
-    elif len(gene_weights) != len(gene_list):
-        raise ValueError(f"Length mismatch: the input gene_weights ({len(gene_weights)}) and gene_list ({len(gene_list)}) must be the same.")
-
-    ### Only keep the ones in adata.var_names
-    valid_genes = set(adata.var_names)
-
-    filtered_genes = []
-    filtered_weights = []
-    filtered_out_genes = []
-    for gene, weight in zip(gene_list, gene_weights):
-        if gene in valid_genes:
-            filtered_genes.append(gene)
-            filtered_weights.append(weight)
-        else:
-            filtered_out_genes.append(gene)
-
-    gene_list = filtered_genes
-    gene_weights = np.array(filtered_weights, dtype=float)
-
-    n_filtered_genes = len(filtered_out_genes)
-    if verbosity > 0 and n_filtered_genes > 0:
-        print(f"Note: {n_filtered_genes} genes were not found in adata.var_names and are excluded from scoring: {', '.join(filtered_out_genes[:10])} {'...' if n_filtered_genes > 10 else ''}")
-
-    # Determine the input matrix
-    cellxgene = adata.layers[layer] if layer is not None else adata.X
-    cellxgene_subset = adata[:, gene_list].layers[layer] if layer is not None else adata[:, gene_list].X
-
-    # --- Use precomputed stats or compute them ---
-    if precomputed is not None:
-        knn_idx = precomputed['knn_idx']
-    else:
-        # Compute mean and variance using CSR sharing trick (avoids X.multiply(X) copy)
-        mean_2d = np.array(cellxgene.mean(axis=0))  # (1, n_genes)
-        infog_mean = mean_2d.copy()[0]  # (n_genes,)
-        mean_sq = mean_2d ** 2
-
-        if sparse.issparse(cellxgene):
-            data_sq = cellxgene.data ** 2
-            X_sq = sparse.csr_matrix((data_sq, cellxgene.indices, cellxgene.indptr),
-                                      shape=cellxgene.shape, copy=False)
-            residual_var = np.squeeze(np.array(X_sq.mean(axis=0)) - mean_sq)
-            del X_sq, data_sq
-        else:
-            residual_var = np.squeeze(np.mean(np.asarray(cellxgene) ** 2, axis=0) - mean_sq)
-
-        mean_var = np.array([infog_mean, residual_var]).T
-        kdt = KDTree(mean_var, leaf_size=leaf_size, metric='euclidean')
-        knn_idx = kdt.query(mean_var, k=n_nearest_neighbors + 1, return_distance=False)
-
-        # Remove self-loops
-        mask = knn_idx != np.arange(knn_idx.shape[0])[:, None]
-        knn_idx = np.array([
-            knn_idx[i, mask[i]][:n_nearest_neighbors]
-            for i in range(knn_idx.shape[0])
-        ], dtype=np.int64)
-
-    # Map gene names to indices for KNN lookup
-    var_names_to_idx = {name: idx for idx, name in enumerate(adata.var_names)}
-    gene_idx = [var_names_to_idx[g] for g in gene_list]
-    gene_list_knn_idx = knn_idx[gene_idx]
-
-    # --- Vectorized control gene sampling ---
-    # Generate random indices in (n_genes, n_ctrl_set) order to match
-    # the original per-gene loop's random state consumption sequence
-    n_genes = len(gene_idx)
-    n_neighbors = gene_list_knn_idx.shape[1]
-    rand_idx = np.random.randint(0, n_neighbors, size=(n_genes, n_ctrl_set))
-    # ctrl_sampled: (n_ctrl_set, n_genes) — gene indices of control genes
-    ctrl_sampled = gene_list_knn_idx[np.arange(n_genes)[:, None], rand_idx].T
-
-    # Build sparse control weight matrix (vectorized)
-    rows = ctrl_sampled.ravel()
-    cols = np.repeat(np.arange(n_ctrl_set, dtype=np.int32), n_genes)
-    data = np.tile(gene_weights, n_ctrl_set)
-    ctrl_gene_weight = sparse.csr_matrix(
-        (data, (rows, cols)), shape=(adata.n_vars, n_ctrl_set)
-    )
-
-    cellxgene_ctrl = cellxgene @ ctrl_gene_weight
-
-    # Query scores
-    cellxgene_query = np.ravel(cellxgene_subset.multiply(gene_weights).sum(axis=1))
-
-    # --- P-values ---
-    from statsmodels.stats.multitest import multipletests
-
-    # Monte Carlo p-values
-    n_greater = np.sum(cellxgene_ctrl >= cellxgene_query[:, None], axis=1)
-    p_value_monte_carlo = np.ravel((n_greater + 1) / (n_ctrl_set + 1))
-    nlog10_p_value_monte_carlo = -np.log10(p_value_monte_carlo)
-    pooled_p_monte_carlo_FDR = multipletests(p_value_monte_carlo, method="fdr_bh")[1]
-    nlog10_pooled_p_monte_carlo_FDR = -np.log10(pooled_p_monte_carlo_FDR)
-
-    # Pooled empirical p-values
-    pooled_p = _get_p_from_empi_null(cellxgene_query, cellxgene_ctrl.toarray().flatten())
-    nlog10_pooled_p = -np.log10(pooled_p)
-    pooled_p_FDR = multipletests(pooled_p, method="fdr_bh")[1]
-    nlog10_pooled_p_FDR = -np.log10(pooled_p_FDR)
-
-    # Background and final score
-    BG = np.ravel(cellxgene_ctrl.mean(axis=1))
-    scaling_factor = np.median(gene_weights) * len(gene_list)
-    cellxgene_query = cellxgene_query / scaling_factor
-    BG = BG / scaling_factor
-    score_val = cellxgene_query - BG
-
-    score_pval_res = {
-        "score": score_val,
-        "score_query": cellxgene_query,
-        "score_ctrl_average": BG,
-        "pval_mc": p_value_monte_carlo,
-        "nlog10_pval_mc": nlog10_p_value_monte_carlo,
-        "pval_mc_FDR": pooled_p_monte_carlo_FDR,
-        "nlog10_pval_mc_FDR": nlog10_pooled_p_monte_carlo_FDR,
-        "pval": pooled_p,
-        "nlog10_pval": nlog10_pooled_p,
-        "pval_FDR": pooled_p_FDR,
-        "nlog10_pval_FDR": nlog10_pooled_p_FDR
-    }
-
-    df_score_pval_res = pd.DataFrame(index=adata.obs.index, data=score_pval_res, dtype=np.float32)
-
-    if key_added is None:
-        adata.obs['INFOG_score'] = score_val
-        adata.uns['INFOG_score'] = df_score_pval_res
-        if verbosity > 0:
-            print(f"Finished. The scores are saved in adata.obs['INFOG_score'] and the scores, P values are saved in adata.uns['INFOG_score'].")
-    else:
-        adata.obs[key_added] = score_val
-        adata.uns[key_added] = df_score_pval_res
-        if verbosity > 0:
-            print(f"Finished. The scores are saved in adata.obs['{key_added}'] and the scores, P values are saved in adata.uns['{key_added}'].")
-
-
-# ============================================================================
-# Optimized scoring functions
-# ============================================================================
-
-def precompute_score_stats(adata, layer='infog', n_nearest_neighbors=30, leaf_size=40):
-    """Precompute gene-level statistics for score(). Call once, reuse across many gene sets.
-
-    Computes mean, variance, and KDTree-based KNN indices for all genes.
-    The returned dict can be passed to ``score_multi(precomputed=...)`` to skip
-    redundant recomputation.
-
-    Parameters
-    ----------
-    adata : AnnData
-        The AnnData object.
-    layer : str or None
-        Layer to use. If None, uses adata.X.
+    cellxgene : sparse matrix or ndarray
+        Gene expression matrix (n_cells, n_genes).
     n_nearest_neighbors : int
         Number of nearest neighbors per gene in (mean, var) space.
     leaf_size : int
@@ -430,30 +222,23 @@ def precompute_score_stats(adata, layer='infog', n_nearest_neighbors=30, leaf_si
 
     Returns
     -------
-    dict
-        Keys: mean, var, knn_idx, var_names.
+    knn_idx : ndarray (n_genes, n_nearest_neighbors)
+        KNN indices for each gene (self-loops removed).
     """
-    cellxgene = adata.layers[layer] if layer else adata.X
-    n_cells, n_genes = cellxgene.shape
-
-    # Match score()'s exact computation for bit-identical KNN
     mean_2d = np.array(cellxgene.mean(axis=0))  # (1, n_genes)
-    mean = mean_2d.copy()[0]  # (n_genes,)
+    infog_mean = mean_2d.copy()[0]  # (n_genes,)
     mean_sq = mean_2d ** 2
 
     if sparse.issparse(cellxgene):
-        # CSR sharing trick: reuse indices/indptr, only allocate squared data.
-        # Avoids full CSR copy from X.multiply(X).
         data_sq = cellxgene.data ** 2
         X_sq = sparse.csr_matrix((data_sq, cellxgene.indices, cellxgene.indptr),
                                   shape=cellxgene.shape, copy=False)
-        var = np.squeeze(np.array(X_sq.mean(axis=0)) - mean_sq)
+        residual_var = np.squeeze(np.array(X_sq.mean(axis=0)) - mean_sq)
         del X_sq, data_sq
     else:
-        var = np.squeeze(np.mean(np.asarray(cellxgene) ** 2, axis=0) - mean_sq)
+        residual_var = np.squeeze(np.mean(np.asarray(cellxgene) ** 2, axis=0) - mean_sq)
 
-    # KDTree on (mean, var) space
-    mean_var = np.array([mean, var]).T
+    mean_var = np.array([infog_mean, residual_var]).T
     kdt = KDTree(mean_var, leaf_size=leaf_size, metric='euclidean')
     knn_idx = kdt.query(mean_var, k=n_nearest_neighbors + 1, return_distance=False)
 
@@ -464,181 +249,353 @@ def precompute_score_stats(adata, layer='infog', n_nearest_neighbors=30, leaf_si
         for i in range(knn_idx.shape[0])
     ], dtype=np.int64)
 
-    return {
-        'mean': mean,
-        'var': var,
-        'knn_idx': knn_idx,
-        'var_names': adata.var_names.values.copy(),
-    }
+    return knn_idx
 
 
-def score_multi(
+#### Gene Set Scoring Method
+def score(
     adata,
-    gene_sets,
-    gene_weights_list=None,
-    precomputed=None,
-    compute_pvalues=False,
-    n_nearest_neighbors=30,
-    leaf_size=40,
-    layer='infog',
-    random_seed=1927,
-    n_ctrl_set=100,
-    chunk_size=10000,
-    verbosity=0,
+    gene_list,
+    gene_weights=None,
+    n_nearest_neighbors: int = 30,
+    leaf_size: int = 40,
+    layer: str = 'infog',
+    random_seed: int = 1927,
+    n_ctrl_set: int = 100,
+    key_added: str = None,
+    compute_pvalues: bool = False,
+    chunk_size: int = 10000,
+    max_workers: int = 1,
+    use_rust: bool = True,
+    verbosity: int = 0,
 ):
-    """Score multiple gene sets in one vectorized pass.
+    """
+    Compute gene expression enrichment scores for one or more gene sets.
 
-    Uses a single batched matrix multiply for all control gene sets,
-    and precomputed mean/var/KDTree stats. Much faster than calling
-    score() in a loop.
+    Supports two modes based on the type of ``gene_list``:
+
+    **Single gene set** (list of str): Computes scores and full p-value suite
+    (Monte Carlo, pooled empirical, FDR) for one gene set. Results are stored
+    in ``adata.obs`` and ``adata.uns``. Returns None.
+
+    **Multiple gene sets** (dict, DataFrame, or list of lists): Scores all gene
+    sets in one batched pass using a single hstack'd sparse matmul. Optionally
+    uses the Rust ``piaso_score`` backend for 16.8x faster matmul with 200x less
+    RAM per thread. Returns (score_matrix, gene_set_names, pval_matrix).
 
     Parameters
     ----------
     adata : AnnData
-        The AnnData object.
-    gene_sets : dict, list of lists, or DataFrame
-        Gene sets to score.
-    gene_weights_list : list of arrays, optional
-        Per-set weights. If None, uniform weights.
-    precomputed : dict, optional
-        From precompute_score_stats().
-    compute_pvalues : bool
-        If True, compute per-cell Monte Carlo p-values for each set.
-    n_nearest_neighbors : int
-        KNN neighbors for control gene sampling.
-    leaf_size : int
-        KDTree leaf size.
-    layer : str or None
-        Expression layer to use.
-    random_seed : int
-        Random seed.
-    n_ctrl_set : int
-        Number of control gene sets per gene set.
-    chunk_size : int
-        Cell chunk size for dense conversion (controls peak RAM).
-    verbosity : int
-        Verbosity level.
+        The AnnData object for the gene expression matrix.
+
+    gene_list : list of str, dict, DataFrame, or list of lists
+        A list of gene names (single gene set), or a dict / DataFrame / list of
+        lists mapping gene set names to gene lists (multiple gene sets).
+
+    gene_weights : array-like or list of arrays, optional
+        For single gene set: a list of weights matching ``gene_list``.
+        For multiple gene sets: a list of weight arrays, one per gene set.
+        If None, all genes are weighted equally. Default is None.
+
+    n_nearest_neighbors : int, optional
+        Number of nearest neighbors for control gene sampling. Default is 30.
+
+    leaf_size : int, optional
+        KDTree leaf size. Default is 40.
+
+    layer : str, optional
+        Layer in ``adata.layers`` to use. Default is 'infog'.
+
+    random_seed : int, optional
+        Random seed for reproducibility. Default is 1927.
+
+    n_ctrl_set : int, optional
+        Number of control gene sets. Default is 100.
+
+    key_added : str, optional
+        Key for storing results in adata (single-set mode only).
+        Default is None ('INFOG_score').
+
+    compute_pvalues : bool, optional
+        Compute Monte Carlo p-values in multi-set mode. Single-set mode
+        always computes full p-values. Default is False.
+
+    chunk_size : int, optional
+        Cell chunk size for Python dense matmul fallback. Default is 10000.
+
+    max_workers : int, optional
+        Thread count for Rust backend (1 = single-threaded). Default is 1.
+
+    use_rust : bool, optional
+        Try Rust fused matmul-reduce backend if available. Default is True.
+
+    verbosity : int, optional
+        Level of verbosity. Default is 0.
 
     Returns
     -------
-    score_matrix : ndarray (n_cells, n_sets)
-        Background-subtracted scores.
-    gene_set_names : list of str
-        Names of gene sets (in order).
-    pval_matrix : ndarray or None
-        Raw Monte Carlo p-values (range 0-1) if compute_pvalues=True, else None.
-        To get -log10 transformed values (as returned by score()), apply
-        ``-np.log10(pval_matrix)``.
+    Single-set mode: None. Modifies ``adata`` in-place.
+    Multi-set mode: (score_matrix, gene_set_names, pval_matrix).
+
+    Example
+    -------
+    >>> import piaso
+    >>> # Single gene set
+    >>> piaso.tl.score(adata, ['Gene1', 'Gene2', 'Gene3'], key_added='my_score')
+    >>>
+    >>> # Multiple gene sets (batched, with optional Rust acceleration)
+    >>> scores, names, pvals = piaso.tl.score(
+    ...     adata, {'SetA': ['Gene1', 'Gene2'], 'SetB': ['Gene3', 'Gene4']},
+    ...     compute_pvalues=True, max_workers=8
+    ... )
     """
     np.random.seed(random_seed)
 
-    # --- Parse gene sets into {name: [gene_names]} ---
-    if isinstance(gene_sets, pd.DataFrame):
-        parsed = {}
-        for col in gene_sets.columns:
-            genes = gene_sets[col].dropna().tolist()
-            if genes:
-                parsed[col] = genes
-    elif isinstance(gene_sets, dict):
-        parsed = gene_sets
-    elif isinstance(gene_sets, list):
-        parsed = {f"GeneSet_{i}": gs for i, gs in enumerate(gene_sets)}
-    else:
-        raise ValueError("gene_sets must be dict, list of lists, or DataFrame.")
-
-    # --- Map gene names to indices, filter invalid ---
-    var_names_to_idx = {name: idx for idx, name in enumerate(adata.var_names)}
-    gene_set_names = []
-    gene_sets_indices = []
-    weights_list = []
-
-    for gs_idx, (name, genes) in enumerate(parsed.items()):
-        valid_idx = [var_names_to_idx[g] for g in genes if g in var_names_to_idx]
-        if not valid_idx:
-            continue
-        gene_set_names.append(name)
-        gene_sets_indices.append(valid_idx)
-        if gene_weights_list is not None:
-            w = gene_weights_list[gs_idx]
-            valid_mask = [g in var_names_to_idx for g in genes]
-            weights_list.append(np.array([w_i for w_i, m in zip(w, valid_mask) if m], dtype=float))
-        else:
-            weights_list.append(np.ones(len(valid_idx), dtype=float))
-
-    n_sets = len(gene_set_names)
-    if n_sets == 0:
-        raise ValueError("No valid gene sets found.")
-
-    cellxgene = adata.layers[layer] if layer else adata.X
-    n_cells, n_genes = cellxgene.shape
-
-    # --- Precomputed stats ---
-    stats = precomputed if precomputed is not None else precompute_score_stats(
-        adata, layer=layer, n_nearest_neighbors=n_nearest_neighbors, leaf_size=leaf_size
+    # --- Determine mode: single gene set vs multiple ---
+    _multi = isinstance(gene_list, (dict, pd.DataFrame)) or (
+        isinstance(gene_list, list) and len(gene_list) > 0
+        and isinstance(gene_list[0], (list, np.ndarray))
     )
 
-    # --- Build control blocks and query scores ---
-    all_ctrl_blocks = []
-    query_scores = np.zeros((n_cells, n_sets), dtype=np.float64)
-    scaling_factors = np.zeros(n_sets, dtype=np.float64)
+    # --- Expression matrix and shared stats ---
+    cellxgene = adata.layers[layer] if layer is not None else adata.X
+    n_cells, n_genes = cellxgene.shape
+    knn_idx = _precompute_stats(cellxgene, n_nearest_neighbors, leaf_size)
+    var_names_to_idx = {name: idx for idx, name in enumerate(adata.var_names)}
 
-    for gs_idx in range(n_sets):
-        # Reset seed per gene set for reproducibility
-        np.random.seed(random_seed)
+    # --- Try Rust backend (multi-set only) ---
+    _rust_fmr = None
+    if use_rust and _multi:
+        try:
+            from piaso._piaso_score import fused_matmul_reduce
+            _rust_fmr = fused_matmul_reduce
+        except ImportError:
+            if verbosity > 0:
+                print("Rust backend not available. Using Python backend. "
+                      "Reinstall with: pip install piaso-tools (requires Rust toolchain for source builds)")
 
-        gene_idx = gene_sets_indices[gs_idx]
-        weights = weights_list[gs_idx]
+    if _multi:
+        # ================================================================
+        # MULTI GENE SET PATH — batched matmul with optional Rust
+        # ================================================================
 
-        # KNN indices for this gene set's genes
-        gs_knn_idx = stats['knn_idx'][gene_idx]
+        # Parse gene_list into {name: [gene_names]}
+        if isinstance(gene_list, pd.DataFrame):
+            parsed = {}
+            for col in gene_list.columns:
+                genes = gene_list[col].dropna().tolist()
+                if genes:
+                    parsed[col] = genes
+        elif isinstance(gene_list, dict):
+            parsed = gene_list
+        else:  # list of lists
+            parsed = {f"GeneSet_{i}": gs for i, gs in enumerate(gene_list)}
 
-        # Sample control genes (vectorized)
-        n_gs = len(gene_idx)
-        n_neighbors = gs_knn_idx.shape[1]
-        rand_idx = np.random.randint(0, n_neighbors, size=(n_gs, n_ctrl_set))
-        ctrl_sampled = gs_knn_idx[np.arange(n_gs)[:, None], rand_idx].T
+        # Map gene names to indices, filter invalid
+        gene_set_names = []
+        gene_sets_indices = []
+        weights_list = []
 
-        # Build sparse block (vectorized)
-        rows_all = ctrl_sampled.ravel()
-        cols_all = np.repeat(np.arange(n_ctrl_set, dtype=np.int32), n_gs)
-        data_all = np.tile(weights, n_ctrl_set)
-        ctrl_block = sparse.csr_matrix(
-            (data_all, (rows_all, cols_all)),
-            shape=(n_genes, n_ctrl_set)
+        for gs_idx, (name, genes) in enumerate(parsed.items()):
+            valid_idx = [var_names_to_idx[g] for g in genes if g in var_names_to_idx]
+            if not valid_idx:
+                continue
+            gene_set_names.append(name)
+            gene_sets_indices.append(valid_idx)
+            if gene_weights is not None:
+                w = gene_weights[gs_idx]
+                valid_mask = [g in var_names_to_idx for g in genes]
+                weights_list.append(np.array([w_i for w_i, m in zip(w, valid_mask) if m], dtype=float))
+            else:
+                weights_list.append(np.ones(len(valid_idx), dtype=float))
+
+        n_sets = len(gene_set_names)
+        if n_sets == 0:
+            raise ValueError("No valid gene sets found.")
+
+        # Build control blocks and query scores
+        all_ctrl_blocks = []
+        query_scores = np.zeros((n_cells, n_sets), dtype=np.float64)
+        scaling_factors = np.zeros(n_sets, dtype=np.float64)
+
+        for gs_idx in range(n_sets):
+            # Reset seed per gene set for reproducibility
+            np.random.seed(random_seed)
+
+            gene_idx = gene_sets_indices[gs_idx]
+            weights = weights_list[gs_idx]
+
+            # KNN indices for this gene set's genes
+            gs_knn_idx = knn_idx[gene_idx]
+
+            # Sample control genes (vectorized)
+            n_gs = len(gene_idx)
+            n_neighbors = gs_knn_idx.shape[1]
+            rand_idx = np.random.randint(0, n_neighbors, size=(n_gs, n_ctrl_set))
+            ctrl_sampled = gs_knn_idx[np.arange(n_gs)[:, None], rand_idx].T
+
+            # Build sparse block (vectorized)
+            rows_all = ctrl_sampled.ravel()
+            cols_all = np.repeat(np.arange(n_ctrl_set, dtype=np.int32), n_gs)
+            data_all = np.tile(weights, n_ctrl_set)
+            ctrl_block = sparse.csr_matrix(
+                (data_all, (rows_all, cols_all)),
+                shape=(n_genes, n_ctrl_set)
+            )
+            all_ctrl_blocks.append(ctrl_block)
+
+            # Query scores
+            subset = cellxgene[:, gene_idx]
+            query_scores[:, gs_idx] = np.ravel(subset.multiply(weights).sum(axis=1))
+            scaling_factors[gs_idx] = np.median(weights) * n_gs
+
+        # Batched matrix multiply
+        if _rust_fmr is not None:
+            big_ctrl_csr = sparse.hstack(all_ctrl_blocks, format='csr')
+            cellxgene_csr = cellxgene.tocsr() if not sparse.isspmatrix_csr(cellxgene) else cellxgene
+            means_flat, pval_flat = _rust_fmr(
+                cellxgene_csr.data.astype(np.float64, copy=False),
+                cellxgene_csr.indices.astype(np.int32, copy=False),
+                cellxgene_csr.indptr.astype(np.int32, copy=False),
+                n_cells, cellxgene_csr.shape[1],
+                big_ctrl_csr.data.astype(np.float64, copy=False),
+                big_ctrl_csr.indices.astype(np.int32, copy=False),
+                big_ctrl_csr.indptr.astype(np.int32, copy=False),
+                big_ctrl_csr.shape[1],
+                query_scores.ravel().astype(np.float64, copy=False),
+                n_sets, n_ctrl_set, chunk_size, max(1, max_workers), compute_pvalues,
+            )
+            ctrl_means = means_flat.reshape(n_cells, n_sets)
+            pval_matrix = pval_flat.reshape(n_cells, n_sets) if pval_flat is not None else None
+        else:
+            # Python fallback: chunked dense conversion
+            big_ctrl = sparse.hstack(all_ctrl_blocks, format='csc')
+            ctrl_means = np.zeros((n_cells, n_sets), dtype=np.float64)
+            pval_matrix = np.zeros((n_cells, n_sets), dtype=np.float64) if compute_pvalues else None
+
+            for c_start in range(0, n_cells, chunk_size):
+                c_end = min(c_start + chunk_size, n_cells)
+
+                chunk = cellxgene[c_start:c_end] @ big_ctrl
+                if sparse.issparse(chunk):
+                    chunk_dense = chunk.toarray()
+                else:
+                    chunk_dense = np.asarray(chunk)
+
+                # Reshape to (chunk_size, n_sets, n_ctrl_set)
+                chunk_3d = chunk_dense.reshape(c_end - c_start, n_sets, n_ctrl_set)
+                ctrl_means[c_start:c_end] = chunk_3d.mean(axis=2)
+
+                if compute_pvalues:
+                    q_chunk = query_scores[c_start:c_end]
+                    n_greater = np.sum(chunk_3d >= q_chunk[:, :, None], axis=2)
+                    pval_matrix[c_start:c_end] = (n_greater + 1) / (n_ctrl_set + 1)
+
+        # Background-subtracted scores
+        score_matrix = (query_scores / scaling_factors[None, :]) - (ctrl_means / scaling_factors[None, :])
+        return score_matrix, gene_set_names, pval_matrix
+
+    else:
+        # ================================================================
+        # SINGLE GENE SET PATH — full p-value suite, stores in adata
+        # ================================================================
+
+        # Ensure gene_weights is correctly initialized
+        if gene_weights is None:
+            gene_weights = np.ones(len(gene_list), dtype=float)
+        elif len(gene_weights) != len(gene_list):
+            raise ValueError(f"Length mismatch: the input gene_weights ({len(gene_weights)}) and gene_list ({len(gene_list)}) must be the same.")
+
+        # Only keep genes in adata.var_names
+        valid_genes = set(adata.var_names)
+        filtered_genes = []
+        filtered_weights = []
+        filtered_out_genes = []
+        for gene, weight in zip(gene_list, gene_weights):
+            if gene in valid_genes:
+                filtered_genes.append(gene)
+                filtered_weights.append(weight)
+            else:
+                filtered_out_genes.append(gene)
+
+        gene_list = filtered_genes
+        gene_weights = np.array(filtered_weights, dtype=float)
+
+        n_filtered_genes = len(filtered_out_genes)
+        if verbosity > 0 and n_filtered_genes > 0:
+            print(f"Note: {n_filtered_genes} genes were not found in adata.var_names and are excluded from scoring: {', '.join(filtered_out_genes[:10])} {'...' if n_filtered_genes > 10 else ''}")
+
+        cellxgene_subset = adata[:, gene_list].layers[layer] if layer is not None else adata[:, gene_list].X
+
+        # Map gene names to indices for KNN lookup
+        gene_idx = [var_names_to_idx[g] for g in gene_list]
+        gene_list_knn_idx = knn_idx[gene_idx]
+
+        # Vectorized control gene sampling
+        n_genes_gs = len(gene_idx)
+        n_neighbors = gene_list_knn_idx.shape[1]
+        rand_idx = np.random.randint(0, n_neighbors, size=(n_genes_gs, n_ctrl_set))
+        ctrl_sampled = gene_list_knn_idx[np.arange(n_genes_gs)[:, None], rand_idx].T
+
+        # Build sparse control weight matrix (vectorized)
+        rows = ctrl_sampled.ravel()
+        cols = np.repeat(np.arange(n_ctrl_set, dtype=np.int32), n_genes_gs)
+        data = np.tile(gene_weights, n_ctrl_set)
+        ctrl_gene_weight = sparse.csr_matrix(
+            (data, (rows, cols)), shape=(adata.n_vars, n_ctrl_set)
         )
-        all_ctrl_blocks.append(ctrl_block)
+
+        cellxgene_ctrl = cellxgene @ ctrl_gene_weight
 
         # Query scores
-        subset = cellxgene[:, gene_idx]
-        query_scores[:, gs_idx] = np.ravel(subset.multiply(weights).sum(axis=1))
-        scaling_factors[gs_idx] = np.median(weights) * n_gs
+        cellxgene_query = np.ravel(cellxgene_subset.multiply(gene_weights).sum(axis=1))
 
-    # --- Single batched matrix multiply ---
-    big_ctrl = sparse.hstack(all_ctrl_blocks, format='csc')
+        # --- P-values ---
+        from statsmodels.stats.multitest import multipletests
 
-    # --- Chunked dense conversion (bounded RAM) ---
-    ctrl_means = np.zeros((n_cells, n_sets), dtype=np.float64)
-    pval_matrix = np.zeros((n_cells, n_sets), dtype=np.float64) if compute_pvalues else None
+        # Monte Carlo p-values
+        n_greater = np.sum(cellxgene_ctrl >= cellxgene_query[:, None], axis=1)
+        p_value_monte_carlo = np.ravel((n_greater + 1) / (n_ctrl_set + 1))
+        nlog10_p_value_monte_carlo = -np.log10(p_value_monte_carlo)
+        pooled_p_monte_carlo_FDR = multipletests(p_value_monte_carlo, method="fdr_bh")[1]
+        nlog10_pooled_p_monte_carlo_FDR = -np.log10(pooled_p_monte_carlo_FDR)
 
-    for c_start in range(0, n_cells, chunk_size):
-        c_end = min(c_start + chunk_size, n_cells)
+        # Pooled empirical p-values
+        pooled_p = _get_p_from_empi_null(cellxgene_query, cellxgene_ctrl.toarray().flatten())
+        nlog10_pooled_p = -np.log10(pooled_p)
+        pooled_p_FDR = multipletests(pooled_p, method="fdr_bh")[1]
+        nlog10_pooled_p_FDR = -np.log10(pooled_p_FDR)
 
-        chunk = cellxgene[c_start:c_end] @ big_ctrl
-        if sparse.issparse(chunk):
-            chunk_dense = chunk.toarray()
+        # Background and final score
+        BG = np.ravel(cellxgene_ctrl.mean(axis=1))
+        scaling_factor = np.median(gene_weights) * len(gene_list)
+        cellxgene_query = cellxgene_query / scaling_factor
+        BG = BG / scaling_factor
+        score_val = cellxgene_query - BG
+
+        score_pval_res = {
+            "score": score_val,
+            "score_query": cellxgene_query,
+            "score_ctrl_average": BG,
+            "pval_mc": p_value_monte_carlo,
+            "nlog10_pval_mc": nlog10_p_value_monte_carlo,
+            "pval_mc_FDR": pooled_p_monte_carlo_FDR,
+            "nlog10_pval_mc_FDR": nlog10_pooled_p_monte_carlo_FDR,
+            "pval": pooled_p,
+            "nlog10_pval": nlog10_pooled_p,
+            "pval_FDR": pooled_p_FDR,
+            "nlog10_pval_FDR": nlog10_pooled_p_FDR
+        }
+
+        df_score_pval_res = pd.DataFrame(index=adata.obs.index, data=score_pval_res, dtype=np.float32)
+
+        if key_added is None:
+            adata.obs['INFOG_score'] = score_val
+            adata.uns['INFOG_score'] = df_score_pval_res
+            if verbosity > 0:
+                print(f"Finished. The scores are saved in adata.obs['INFOG_score'] and the scores, P values are saved in adata.uns['INFOG_score'].")
         else:
-            chunk_dense = np.asarray(chunk)
-
-        # Reshape to (chunk_size, n_sets, n_ctrl_set)
-        chunk_3d = chunk_dense.reshape(c_end - c_start, n_sets, n_ctrl_set)
-        ctrl_means[c_start:c_end] = chunk_3d.mean(axis=2)
-
-        if compute_pvalues:
-            q_chunk = query_scores[c_start:c_end]
-            n_greater = np.sum(chunk_3d >= q_chunk[:, :, None], axis=2)
-            pval_matrix[c_start:c_end] = (n_greater + 1) / (n_ctrl_set + 1)
-
-    # --- Background-subtracted scores ---
-    score_matrix = (query_scores / scaling_factors[None, :]) - (ctrl_means / scaling_factors[None, :])
-
-    return score_matrix, gene_set_names, pval_matrix
+            adata.obs[key_added] = score_val
+            adata.uns[key_added] = df_score_pval_res
+            if verbosity > 0:
+                print(f"Finished. The scores are saved in adata.obs['{key_added}'] and the scores, P values are saved in adata.uns['{key_added}'].")

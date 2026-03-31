@@ -230,11 +230,11 @@ def runGDR(
             score_list_collection=[]
 
             if scoring_method == 'piaso':
-                from ._normalization import score_multi, precompute_score_stats
-                stats = precompute_score_stats(adata, layer=score_layer)
-                score_list, _, _ = score_multi(
-                    adata, gene_sets=marker_gene, precomputed=stats,
+                from ._normalization import score as _score
+                score_list, _, _ = _score(
+                    adata, gene_list=marker_gene,
                     layer=score_layer, random_seed=random_seed,
+                    compute_pvalues=False,
                 )
             elif scoring_method == 'scanpy':
                 score_list = []
@@ -358,11 +358,11 @@ def runGDR(
                     adata_u=adata[adata.obs[batch_key]==batch_u].copy()
 
                     if scoring_method == 'piaso':
-                        from ._normalization import score_multi, precompute_score_stats
-                        stats_u = precompute_score_stats(adata_u, layer=score_layer)
-                        score_list, _, _ = score_multi(
-                            adata_u, gene_sets=marker_gene, precomputed=stats_u,
+                        from ._normalization import score as _score
+                        score_list, _, _ = _score(
+                            adata_u, gene_list=marker_gene,
                             layer=score_layer, random_seed=random_seed,
+                            compute_pvalues=False,
                         )
                     elif scoring_method == 'scanpy':
                         score_list = []
@@ -733,9 +733,9 @@ def calculateScoreParallel(
 
     This function processes multiple gene sets in parallel, computing enrichment scores
     for each gene set across all cells in the AnnData object. When using the 'piaso'
-    scoring method, it uses a vectorized batched approach (score_multi) that precomputes
-    gene-level statistics once and scores all gene sets in a single pass, which is
-    significantly faster and more memory-efficient than scoring each set independently.
+    scoring method, it uses a vectorized batched approach (score() with multi-set mode)
+    that precomputes gene-level statistics once and scores all gene sets in a single pass,
+    which is significantly faster and more memory-efficient than scoring each set independently.
     For the 'scanpy' method, it uses shared memory to pass the expression matrix
     to worker processes.
 
@@ -820,13 +820,13 @@ def calculateScoreParallel(
     # batched matrix multiply. ~11-14x faster and ~100x less RAM than the
     # per-set ProcessPoolExecutor path.
     if score_method == 'piaso':
-        from ._normalization import score_multi, precompute_score_stats
-        stats = precompute_score_stats(adata, layer=score_layer)
-        score_matrix, gene_set_names, pval_matrix = score_multi(
-            adata, gene_sets=gene_set, precomputed=stats,
+        from ._normalization import score as _score
+        score_matrix, gene_set_names, pval_matrix = _score(
+            adata, gene_list=gene_set,
             compute_pvalues=return_pvals,
             layer=score_layer, random_seed=random_seed,
-            n_ctrl_set=100, verbosity=verbosity,
+            n_ctrl_set=100, max_workers=max_workers if max_workers is not None else 1,
+            verbosity=verbosity,
         )
         if return_pvals:
             # Convert raw p-values to -log10 format to match original score() behavior
@@ -1037,10 +1037,8 @@ def calculateScoreParallel_multiBatch(
     shared_data["var_names"] = adata.var_names.copy()
 
     # Process batches in parallel
-    # batch_list = np.unique(adata.obs[batch_key])
-    
-    # Create Map
     batch_order_map = {batch: i for i, batch in enumerate(np.unique(adata.obs[batch_key]))}
+    batch_list = list(batch_order_map.keys())
     
     score_list_collection = []
     cellbarcode_info = []
