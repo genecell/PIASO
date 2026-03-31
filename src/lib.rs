@@ -184,8 +184,8 @@ fn fused_matmul_reduce<'py>(
         v
     });
 
-    let means_array = Array1::from_vec(means_flat).into_pyarray_bound(py);
-    let pval_array = pval_flat.map(|v| Array1::from_vec(v).into_pyarray_bound(py));
+    let means_array = Array1::from_vec(means_flat).into_pyarray(py);
+    let pval_array = pval_flat.map(|v| Array1::from_vec(v).into_pyarray(py));
 
     Ok((means_array, pval_array))
 }
