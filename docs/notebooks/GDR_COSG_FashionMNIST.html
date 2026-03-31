@@ -1,0 +1,2212 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Running GDR on FashionMNIST image data (COSG for feature selection in pixels) &#8212; PIASO 0.1.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../_static/styles/theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+<link href="../_static/styles/pydata-sphinx-theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=362ab14a" />
+    <link rel="stylesheet" type="text/css" href="../_static/nbsphinx-code-cells.css?v=2aa19091" />
+    <link rel="stylesheet" type="text/css" href="../_static/custom.css?v=0330b353" />
+  
+  <!-- So that users can add custom icons -->
+  <script src="../_static/scripts/fontawesome.js?digest=8878045cc6db502f8baf"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf" />
+<link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf" />
+
+    <script src="../_static/documentation_options.js?v=01f34227"></script>
+    <script src="../_static/doctools.js?v=9a2dae69"></script>
+    <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+    <script>window.MathJax = {"tex": {"inlineMath": [["$", "$"], ["\\(", "\\)"]], "processEscapes": true}, "options": {"ignoreHtmlClass": "tex2jax_ignore|mathjax_ignore|document", "processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+    <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'notebooks/GDR_COSG_FashionMNIST';</script>
+    <script src="../_static/sidebar_toggle.js?v=3b053ec6"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Cell type prediction based on marker genes from reference dataset" href="27_PIASO_markerGeneBasedCellTypePrediction_mouseCortex_updated.html" />
+    <link rel="prev" title="Running GDR on MNIST image data" href="PIASO_GDR_on_MNIST.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="" />
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class=" navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../_static/PIASO_logo.png" class="logo__image only-light" alt="PIASO 0.1.0 documentation - Home"/>
+    <img src="../_static/PIASO_logo.png" class="logo__image only-dark pst-js-only" alt="PIASO 0.1.0 documentation - Home"/>
+  
+  
+</a></div>
+    
+  </div>
+  
+  <div class=" navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../installation.html">
+    Installation
+  </a>
+</li>
+
+
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="../tutorials.html">
+    Tutorials
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../modules.html">
+    API
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../references.html">
+    References
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../releaseNotes.html">
+    Release notes
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/genecell/PIASO" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+    </div>
+  
+
+  
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../installation.html">
+    Installation
+  </a>
+</li>
+
+
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="../tutorials.html">
+    Tutorials
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../modules.html">
+    API
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../references.html">
+    References
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../releaseNotes.html">
+    Release notes
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/genecell/PIASO" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+<h3><a href="../index.html">Table of Contents</a></h3>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../tutorials.html">Tutorials</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../modules.html">API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../references.html">References</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../releaseNotes.html">Release notes</a></li>
+</ul>
+</div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
+  </div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../tutorials.html" class="nav-link">Tutorials</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Running GDR on FashionMNIST image data (COSG for feature selection in pixels)</span></li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section id="Running-GDR-on-FashionMNIST-image-data-(COSG-for-feature-selection-in-pixels)">
+<h1>Running GDR on FashionMNIST image data (COSG for feature selection in pixels)<a class="headerlink" href="#Running-GDR-on-FashionMNIST-image-data-(COSG-for-feature-selection-in-pixels)" title="Link to this heading">#</a></h1>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[1]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>import numpy as np
+import pandas as pd
+import scanpy as sc
+sc.set_figure_params(dpi=80,dpi_save=300, color_map=&#39;viridis&#39;,facecolor=&#39;white&#39;)
+from matplotlib import rcParams
+# To modify the default figure size, use rcParams.
+rcParams[&#39;figure.figsize&#39;] = 4, 4
+rcParams[&#39;font.sans-serif&#39;] = &quot;Arial&quot;
+rcParams[&#39;font.family&#39;] = &quot;Arial&quot;
+sc.settings.verbosity = 3
+sc.logging.print_header()
+</pre></div>
+</div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+/tmp/ipykernel_3363214/1353975569.py:11: RuntimeWarning: Failed to import dependencies for application/vnd.jupyter.widget-view+json representation. (ModuleNotFoundError: No module named &#39;ipywidgets&#39;)
+  sc.logging.print_header()
+</pre></div></div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[1]:
+</pre></div>
+</div>
+<div class="output_area rendered_html docutils container">
+<table class=table>
+            <thead style="position: sticky; top: 0; background-color: var(--jp-layout-color0, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));">
+        <tr><th>Component</th><th>Info</th></tr>
+    </thead>
+    <tbody>
+        <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>Python</td><td>3.10.19 (main, Oct 21 2025, 16:43:05) [GCC 11.2.0]</td></tr>
+        <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>OS</td><td>Linux-5.14.0-570.23.1.el9_6.x86_64-x86_64-with-glibc2.34</td></tr>
+        <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>CPU</td><td>32 logical CPU cores, x86_64</td></tr>
+        <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>GPU</td><td>No GPU found</td></tr>
+        <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>Updated</td><td>2025-12-22 21:28</td></tr>
+    </tbody>
+        </table>
+
+        <details>
+        <summary>Dependencies</summary>
+                <div style="max-height: min(500px, 80vh); overflow-y: auto;">
+    <table class=table>
+            <thead style="position: sticky; top: 0; background-color: var(--jp-layout-color0, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));">
+    <tr><th>Dependency</th><th>Version</th></tr>
+</thead>
+<tbody>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>decorator</td><td>5.2.1</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>tornado</td><td>6.5.4</td></tr>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>texttable</td><td>1.7.0</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>pillow</td><td>12.0.0</td></tr>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>igraph</td><td>0.11.9</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>pytz</td><td>2025.2</td></tr>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>numba</td><td>0.63.1</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>executing</td><td>2.2.1</td></tr>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>natsort</td><td>8.4.0</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>pure_eval</td><td>0.2.3</td></tr>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>setuptools</td><td>80.9.0</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>joblib</td><td>1.5.3</td></tr>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>six</td><td>1.17.0</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>psutil</td><td>7.0.0</td></tr>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>tqdm</td><td>4.67.1</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>parso</td><td>0.8.5</td></tr>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>prompt_toolkit</td><td>3.0.52</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>asttokens</td><td>3.0.0</td></tr>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>stack_data</td><td>0.6.3</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>h5py</td><td>3.15.1</td></tr>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>cycler</td><td>0.12.1</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>wcwidth</td><td>0.2.13</td></tr>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>ipython</td><td>8.30.0</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>jedi</td><td>0.19.2</td></tr>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>python-dateutil</td><td>2.9.0.post0</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>torch</td><td>2.9.1 (2.9.1+cu128)</td></tr>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>kiwisolver</td><td>1.4.9</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>debugpy</td><td>1.8.16</td></tr>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>leidenalg</td><td>0.10.2</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>llvmlite</td><td>0.46.0</td></tr>
+</tbody>
+    </table>
+</div>
+    </details>
+        <details>
+            <summary>Copyable Markdown</summary>
+            <pre>| Dependency      | Version             |
+| --------------- | ------------------- |
+| decorator       | 5.2.1               |
+| tornado         | 6.5.4               |
+| texttable       | 1.7.0               |
+| pillow          | 12.0.0              |
+| igraph          | 0.11.9              |
+| pytz            | 2025.2              |
+| numba           | 0.63.1              |
+| executing       | 2.2.1               |
+| natsort         | 8.4.0               |
+| pure_eval       | 0.2.3               |
+| setuptools      | 80.9.0              |
+| joblib          | 1.5.3               |
+| six             | 1.17.0              |
+| psutil          | 7.0.0               |
+| tqdm            | 4.67.1              |
+| parso           | 0.8.5               |
+| prompt_toolkit  | 3.0.52              |
+| asttokens       | 3.0.0               |
+| stack_data      | 0.6.3               |
+| h5py            | 3.15.1              |
+| cycler          | 0.12.1              |
+| wcwidth         | 0.2.13              |
+| ipython         | 8.30.0              |
+| jedi            | 0.19.2              |
+| python-dateutil | 2.9.0.post0         |
+| torch           | 2.9.1 (2.9.1+cu128) |
+| kiwisolver      | 1.4.9               |
+| debugpy         | 1.8.16              |
+| leidenalg       | 0.10.2              |
+| llvmlite        | 0.46.0              |
+
+| Component | Info                                                     |
+| --------- | -------------------------------------------------------- |
+| Python    | 3.10.19 (main, Oct 21 2025, 16:43:05) [GCC 11.2.0]       |
+| OS        | Linux-5.14.0-570.23.1.el9_6.x86_64-x86_64-with-glibc2.34 |
+| CPU       | 32 logical CPU cores, x86_64                             |
+| GPU       | No GPU found                                             |
+| Updated   | 2025-12-22 21:28                                         |</pre>
+        </details></div>
+</div>
+<section id="Setting-paths">
+<h2>Setting paths<a class="headerlink" href="#Setting-paths" title="Link to this heading">#</a></h2>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[2]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>save_dir=&#39;/n/scratch/users/m/mid166/Result/single-cell/Methods/NCA&#39;
+sc.settings.figdir = save_dir
+prefix=&#39;FashionMNIST&#39;
+import os
+if not os.path.exists(save_dir):
+    os.makedirs(save_dir)
+</pre></div>
+</div>
+</div>
+</section>
+<section id="Load-data">
+<h2>Load data<a class="headerlink" href="#Load-data" title="Link to this heading">#</a></h2>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[3]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>from sklearn.datasets import fetch_openml
+print(&quot;Fetching data from OpenML...&quot;)
+mnist_fashion = fetch_openml(&#39;Fashion-MNIST&#39;, version=1, as_frame=False, parser=&#39;pandas&#39;)
+X, y = mnist_fashion.data, mnist_fashion.target
+print(&quot;Data successfully loaded.&quot;)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Fetching data from OpenML...
+Data successfully loaded.
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[4]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>X
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[4]:
+</pre></div>
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+array([[0, 0, 0, ..., 0, 0, 0],
+       [0, 0, 0, ..., 0, 0, 0],
+       [0, 0, 0, ..., 0, 0, 0],
+       ...,
+       [0, 0, 0, ..., 0, 0, 0],
+       [0, 0, 0, ..., 0, 0, 0],
+       [0, 0, 0, ..., 0, 0, 0]], shape=(70000, 784))
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[5]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>y
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[5]:
+</pre></div>
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+array([&#39;9&#39;, &#39;0&#39;, &#39;0&#39;, ..., &#39;8&#39;, &#39;1&#39;, &#39;5&#39;], shape=(70000,), dtype=object)
+</pre></div></div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[6]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata=sc.AnnData(X)
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[7]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[7]:
+</pre></div>
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+AnnData object with n_obs × n_vars = 70000 × 784
+</pre></div></div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[8]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>from scipy import sparse
+</pre></div>
+</div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[9]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata.X=sparse.csr_matrix(adata.X)
+</pre></div>
+</div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[10]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata.obs[&#39;categoryID&#39;]=y
+</pre></div>
+</div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[11]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>label_map = {
+    &quot;0&quot;: &quot;T-shirt/top&quot;,
+    &quot;1&quot;: &quot;Trouser&quot;,
+    &quot;2&quot;: &quot;Pullover&quot;,
+    &quot;3&quot;: &quot;Dress&quot;,
+    &quot;4&quot;: &quot;Coat&quot;,
+    &quot;5&quot;: &quot;Sandal&quot;,
+    &quot;6&quot;: &quot;Shirt&quot;,
+    &quot;7&quot;: &quot;Sneaker&quot;,
+    &quot;8&quot;: &quot;Bag&quot;,
+    &quot;9&quot;: &quot;Ankle boot&quot;
+}
+</pre></div>
+</div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[12]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata.obs[&#39;class&#39;]=adata.obs[&#39;categoryID&#39;].map(label_map)
+</pre></div>
+</div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[13]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>import matplotlib.pyplot as plt
+import numpy as np
+
+
+def visualize_mnist_image(image_data):
+    # Reshape from 784 pixels to 28x28 image
+    image = image_data.reshape(28, 28)
+
+    # Display the image
+    plt.figure(figsize=(5, 5))
+    plt.imshow(image, cmap=&#39;Spectral_r&#39;)
+    plt.axis(&#39;off&#39;)
+    plt.title(&#39;MNIST Digit&#39;)
+    plt.show()
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[14]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>visualize_mnist_image(adata[30].X.toarray())
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_GDR_COSG_FashionMNIST_16_0.png" class="no-scaled-link" src="../_images/notebooks_GDR_COSG_FashionMNIST_16_0.png" style="width: 319px; height: 338px;" />
+</div>
+</div>
+</section>
+<section id="Import-PIASO">
+<h2>Import PIASO<a class="headerlink" href="#Import-PIASO" title="Link to this heading">#</a></h2>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[15]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>import piaso
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+/n/data1/hms/neurobio/fishell/mindai/.conda/envs/nca/lib/python3.10/site-packages/tqdm/auto.py:21: TqdmWarning: IProgress not found. Please update jupyter and ipywidgets. See https://ipywidgets.readthedocs.io/en/stable/user_install.html
+  from .autonotebook import tqdm as notebook_tqdm
+</pre></div></div>
+</div>
+</section>
+<section id="INFOG-Normalization">
+<h2>INFOG Normalization<a class="headerlink" href="#INFOG-Normalization" title="Link to this heading">#</a></h2>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[16]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata.layers[&#39;raw&#39;]=adata.X.copy()
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[17]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>%%time
+piaso.tl.infog(adata, layer=&#39;raw&#39;, n_top_genes=100)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+The normalized data is saved as `infog` in `adata.layers`.
+The highly variable genes are saved as `highly_variable` in `adata.var`.
+Finished INFOG normalization.
+CPU times: user 2.06 s, sys: 1.23 s, total: 3.28 s
+Wall time: 3.3 s
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[18]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>visualize_mnist_image(adata[30].layers[&#39;infog&#39;].toarray())
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_GDR_COSG_FashionMNIST_22_0.png" class="no-scaled-link" src="../_images/notebooks_GDR_COSG_FashionMNIST_22_0.png" style="width: 319px; height: 338px;" />
+</div>
+</div>
+</section>
+<section id="Run-GDR-for-dimensionality-reduction">
+<h2>Run GDR for dimensionality reduction<a class="headerlink" href="#Run-GDR-for-dimensionality-reduction" title="Link to this heading">#</a></h2>
+<p>Setting <code class="docutils literal notranslate"><span class="pre">use_highly_variable=False</span></code> is needed for this dataset:</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[19]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>%%time
+piaso.tl.runGDRParallel(
+    adata,
+    groupby=None,
+    resolution=1,
+    n_gene =100,
+    mu = 10,
+    layer=&#39;raw&#39;, infog_layer=&#39;raw&#39;,
+    score_layer=&#39;raw&#39;,
+    scoring_method=&#39;piaso&#39;,
+
+    random_seed=1927,
+
+    use_highly_variable =False,
+    n_highly_variable_genes = 200,
+
+    n_svd_dims =10,
+
+    max_workers = 32,
+    calculate_score_multiBatch=False,
+    verbosity=0
+)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+The cell embeddings calculated by GDR were saved as `X_gdr` in adata.obsm.
+CPU times: user 1min 34s, sys: 2.18 s, total: 1min 37s
+Wall time: 1min 42s
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[20]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>%%time
+sc.pp.neighbors(adata,
+                use_rep=&#39;X_gdr&#39;,
+               n_neighbors=15,random_state=10,knn=True,
+                method=&quot;umap&quot;)
+
+sc.tl.umap(adata)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+computing neighbors
+    finished: added to `.uns[&#39;neighbors&#39;]`
+    `.obsp[&#39;distances&#39;]`, distances for each pair of neighbors
+    `.obsp[&#39;connectivities&#39;]`, weighted adjacency matrix (0:00:08)
+computing UMAP
+    finished: added
+    &#39;X_umap&#39;, UMAP coordinates (adata.obsm)
+    &#39;umap&#39;, UMAP parameters (adata.uns) (0:01:03)
+CPU times: user 3min 9s, sys: 396 ms, total: 3min 10s
+Wall time: 1min 12s
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[21]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(adata,
+           color=[&#39;class&#39;],
+           # layer=&#39;raw&#39;,
+           palette=piaso.pl.color.d_color1,
+           ncols=3,
+           # size=10,
+           frameon=False)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_GDR_COSG_FashionMNIST_27_0.png" class="no-scaled-link" src="../_images/notebooks_GDR_COSG_FashionMNIST_27_0.png" style="width: 364px; height: 277px;" />
+</div>
+</div>
+</section>
+<section id="Run-Clustering">
+<h2>Run Clustering<a class="headerlink" href="#Run-Clustering" title="Link to this heading">#</a></h2>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[22]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>%%time
+sc.tl.leiden(adata,resolution=1,key_added=&#39;Leiden&#39;)
+</pre></div>
+</div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+running Leiden clustering
+</pre></div></div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+&lt;timed eval&gt;:1: FutureWarning: In the future, the default backend for leiden will be igraph instead of leidenalg.
+
+ To achieve the future defaults please pass: flavor=&#34;igraph&#34; and n_iterations=2.  directed must also be False to work with igraph&#39;s implementation.
+</pre></div></div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+    finished: found 22 clusters and added
+    &#39;Leiden&#39;, the cluster labels (adata.obs, categorical) (0:00:18)
+CPU times: user 18.4 s, sys: 203 ms, total: 18.6 s
+Wall time: 18.7 s
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[23]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(adata,
+           color=[&#39;Leiden&#39;],
+           # layer=&#39;raw&#39;,
+           palette=piaso.pl.color.d_color3,
+           ncols=3,
+           # size=10,
+           frameon=False)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_GDR_COSG_FashionMNIST_30_0.png" class="no-scaled-link" src="../_images/notebooks_GDR_COSG_FashionMNIST_30_0.png" style="width: 370px; height: 277px;" />
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[24]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(adata,
+           color=[&#39;Leiden&#39;],
+           # layer=&#39;raw&#39;,
+           palette=piaso.pl.color.d_color3,
+           legend_fontsize=10,
+           legend_fontoutline=2,
+           legend_loc=&#39;on data&#39;,
+           ncols=3,
+           # size=10,
+           frameon=False)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_GDR_COSG_FashionMNIST_31_0.png" class="no-scaled-link" src="../_images/notebooks_GDR_COSG_FashionMNIST_31_0.png" style="width: 265px; height: 277px;" />
+</div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[25]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>def visualize_cluster(X, cluster_labels, cluster_id, num_samples=7):
+    # Find all samples belonging to the specified cluster
+    indices = np.where(cluster_labels == cluster_id)[0]
+
+    # Select random samples from this cluster (or first few if less than requested)
+    sample_indices = indices[:min(num_samples, len(indices))]
+
+    # Create a figure with subplots
+    fig, axes = plt.subplots(1, len(sample_indices), figsize=(len(sample_indices)*2, 2))
+
+    # Display each sample
+    for i, idx in enumerate(sample_indices):
+        ax = axes[i] if len(sample_indices) &gt; 1 else axes
+        ax.imshow(X[idx].reshape(28, 28), cmap=&#39;Spectral_r&#39;)
+        ax.set_title(f&#39;Cluster {cluster_id}&#39;)
+        ax.axis(&#39;off&#39;)
+
+    plt.tight_layout()
+    plt.show()
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[26]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>visualize_cluster(adata.X.todense(),
+                  cluster_labels=adata.obs[&#39;Leiden&#39;],
+                  cluster_id=&#39;1&#39;,
+                 num_samples=7)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_GDR_COSG_FashionMNIST_33_0.png" class="no-scaled-link" src="../_images/notebooks_GDR_COSG_FashionMNIST_33_0.png" style="width: 1076px; height: 149px;" />
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[27]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>visualize_cluster(adata.X.todense(),
+                  cluster_labels=adata.obs[&#39;Leiden&#39;],
+                  cluster_id=&#39;17&#39;,
+                 num_samples=7)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_GDR_COSG_FashionMNIST_34_0.png" class="no-scaled-link" src="../_images/notebooks_GDR_COSG_FashionMNIST_34_0.png" style="width: 1076px; height: 149px;" />
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[28]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>visualize_cluster(adata.X.todense(),
+                  cluster_labels=adata.obs[&#39;Leiden&#39;],
+                  cluster_id=&#39;0&#39;,
+                 num_samples=7)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_GDR_COSG_FashionMNIST_35_0.png" class="no-scaled-link" src="../_images/notebooks_GDR_COSG_FashionMNIST_35_0.png" style="width: 1076px; height: 149px;" />
+</div>
+</div>
+</section>
+<section id="Run-COSG-to-identify-features-for-each-cluster">
+<h2>Run COSG to identify features for each cluster<a class="headerlink" href="#Run-COSG-to-identify-features-for-each-cluster" title="Link to this heading">#</a></h2>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[29]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>import cosg
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[30]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>%%time
+n_gene=30
+groupby=&#39;Leiden&#39;
+cosg.cosg(adata,
+    key_added=&#39;cosg&#39;,
+    # use_raw=False, layer=&#39;log1p&#39;, ## e.g., if you want to use the log1p layer in adata
+    mu=100,
+    expressed_pct=0.1,
+    remove_lowly_expressed=True,
+     n_genes_user=adata.n_vars,
+               groupby=groupby)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+CPU times: user 1.45 s, sys: 221 ms, total: 1.67 s
+Wall time: 1.68 s
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[31]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.tl.dendrogram(adata,groupby=groupby,use_rep=&#39;X_gdr&#39;)
+df_tmp=pd.DataFrame(adata.uns[&#39;cosg&#39;][&#39;names&#39;][:3,]).T
+df_tmp=df_tmp.reindex(adata.uns[&#39;dendrogram_&#39;+groupby][&#39;categories_ordered&#39;])
+marker_genes_list={idx: list(row.values) for idx, row in df_tmp.iterrows()}
+marker_genes_list = {k: v for k, v in marker_genes_list.items() if not any(isinstance(x, float) for x in v)}
+
+sc.pl.dotplot(adata, marker_genes_list,
+             groupby=groupby,
+              # layer=&#39;log1p&#39;,
+             dendrogram=True,
+              swap_axes=False,
+             standard_scale=&#39;var&#39;,
+             cmap=&#39;Spectral_r&#39;)
+</pre></div>
+</div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Storing dendrogram info using `.uns[&#39;dendrogram_Leiden&#39;]`
+</pre></div></div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_GDR_COSG_FashionMNIST_39_1.png" class="no-scaled-link" src="../_images/notebooks_GDR_COSG_FashionMNIST_39_1.png" style="width: 1714px; height: 574px;" />
+</div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[32]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>marker_gene=pd.DataFrame(adata.uns[&#39;cosg&#39;][&#39;names&#39;])
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[33]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>cluster_check=&#39;12&#39;
+marker_gene[cluster_check].values[:30]
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[33]:
+</pre></div>
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+array([&#39;19&#39;, &#39;18&#39;, &#39;9&#39;, &#39;10&#39;, &#39;17&#39;, &#39;11&#39;, &#39;46&#39;, &#39;773&#39;, &#39;38&#39;, &#39;12&#39;, &#39;16&#39;,
+       &#39;13&#39;, &#39;774&#39;, &#39;14&#39;, &#39;15&#39;, &#39;767&#39;, &#39;766&#39;, &#39;45&#39;, &#39;39&#39;, &#39;37&#39;, &#39;233&#39;,
+       &#39;261&#39;, &#39;205&#39;, &#39;289&#39;, &#39;74&#39;, &#39;177&#39;, &#39;745&#39;, &#39;66&#39;, &#39;317&#39;, &#39;149&#39;],
+      dtype=object)
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[34]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.embedding(adata,
+    basis=&#39;X_umap&#39;,
+    color=marker_gene[cluster_check].values[:12],
+    # layer=&#39;log1p&#39;,
+    palette=piaso.pl.color.d_color4,
+    legend_fontoutline=2,
+    legend_fontsize=7,
+    legend_fontweight=5,
+    # legend_loc=&#39;on data&#39;,
+    cmap=piaso.pl.color.c_color1,
+    ncols=6,
+    # size=10,
+    frameon=False)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_GDR_COSG_FashionMNIST_42_0.png" class="no-scaled-link" src="../_images/notebooks_GDR_COSG_FashionMNIST_42_0.png" style="width: 1887px; height: 567px;" />
+</div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[35]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>cosg_scores=cosg.indexByGene(
+    adata.uns[&#39;cosg&#39;][&#39;COSG&#39;],
+    # gene_key=&quot;names&quot;, score_key=&quot;scores&quot;,
+    set_nan_to_zero=True,
+    convert_negative_one_to_zero=True
+)
+</pre></div>
+</div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[36]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>cosg_scores=cosg_scores.loc[adata.var_names]
+</pre></div>
+</div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[37]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>cosg_scores=cosg.iqrLogNormalize(cosg_scores)
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[38]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>cosg_scores
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[38]:
+</pre></div>
+</div>
+<div class="output_area rendered_html docutils container">
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>0</th>
+      <th>1</th>
+      <th>2</th>
+      <th>3</th>
+      <th>4</th>
+      <th>5</th>
+      <th>6</th>
+      <th>7</th>
+      <th>8</th>
+      <th>9</th>
+      <th>...</th>
+      <th>12</th>
+      <th>13</th>
+      <th>14</th>
+      <th>15</th>
+      <th>16</th>
+      <th>17</th>
+      <th>18</th>
+      <th>19</th>
+      <th>20</th>
+      <th>21</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>...</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.00000</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>...</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.00000</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>...</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+      <td>0.000000</td>
+      <td>0.922156</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.00000</td>
+    </tr>
+    <tr>
+      <th>3</th>
+      <td>0.126049</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>...</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+      <td>0.000000</td>
+      <td>1.122768</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.00000</td>
+    </tr>
+    <tr>
+      <th>4</th>
+      <td>0.040497</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>...</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+      <td>0.000000</td>
+      <td>1.905220</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.00000</td>
+    </tr>
+    <tr>
+      <th>...</th>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+    </tr>
+    <tr>
+      <th>779</th>
+      <td>0.000010</td>
+      <td>2.081644</td>
+      <td>0.0</td>
+      <td>0.557788</td>
+      <td>0.003543</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>...</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.000003</td>
+      <td>0.0</td>
+      <td>0.867113</td>
+      <td>0.034861</td>
+      <td>0.021561</td>
+      <td>0.114554</td>
+      <td>0.00000</td>
+    </tr>
+    <tr>
+      <th>780</th>
+      <td>0.000003</td>
+      <td>2.454238</td>
+      <td>0.0</td>
+      <td>0.049116</td>
+      <td>0.017677</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>...</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+      <td>0.431328</td>
+      <td>0.298676</td>
+      <td>0.080659</td>
+      <td>0.017303</td>
+      <td>0.00000</td>
+    </tr>
+    <tr>
+      <th>781</th>
+      <td>0.000000</td>
+      <td>0.367824</td>
+      <td>0.0</td>
+      <td>0.000000</td>
+      <td>0.134834</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>...</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+      <td>0.000000</td>
+      <td>0.911768</td>
+      <td>0.361801</td>
+      <td>0.000000</td>
+      <td>0.52998</td>
+    </tr>
+    <tr>
+      <th>782</th>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>...</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+      <td>0.000000</td>
+      <td>0.286133</td>
+      <td>0.640235</td>
+      <td>0.000000</td>
+      <td>0.00000</td>
+    </tr>
+    <tr>
+      <th>783</th>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>...</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.00000</td>
+    </tr>
+  </tbody>
+</table>
+<p>784 rows × 22 columns</p>
+</div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[39]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>visualize_mnist_image(cosg_scores[&#39;0&#39;].values)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_GDR_COSG_FashionMNIST_47_0.png" class="no-scaled-link" src="../_images/notebooks_GDR_COSG_FashionMNIST_47_0.png" style="width: 319px; height: 338px;" />
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[40]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>visualize_mnist_image(cosg_scores[&#39;1&#39;].values)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_GDR_COSG_FashionMNIST_48_0.png" class="no-scaled-link" src="../_images/notebooks_GDR_COSG_FashionMNIST_48_0.png" style="width: 319px; height: 338px;" />
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[41]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>visualize_mnist_image(cosg_scores[&#39;2&#39;].values)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_GDR_COSG_FashionMNIST_49_0.png" class="no-scaled-link" src="../_images/notebooks_GDR_COSG_FashionMNIST_49_0.png" style="width: 319px; height: 338px;" />
+</div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[42]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>import matplotlib.pyplot as plt
+import numpy as np
+import math
+
+def visualize_mnist_dataframe(df, images_per_row=6):
+    &quot;&quot;&quot;
+    Plots MNIST images from a dataframe where columns are images and rows are pixels.
+
+    Parameters:
+    - df: pandas DataFrame where each column is an image (784 pixels).
+    - images_per_row: int, number of images to display per row (default 8).
+    &quot;&quot;&quot;
+    num_images = df.shape[1]
+
+    # Calculate how many rows we need in the plot grid
+    num_rows = math.ceil(num_images / images_per_row)
+
+    # Create the figure with a dynamic size based on the grid
+    # We multiply by 2 to give each image roughly 2x2 inches of space
+    plt.figure(figsize=(2 * images_per_row, 2 * num_rows))
+
+    for i in range(num_images):
+        # Select the i-th column, convert to numpy array, and reshape
+        # iloc is used to access columns by position regardless of column names
+        image_data = df.iloc[:, i].values
+        image = image_data.reshape(28, 28)
+
+        # Create subplot indices start at 1
+        plt.subplot(num_rows, images_per_row, i + 1)
+        plt.imshow(image, cmap=&#39;Spectral_r&#39;)
+        plt.axis(&#39;off&#39;)
+
+        # Optional: Add column name as title for reference
+        plt.title(f&#39;COSG Cluster Features: {df.columns[i]}&#39;, fontsize=9)
+
+    plt.tight_layout()
+    plt.show()
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[43]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>visualize_mnist_dataframe(cosg_scores)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_GDR_COSG_FashionMNIST_51_0.png" class="no-scaled-link" src="../_images/notebooks_GDR_COSG_FashionMNIST_51_0.png" style="width: 927px; height: 622px;" />
+</div>
+</div>
+</section>
+<section id="Run-COSG-to-identify-features-for-each-Class">
+<h2>Run COSG to identify features for each Class<a class="headerlink" href="#Run-COSG-to-identify-features-for-each-Class" title="Link to this heading">#</a></h2>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[44]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>import cosg
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[45]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>%%time
+n_gene=30
+groupby=&#39;class&#39;
+cosg.cosg(adata,
+    key_added=&#39;cosg&#39;,
+    # use_raw=False, layer=&#39;log1p&#39;, ## e.g., if you want to use the log1p layer in adata
+    mu=100,
+    expressed_pct=0.1,
+    remove_lowly_expressed=True,
+     n_genes_user=adata.n_vars,
+               groupby=groupby)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+CPU times: user 1.42 s, sys: 226 ms, total: 1.65 s
+Wall time: 1.65 s
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[46]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.tl.dendrogram(adata,groupby=groupby,use_rep=&#39;X_gdr&#39;)
+df_tmp=pd.DataFrame(adata.uns[&#39;cosg&#39;][&#39;names&#39;][:3,]).T
+df_tmp=df_tmp.reindex(adata.uns[&#39;dendrogram_&#39;+groupby][&#39;categories_ordered&#39;])
+marker_genes_list={idx: list(row.values) for idx, row in df_tmp.iterrows()}
+marker_genes_list = {k: v for k, v in marker_genes_list.items() if not any(isinstance(x, float) for x in v)}
+
+sc.pl.dotplot(adata, marker_genes_list,
+             groupby=groupby,
+              # layer=&#39;log1p&#39;,
+             dendrogram=True,
+              swap_axes=False,
+             standard_scale=&#39;var&#39;,
+             cmap=&#39;Spectral_r&#39;)
+</pre></div>
+</div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Storing dendrogram info using `.uns[&#39;dendrogram_class&#39;]`
+</pre></div></div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_GDR_COSG_FashionMNIST_55_1.png" class="no-scaled-link" src="../_images/notebooks_GDR_COSG_FashionMNIST_55_1.png" style="width: 930px; height: 343px;" />
+</div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[47]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>marker_gene=pd.DataFrame(adata.uns[&#39;cosg&#39;][&#39;names&#39;])
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[48]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>cluster_check=&#39;Bag&#39;
+marker_gene[cluster_check].values[:30]
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[48]:
+</pre></div>
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+array([&#39;337&#39;, &#39;309&#39;, &#39;336&#39;, &#39;364&#39;, &#39;308&#39;, &#39;365&#39;, &#39;281&#39;, &#39;280&#39;, &#39;252&#39;,
+       &#39;253&#39;, &#39;224&#39;, &#39;225&#39;, &#39;197&#39;, &#39;338&#39;, &#39;196&#39;, &#39;169&#39;, &#39;366&#39;, &#39;168&#39;,
+       &#39;310&#39;, &#39;141&#39;, &#39;282&#39;, &#39;392&#39;, &#39;198&#39;, &#39;170&#39;, &#39;254&#39;, &#39;226&#39;, &#39;339&#39;,
+       &#39;367&#39;, &#39;142&#39;, &#39;311&#39;], dtype=object)
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[49]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.embedding(adata,
+    basis=&#39;X_umap&#39;,
+    color=marker_gene[cluster_check].values[:12],
+    # layer=&#39;log1p&#39;,
+    palette=piaso.pl.color.d_color4,
+    legend_fontoutline=2,
+    legend_fontsize=7,
+    legend_fontweight=5,
+    # legend_loc=&#39;on data&#39;,
+    cmap=piaso.pl.color.c_color1,
+    ncols=6,
+    # size=10,
+    frameon=False)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_GDR_COSG_FashionMNIST_58_0.png" class="no-scaled-link" src="../_images/notebooks_GDR_COSG_FashionMNIST_58_0.png" style="width: 1887px; height: 567px;" />
+</div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[50]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>cosg_scores=cosg.indexByGene(
+    adata.uns[&#39;cosg&#39;][&#39;COSG&#39;],
+    # gene_key=&quot;names&quot;, score_key=&quot;scores&quot;,
+    set_nan_to_zero=True,
+    convert_negative_one_to_zero=True
+)
+</pre></div>
+</div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[51]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>cosg_scores=cosg_scores.loc[adata.var_names]
+</pre></div>
+</div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[52]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>cosg_scores=cosg.iqrLogNormalize(cosg_scores)
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[53]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>cosg_scores
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[53]:
+</pre></div>
+</div>
+<div class="output_area rendered_html docutils container">
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>Ankle boot</th>
+      <th>Bag</th>
+      <th>Coat</th>
+      <th>Dress</th>
+      <th>Pullover</th>
+      <th>Sandal</th>
+      <th>Shirt</th>
+      <th>Sneaker</th>
+      <th>T-shirt/top</th>
+      <th>Trouser</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>0.0</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>0.0</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>0.0</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+    </tr>
+    <tr>
+      <th>3</th>
+      <td>0.0</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+      <td>0.142387</td>
+      <td>0.0</td>
+    </tr>
+    <tr>
+      <th>4</th>
+      <td>0.0</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+      <td>0.035906</td>
+      <td>0.0</td>
+    </tr>
+    <tr>
+      <th>...</th>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+    </tr>
+    <tr>
+      <th>779</th>
+      <td>0.0</td>
+      <td>0.004029</td>
+      <td>1.342603</td>
+      <td>0.0</td>
+      <td>1.726759</td>
+      <td>0.0</td>
+      <td>0.342494</td>
+      <td>0.0</td>
+      <td>0.000031</td>
+      <td>0.0</td>
+    </tr>
+    <tr>
+      <th>780</th>
+      <td>0.0</td>
+      <td>0.005588</td>
+      <td>0.807287</td>
+      <td>0.0</td>
+      <td>1.535818</td>
+      <td>0.0</td>
+      <td>0.297864</td>
+      <td>0.0</td>
+      <td>0.000018</td>
+      <td>0.0</td>
+    </tr>
+    <tr>
+      <th>781</th>
+      <td>0.0</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+      <td>0.564507</td>
+      <td>0.0</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+    </tr>
+    <tr>
+      <th>782</th>
+      <td>0.0</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+    </tr>
+    <tr>
+      <th>783</th>
+      <td>0.0</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+    </tr>
+  </tbody>
+</table>
+<p>784 rows × 10 columns</p>
+</div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[54]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>visualize_mnist_image(cosg_scores[&#39;T-shirt/top&#39;].values)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_GDR_COSG_FashionMNIST_63_0.png" class="no-scaled-link" src="../_images/notebooks_GDR_COSG_FashionMNIST_63_0.png" style="width: 319px; height: 338px;" />
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[55]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>visualize_mnist_image(cosg_scores[&#39;Ankle boot&#39;].values)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_GDR_COSG_FashionMNIST_64_0.png" class="no-scaled-link" src="../_images/notebooks_GDR_COSG_FashionMNIST_64_0.png" style="width: 319px; height: 338px;" />
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[56]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>visualize_mnist_image(cosg_scores[&#39;Dress&#39;].values)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_GDR_COSG_FashionMNIST_65_0.png" class="no-scaled-link" src="../_images/notebooks_GDR_COSG_FashionMNIST_65_0.png" style="width: 319px; height: 338px;" />
+</div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[57]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>import matplotlib.pyplot as plt
+import numpy as np
+import math
+
+def visualize_mnist_dataframe(df, images_per_row=6):
+    &quot;&quot;&quot;
+    Plots MNIST images from a dataframe where columns are images and rows are pixels.
+
+    Parameters:
+    - df: pandas DataFrame where each column is an image (784 pixels).
+    - images_per_row: int, number of images to display per row (default 8).
+    &quot;&quot;&quot;
+    num_images = df.shape[1]
+
+    # Calculate how many rows we need in the plot grid
+    num_rows = math.ceil(num_images / images_per_row)
+
+    # Create the figure with a dynamic size based on the grid
+    # We multiply by 2 to give each image roughly 2x2 inches of space
+    plt.figure(figsize=(2 * images_per_row, 2 * num_rows))
+
+    for i in range(num_images):
+        # Select the i-th column, convert to numpy array, and reshape
+        # iloc is used to access columns by position regardless of column names
+        image_data = df.iloc[:, i].values
+        image = image_data.reshape(28, 28)
+
+        # Create subplot indices start at 1
+        plt.subplot(num_rows, images_per_row, i + 1)
+        plt.imshow(image, cmap=&#39;Spectral_r&#39;)
+        plt.axis(&#39;off&#39;)
+
+        # Optional: Add column name as title for reference
+        plt.title(f&#39;COSG Cluster Features: {df.columns[i]}&#39;, fontsize=9)
+
+    plt.tight_layout()
+    plt.show()
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[58]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>visualize_mnist_dataframe(cosg_scores)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_GDR_COSG_FashionMNIST_67_0.png" class="no-scaled-link" src="../_images/notebooks_GDR_COSG_FashionMNIST_67_0.png" style="width: 952px; height: 304px;" />
+</div>
+</div>
+</section>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="PIASO_GDR_on_MNIST.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Running GDR on MNIST image data</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="27_PIASO_markerGeneBasedCellTypePrediction_mouseCortex_updated.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Cell type prediction based on marker genes from reference dataset</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#Setting-paths">Setting paths</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#Load-data">Load data</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#Import-PIASO">Import PIASO</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#INFOG-Normalization">INFOG Normalization</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#Run-GDR-for-dimensionality-reduction">Run GDR for dimensionality reduction</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#Run-Clustering">Run Clustering</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#Run-COSG-to-identify-features-for-each-cluster">Run COSG to identify features for each cluster</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#Run-COSG-to-identify-features-for-each-Class">Run COSG to identify features for each Class</a></li>
+</ul>
+  </nav></div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf"></script>
+<script defer src="../_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2025, Min Dai.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 7.3.7.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  <!-- # L10n: Setting the PST URL as an argument as this does not need to be localized -->
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.16.1.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

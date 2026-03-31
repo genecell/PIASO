@@ -1,0 +1,1475 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Pre-processing CellRanger outputs (multiple samples, mouse brain) &#8212; PIASO 0.1.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../_static/styles/theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+<link href="../_static/styles/pydata-sphinx-theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=362ab14a" />
+    <link rel="stylesheet" type="text/css" href="../_static/nbsphinx-code-cells.css?v=2aa19091" />
+    <link rel="stylesheet" type="text/css" href="../_static/custom.css?v=0330b353" />
+  
+  <!-- So that users can add custom icons -->
+  <script src="../_static/scripts/fontawesome.js?digest=8878045cc6db502f8baf"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf" />
+<link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf" />
+
+    <script src="../_static/documentation_options.js?v=01f34227"></script>
+    <script src="../_static/doctools.js?v=9a2dae69"></script>
+    <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+    <script>window.MathJax = {"tex": {"inlineMath": [["$", "$"], ["\\(", "\\)"]], "processEscapes": true}, "options": {"ignoreHtmlClass": "tex2jax_ignore|mathjax_ignore|document", "processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+    <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'notebooks/rnaSeqPipelineTutorial_E18_mouse';</script>
+    <script src="../_static/sidebar_toggle.js?v=3b053ec6"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="" />
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class=" navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../_static/PIASO_logo.png" class="logo__image only-light" alt="PIASO 0.1.0 documentation - Home"/>
+    <img src="../_static/PIASO_logo.png" class="logo__image only-dark pst-js-only" alt="PIASO 0.1.0 documentation - Home"/>
+  
+  
+</a></div>
+    
+  </div>
+  
+  <div class=" navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../installation.html">
+    Installation
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../tutorials.html">
+    Tutorials
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../modules.html">
+    API
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../references.html">
+    References
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../releaseNotes.html">
+    Release notes
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/genecell/PIASO" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+    </div>
+  
+
+  
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../installation.html">
+    Installation
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../tutorials.html">
+    Tutorials
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../modules.html">
+    API
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../references.html">
+    References
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../releaseNotes.html">
+    Release notes
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/genecell/PIASO" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+<h3><a href="../index.html">Table of Contents</a></h3>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials.html">Tutorials</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../modules.html">API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../references.html">References</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../releaseNotes.html">Release notes</a></li>
+</ul>
+</div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
+  </div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Pre-processing CellRanger outputs (multiple samples, mouse brain)</span></li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section id="Pre-processing-CellRanger-outputs-(multiple-samples,-mouse-brain)">
+<h1>Pre-processing CellRanger outputs (multiple samples, mouse brain)<a class="headerlink" href="#Pre-processing-CellRanger-outputs-(multiple-samples,-mouse-brain)" title="Link to this heading">#</a></h1>
+<p>This notebook demonstrates the pipeline for processing scRNA-seq data, covering metric computation, normalization, clustering, cell type prediction, and the identification/removal of doublets and low-quality clusters. The final output is pre-processed, annotated scRNA-seq data.</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[1]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>import piaso
+import cosg
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+/home/vas744/.local/lib/python3.9/site-packages/networkx/utils/backends.py:135: RuntimeWarning: networkx backend defined more than once: nx-loopback
+  backends.update(_get_backends(&#34;networkx.backends&#34;))
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[2]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>import os
+import numpy as np
+import pandas as pd
+import scanpy as sc
+import anndata as ad
+import logging
+from matplotlib import rcParams
+import warnings
+
+# To modify the default figure size, use rcParams.
+rcParams[&#39;figure.figsize&#39;] = 4, 4
+rcParams[&#39;font.sans-serif&#39;] = &quot;Arial&quot;
+rcParams[&#39;font.family&#39;] = &quot;Arial&quot;
+sc.settings.verbosity = 3
+sc.logging.print_header()
+sc.set_figure_params(dpi=80,dpi_save=300, color_map=&#39;viridis&#39;,facecolor=&#39;white&#39;)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+scanpy==1.10.3 anndata==0.10.8 umap==0.5.7 numpy==1.26.4 scipy==1.13.0 pandas==2.2.3 scikit-learn==1.5.2 statsmodels==0.14.4 igraph==0.11.5 louvain==0.8.2 pynndescent==0.5.13
+</pre></div></div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[3]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>warnings.simplefilter(action=&#39;ignore&#39;, category=FutureWarning)
+</pre></div>
+</div>
+</div>
+<section id="Load-the-data">
+<h2>Load the data<a class="headerlink" href="#Load-the-data" title="Link to this heading">#</a></h2>
+<p>This dataset was obtained from a mouse at E18 and includes various samples derived from different sequencing technologies, tissue types, and cell vs. nuclei preparations.</p>
+<p>The data was obtained from 10x Genomics:
+<a class="reference external" href="https://www.10xgenomics.com/datasets?configure%5BhitsPerPage%5D=50&amp;configure%5BmaxValuesPerFacet%5D=1000&amp;refinementList%5Bproduct.name%5D%5B0%5D=Universal%203%27%20Gene%20Expression&amp;refinementList%5Bproduct.name%5D%5B1%5D=Flex%20Gene%20Expression&amp;refinementList%5Bchemistry.version%5D%5B0%5D=3&amp;refinementList%5Bchemistry.version%5D%5B1%5D=3.1&amp;refinementList%5Bchemistry.version%5D%5B2%5D=4&amp;refinementList%5Bspecies%5D%5B0%5D=Mouse&amp;refinementList%5BanatomicalEntities%5D%5B0%5D=Brain&amp;refinementList%5BanatomicalEntities%5D%5B1%5D=cortex&amp;refinementList%5BanatomicalEntities%5D%5B2%5D=hippocampus">https://www.10xgenomics.com/datasets?configure%5BhitsPerPage%5D=50&amp;configure%5BmaxValuesPerFacet%5D=1000&amp;refinementList%5Bproduct.name%5D%5B0%5D=Universal%203%27%20Gene%20Expression&amp;refinementList%5Bproduct.name%5D%5B1%5D=Flex%20Gene%20Expression&amp;refinementList%5Bchemistry.version%5D%5B0%5D=3&amp;refinementList%5Bchemistry.version%5D%5B1%5D=3.1&amp;refinementList%5Bchemistry.version%5D%5B2%5D=4&amp;refinementList%5Bspecies%5D%5B0%5D=Mouse&amp;refinementList%5BanatomicalEntities%5D%5B0%5D=Brain&amp;refinementList%5BanatomicalEntities%5D%5B1%5D=cortex&amp;refinementList%5BanatomicalEntities%5D%5B2%5D=hippocampus</a></p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[4]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>!/home/vas744/Software/gdrive files download --overwrite --recursive --destination /n/scratch/users/v/vas744/Data/Public/PIASO/multiple_samples 1fOVhYBDQirFtrpRPuy7euAHykXuTSe_r
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Found 3 files in 1 directories with a total size of 129.2 MB
+Creating directory E18_h5_files
+Downloaded 3 files in 1 directories with a total size of 129.2 MB
+</pre></div></div>
+</div>
+<p>For this tutorial, we will use only three samples from this dataset. The selection includes one sample from cells, one from nuclei, and one from a different version of 10x (GEM-X-v4), providing a diverse range of sample types within a limited dataset.</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[4]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>data_path=&#39;/n/scratch/users/v/vas744/Data/Public/PIASO/multiple_samples/&#39;
+time_points = [entry.name for entry in os.scandir(data_path) if entry.is_dir()]
+print(time_points)
+
+for time_point in time_points:
+    samples = [entry.name for entry in os.scandir(data_path+time_point) if entry.is_dir()]
+    print(time_point, samples)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+[&#39;E18&#39;]
+E18 [&#39;E18_v3.1_cell&#39;, &#39;E18_v3.1_nuclei&#39;, &#39;E18_v4_cell&#39;]
+</pre></div></div>
+</div>
+<p>We will use this function to load multiple .h5 files into adata objects, creating a list of adata objects.</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[5]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>def load_multiple_anndata(
+    data_path,
+    time_points,
+    key_added):
+    anndata_list = []
+    for time_point in time_points:
+        samples = [entry.name for entry in os.scandir(data_path+time_point) if entry.is_dir()]
+        for sample in samples:
+            try:
+                # Load the data
+                file_name = os.listdir(data_path+time_point+&#39;/&#39;+sample)[0]
+                h5_path=data_path+time_point+&#39;/&#39;+sample+&#39;/&#39;+file_name
+                if os.path.exists(h5_path):
+                    adata = sc.read_10x_h5(h5_path)
+                    print(&#39;Loading the h5 file&#39;)
+
+                else:
+                    adata = sc.read_10x_mtx(data_path+&#39;/&#39;+sample, cache=True)
+                adata.var_names_make_unique()
+                adata.obs_names_make_unique()
+                adata.obs[key_added]=sample
+                anndata_list.append(adata)
+                print(&#39;Sample loaded: &#39;, sample)
+            except Exception as e:
+                print(f&quot;Error loading {data_path}: {e}&quot;)
+
+    return anndata_list
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[6]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata_list=load_multiple_anndata(data_path=data_path, time_points=time_points, key_added=&#39;Sample&#39;)
+</pre></div>
+</div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+reading /n/scratch/users/v/vas744/Data/Public/PIASO/multiple_samples/E18/E18_v3.1_cell/neuron_10k_v3_filtered_feature_bc_matrix.h5
+ (0:00:02)
+</pre></div></div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+/home/vas744/.local/lib/python3.9/site-packages/anndata/_core/anndata.py:1820: UserWarning: Variable names are not unique. To make them unique, call `.var_names_make_unique`.
+  utils.warn_names_duplicates(&#34;var&#34;)
+</pre></div></div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Loading the h5 file
+Sample loaded:  E18_v3.1_cell
+reading /n/scratch/users/v/vas744/Data/Public/PIASO/multiple_samples/E18/E18_v3.1_nuclei/SC3_v3_NextGem_DI_Nuclei_5K_SC3_v3_NextGem_DI_Nuclei_5K_count_sample_feature_bc_matrix.h5
+</pre></div></div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+/home/vas744/.local/lib/python3.9/site-packages/anndata/_core/anndata.py:1820: UserWarning: Variable names are not unique. To make them unique, call `.var_names_make_unique`.
+  utils.warn_names_duplicates(&#34;var&#34;)
+</pre></div></div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+ (0:00:00)
+</pre></div></div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+/home/vas744/.local/lib/python3.9/site-packages/anndata/_core/anndata.py:1820: UserWarning: Variable names are not unique. To make them unique, call `.var_names_make_unique`.
+  utils.warn_names_duplicates(&#34;var&#34;)
+</pre></div></div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Loading the h5 file
+Sample loaded:  E18_v3.1_nuclei
+reading /n/scratch/users/v/vas744/Data/Public/PIASO/multiple_samples/E18/E18_v4_cell/10k_Mouse_Neurons_3p_gemx_10k_Mouse_Neurons_3p_gemx_count_sample_filtered_feature_bc_matrix.h5
+</pre></div></div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+/home/vas744/.local/lib/python3.9/site-packages/anndata/_core/anndata.py:1820: UserWarning: Variable names are not unique. To make them unique, call `.var_names_make_unique`.
+  utils.warn_names_duplicates(&#34;var&#34;)
+</pre></div></div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+ (0:00:02)
+</pre></div></div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+/home/vas744/.local/lib/python3.9/site-packages/anndata/_core/anndata.py:1820: UserWarning: Variable names are not unique. To make them unique, call `.var_names_make_unique`.
+  utils.warn_names_duplicates(&#34;var&#34;)
+</pre></div></div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Loading the h5 file
+Sample loaded:  E18_v4_cell
+</pre></div></div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+/home/vas744/.local/lib/python3.9/site-packages/anndata/_core/anndata.py:1820: UserWarning: Variable names are not unique. To make them unique, call `.var_names_make_unique`.
+  utils.warn_names_duplicates(&#34;var&#34;)
+</pre></div></div>
+</div>
+<p>Concatenate the adata objects in the list to create a single adata object that contains information from all the samples and time points.</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[7]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata=ad.concat(adata_list, join=&#39;outer&#39;,index_unique=&quot;-&quot;)
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[8]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[8]:
+</pre></div>
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+AnnData object with n_obs × n_vars = 30257 × 37089
+    obs: &#39;Sample&#39;
+</pre></div></div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[9]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata.layers[&#39;raw&#39;]=adata.X.copy()
+</pre></div>
+</div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[10]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata.var_names_make_unique()
+</pre></div>
+</div>
+</div>
+<p>Next, we filter out cells with fewer than 200 detected genes.</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[11]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pp.filter_cells(adata, min_genes=200)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+filtered out 386 cells that have less than 200 genes expressed
+</pre></div></div>
+</div>
+<p>We identify mitochondrial and ribosomal protein genes and compute their proportion in each cell’s total read count. A high proportion of these reads often indicates low-quality cells.</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[12]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata.var[&#39;mt&#39;] = adata.var_names.str.startswith(&#39;mt-&#39;)  # annotate the group of mitochondrial genes as &#39;mt&#39;
+sc.pp.calculate_qc_metrics(adata, qc_vars=[&#39;mt&#39;], percent_top=None, log1p=False, inplace=True)
+</pre></div>
+</div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[13]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>ribo_cells = adata.var_names.str.startswith(&#39;Rps&#39;,&#39;Rpl&#39;)
+adata.obs[&#39;pct_counts_ribo&#39;] = np.ravel(100*np.sum(adata[:, ribo_cells].X, axis = 1) / np.sum(adata.X, axis = 1))
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[14]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>piaso.pl.plot_features_violin(adata,
+                              [&#39;n_genes_by_counts&#39;, &#39;total_counts&#39;, &#39;pct_counts_mt&#39;,&#39;pct_counts_ribo&#39;],
+                              width_single=4,
+                              groupby=&#39;Sample&#39;)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_rnaSeqPipelineTutorial_E18_mouse_22_0.png" class="no-scaled-link" src="../_images/notebooks_rnaSeqPipelineTutorial_E18_mouse_22_0.png" style="width: 344px; height: 643px;" />
+</div>
+</div>
+</section>
+<section id="Doublet-prediction">
+<h2>Doublet prediction<a class="headerlink" href="#Doublet-prediction" title="Link to this heading">#</a></h2>
+<p>Next, we compute the Scrublet score to identify and predict potential doublets.</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[15]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>experiments=np.unique(adata.obs[&#39;Sample&#39;])
+adata.obs[&#39;scrublet_score&#39;]=np.repeat(0,adata.n_obs)
+adata.obs[&#39;predicted_doublets&#39;]=np.repeat(False,adata.n_obs)
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[16]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>import scrublet as scr
+
+for experiment in experiments:
+    print(experiment)
+    adatai=adata[adata.obs[&#39;Sample&#39;]==experiment]
+
+    scrub = scr.Scrublet(adatai.X.todense(),random_state=10)
+    doublet_scores, predicted_doublets = scrub.scrub_doublets()
+
+    adata.obs[&#39;predicted_doublets&#39;][adatai.obs_names]=predicted_doublets
+
+    adata.obs[&#39;scrublet_score&#39;][adatai.obs_names]=doublet_scores
+</pre></div>
+</div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+E18_v3.1_cell
+Preprocessing...
+Simulating doublets...
+Embedding transcriptomes using PCA...
+Calculating doublet scores...
+Automatically set threshold at doublet score = 0.39
+Detected doublet rate = 2.3%
+Estimated detectable doublet fraction = 28.0%
+Overall doublet rate:
+        Expected   = 10.0%
+        Estimated  = 8.1%
+Elapsed time: 32.3 seconds
+E18_v3.1_nuclei
+</pre></div></div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+/tmp/ipykernel_17593/2312138584.py:10: SettingWithCopyWarning:
+A value is trying to be set on a copy of a slice from a DataFrame
+
+See the caveats in the documentation: https://pandas.pydata.org/pandas-docs/stable/user_guide/indexing.html#returning-a-view-versus-a-copy
+  adata.obs[&#39;predicted_doublets&#39;][adatai.obs_names]=predicted_doublets
+/tmp/ipykernel_17593/2312138584.py:12: SettingWithCopyWarning:
+A value is trying to be set on a copy of a slice from a DataFrame
+
+See the caveats in the documentation: https://pandas.pydata.org/pandas-docs/stable/user_guide/indexing.html#returning-a-view-versus-a-copy
+  adata.obs[&#39;scrublet_score&#39;][adatai.obs_names]=doublet_scores
+</pre></div></div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Preprocessing...
+Simulating doublets...
+Embedding transcriptomes using PCA...
+Calculating doublet scores...
+Automatically set threshold at doublet score = 0.74
+Detected doublet rate = 0.0%
+Estimated detectable doublet fraction = 0.5%
+Overall doublet rate:
+        Expected   = 10.0%
+        Estimated  = 3.3%
+Elapsed time: 17.2 seconds
+E18_v4_cell
+</pre></div></div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+/tmp/ipykernel_17593/2312138584.py:10: SettingWithCopyWarning:
+A value is trying to be set on a copy of a slice from a DataFrame
+
+See the caveats in the documentation: https://pandas.pydata.org/pandas-docs/stable/user_guide/indexing.html#returning-a-view-versus-a-copy
+  adata.obs[&#39;predicted_doublets&#39;][adatai.obs_names]=predicted_doublets
+</pre></div></div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Preprocessing...
+Simulating doublets...
+Embedding transcriptomes using PCA...
+Calculating doublet scores...
+Automatically set threshold at doublet score = 0.46
+Detected doublet rate = 0.9%
+Estimated detectable doublet fraction = 15.3%
+Overall doublet rate:
+        Expected   = 10.0%
+        Estimated  = 5.7%
+Elapsed time: 65.7 seconds
+</pre></div></div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+/tmp/ipykernel_17593/2312138584.py:10: SettingWithCopyWarning:
+A value is trying to be set on a copy of a slice from a DataFrame
+
+See the caveats in the documentation: https://pandas.pydata.org/pandas-docs/stable/user_guide/indexing.html#returning-a-view-versus-a-copy
+  adata.obs[&#39;predicted_doublets&#39;][adatai.obs_names]=predicted_doublets
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[17]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>piaso.pl.plot_features_violin(adata,
+                              [&#39;scrublet_score&#39;],
+                              groupby=&#39;Sample&#39;,
+                              width_single=3,
+                              height_single=3)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_rnaSeqPipelineTutorial_E18_mouse_26_0.png" class="no-scaled-link" src="../_images/notebooks_rnaSeqPipelineTutorial_E18_mouse_26_0.png" style="width: 251px; height: 339px;" />
+</div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[18]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>tmp=np.repeat(False, adata.n_obs)
+tmp[adata.obs[&#39;predicted_doublets&#39;].values==True]=True
+adata.obs[&#39;predicted_doublets&#39;]=tmp
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[19]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>print(f&quot;# of cells with scrublet score &gt;= 0.2: {np.sum(adata.obs[&#39;scrublet_score&#39;]&gt;=0.2)} \n# of predicted doublets: {np.sum(adata.obs[&#39;predicted_doublets&#39;])}&quot;)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+# of cells with scrublet score &gt;= 0.2: 1510
+# of predicted doublets: 373
+</pre></div></div>
+</div>
+</section>
+<section id="Normalization">
+<h2>Normalization<a class="headerlink" href="#Normalization" title="Link to this heading">#</a></h2>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[20]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pp.normalize_total(adata, target_sum=1e4)
+sc.pp.log1p(adata)
+
+adata.layers[&#39;log1p&#39;]=adata.X.copy()
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+normalizing counts per cell
+    finished (0:00:00)
+</pre></div></div>
+</div>
+</section>
+<section id="INFOG-normalization">
+<h2>INFOG normalization<a class="headerlink" href="#INFOG-normalization" title="Link to this heading">#</a></h2>
+<p>We use PIASO’s infog to normalize the data and identify a highly variable set of genes.</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[21]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>%%time
+piaso.tl.infog(adata,
+               layer=&#39;raw&#39;,
+               n_top_genes=3000,)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+The normalized data is saved as `infog` in `adata.layers`.
+The highly variable genes are saved as `highly_variable` in `adata.var`.
+Finished INFOG normalization.
+CPU times: user 19 s, sys: 8.06 s, total: 27.1 s
+Wall time: 27.1 s
+</pre></div></div>
+</div>
+</section>
+<section id="SVD-dimensionality-reduction-and-visualization">
+<h2>SVD dimensionality reduction and visualization<a class="headerlink" href="#SVD-dimensionality-reduction-and-visualization" title="Link to this heading">#</a></h2>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[22]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>piaso.tl.runSVD(adata,
+                use_highly_variable=True,
+                n_components=50,
+                random_state=10,
+                key_added=&#39;X_svd&#39;,
+                layer=&#39;infog&#39;)
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[23]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>%%time
+sc.pp.neighbors(adata,
+                use_rep=&#39;X_svd&#39;,
+                n_neighbors=15,
+                random_state=10,
+                knn=True,
+                method=&quot;umap&quot;)
+
+sc.tl.umap(adata)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+computing neighbors
+    finished: added to `.uns[&#39;neighbors&#39;]`
+    `.obsp[&#39;distances&#39;]`, distances for each pair of neighbors
+    `.obsp[&#39;connectivities&#39;]`, weighted adjacency matrix (0:00:40)
+computing UMAP
+    finished: added
+    &#39;X_umap&#39;, UMAP coordinates (adata.obsm)
+    &#39;umap&#39;, UMAP parameters (adata.uns) (0:00:36)
+CPU times: user 1min 30s, sys: 685 ms, total: 1min 30s
+Wall time: 1min 16s
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[24]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(adata,
+           color=[&#39;n_genes_by_counts&#39;, &#39;total_counts&#39;,&#39;pct_counts_mt&#39;,&#39;pct_counts_ribo&#39;, &#39;scrublet_score&#39;],
+           cmap=piaso.pl.color.c_color1,
+           palette=piaso.pl.color.d_color1,
+           ncols=3,
+           size=10,
+           frameon=False)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_rnaSeqPipelineTutorial_E18_mouse_36_0.png" class="no-scaled-link" src="../_images/notebooks_rnaSeqPipelineTutorial_E18_mouse_36_0.png" style="width: 950px; height: 567px;" />
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[26]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>piaso.pl.plot_embeddings_split(adata,
+                               color=&#39;scrublet_score&#39;,
+                               cmap=piaso.pl.color.c_color1,
+                               splitby=&#39;Sample&#39;,
+                               ncol=3,
+                               frameon=False)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_rnaSeqPipelineTutorial_E18_mouse_37_0.png" class="no-scaled-link" src="../_images/notebooks_rnaSeqPipelineTutorial_E18_mouse_37_0.png" style="width: 981px; height: 287px;" />
+</div>
+</div>
+</section>
+<section id="Leiden-clustering">
+<h2>Leiden clustering<a class="headerlink" href="#Leiden-clustering" title="Link to this heading">#</a></h2>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[27]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>%%time
+sc.tl.leiden(adata,resolution=0.5,key_added=&#39;Leiden&#39;)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+running Leiden clustering
+    finished: found 24 clusters and added
+    &#39;Leiden&#39;, the cluster labels (adata.obs, categorical) (0:00:03)
+CPU times: user 3.85 s, sys: 114 ms, total: 3.96 s
+Wall time: 3.96 s
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[28]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(adata,
+           color=[&#39;Leiden&#39;],
+           palette=piaso.pl.color.d_color1,
+           legend_fontsize=12,
+           legend_fontoutline=2,
+           legend_loc=&#39;on data&#39;,
+           ncols=1,
+           size=10,
+           frameon=False)
+</pre></div>
+</div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+WARNING: Length of palette colors is smaller than the number of categories (palette length: 19, categories length: 24. Some categories will have the same color.
+</pre></div></div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_rnaSeqPipelineTutorial_E18_mouse_40_1.png" class="no-scaled-link" src="../_images/notebooks_rnaSeqPipelineTutorial_E18_mouse_40_1.png" style="width: 265px; height: 277px;" />
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[29]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>piaso.pl.plot_features_violin(adata,
+                              [&#39;n_genes_by_counts&#39;, &#39;total_counts&#39;, &#39;pct_counts_mt&#39;,&#39;pct_counts_ribo&#39;, &#39;scrublet_score&#39;],
+                              groupby=&#39;Leiden&#39;)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_rnaSeqPipelineTutorial_E18_mouse_41_0.png" class="no-scaled-link" src="../_images/notebooks_rnaSeqPipelineTutorial_E18_mouse_41_0.png" style="width: 968px; height: 667px;" />
+</div>
+</div>
+<section id="Identify-marker-genes-with-COSG">
+<h3>Identify marker genes with COSG<a class="headerlink" href="#Identify-marker-genes-with-COSG" title="Link to this heading">#</a></h3>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[30]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>%%time
+n_gene=30
+cosg.cosg(adata,
+          key_added=&#39;cosg&#39;,
+          use_raw=False,
+          layer=&#39;log1p&#39;,
+          mu=100,
+          expressed_pct=0.1,
+          remove_lowly_expressed=True,
+          n_genes_user=100,
+          groupby=&#39;Leiden&#39;)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+CPU times: user 6.57 s, sys: 2.75 s, total: 9.32 s
+Wall time: 9.32 s
+</pre></div></div>
+</div>
+<p>We can use a dendrogram dot plot to visualize the expression of the top three marker genes of each Leiden cluster.</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[31]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.tl.dendrogram(adata,groupby=&#39;Leiden&#39;,use_rep=&#39;X_svd&#39;)
+df_tmp=pd.DataFrame(adata.uns[&#39;cosg&#39;][&#39;names&#39;][:3,]).T
+df_tmp=df_tmp.reindex(adata.uns[&#39;dendrogram_&#39;+&#39;Leiden&#39;][&#39;categories_ordered&#39;])
+marker_genes_list={idx: list(row.values) for idx, row in df_tmp.iterrows()}
+marker_genes_list = {k: v for k, v in marker_genes_list.items() if not any(isinstance(x, float) for x in v)}
+
+sc.pl.dotplot(adata,
+              marker_genes_list,
+              groupby=&#39;Leiden&#39;,
+              layer=&#39;log1p&#39;,
+              dendrogram=True,
+              swap_axes=False,
+              standard_scale=&#39;var&#39;,
+              cmap=&#39;Spectral_r&#39;)
+</pre></div>
+</div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Storing dendrogram info using `.uns[&#39;dendrogram_Leiden&#39;]`
+</pre></div></div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_rnaSeqPipelineTutorial_E18_mouse_45_1.png" class="no-scaled-link" src="../_images/notebooks_rnaSeqPipelineTutorial_E18_mouse_45_1.png" style="width: 1853px; height: 690px;" />
+</div>
+</div>
+<p>Another way to visualize the expression of the top three marker genes from each Leiden cluster is by using COSG’s plotMarkerDendrogram method to create a circular dendrogram.</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[32]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>cosg.plotMarkerDendrogram(
+     adata,
+     group_by=&quot;Leiden&quot;,
+     use_rep=&quot;X_svd&quot;,
+     calculate_dendrogram_on_cosg_scores=True,
+     top_n_genes=3,
+     radius_step=4.5,
+     cmap=&quot;Purples&quot;,
+     gene_label_offset=0.25,
+     gene_label_color=&quot;black&quot;,
+     linkage_method=&quot;ward&quot;,
+     distance_metric=&quot;correlation&quot;,
+     hierarchy_merge_scale=0,
+     collapse_scale=0.5,
+     add_cluster_node_for_single_node_cluster=True,
+     palette=None,
+     figure_size= (10, 10),
+     colorbar_width=0.01,
+     gene_color_min=0,
+     gene_color_max=None,
+     show_figure=True,
+)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_rnaSeqPipelineTutorial_E18_mouse_47_0.png" class="no-scaled-link" src="../_images/notebooks_rnaSeqPipelineTutorial_E18_mouse_47_0.png" style="width: 752px; height: 616px;" />
+</div>
+</div>
+</section>
+</section>
+<section id="Marker-genes-of-an-individual-cluster">
+<h2>Marker genes of an individual cluster<a class="headerlink" href="#Marker-genes-of-an-individual-cluster" title="Link to this heading">#</a></h2>
+<p>We can use dotplots and UMAPs to visualize the expression of the top marker genes in a selected cluster, which can be used to evaluate cluster quality.</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[33]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>marker_gene=pd.DataFrame(adata.uns[&#39;cosg&#39;][&#39;names&#39;])
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[34]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>cluster_check=&#39;11&#39;
+marker_gene[cluster_check].values
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[34]:
+</pre></div>
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+array([&#39;Gm56756&#39;, &#39;Gm31621&#39;, &#39;Cntnap5c&#39;, &#39;Dlgap2&#39;, &#39;Gm13986&#39;, &#39;Dpp10&#39;,
+       &#39;Nxph1&#39;, &#39;4930555F03Rik&#39;, &#39;Gm2516&#39;, &#39;Gm45323&#39;, &#39;Epb41l4a&#39;, &#39;Chrm3&#39;,
+       &#39;Gm45341&#39;, &#39;Syndig1&#39;, &#39;Cntnap3&#39;, &#39;Kcnmb2&#39;, &#39;Ackr3&#39;, &#39;Sntg2&#39;, &#39;Mkx&#39;,
+       &#39;Cacng3&#39;, &#39;Nxph2&#39;, &#39;Gria4&#39;, &#39;Rbms3&#39;, &#39;Gria1&#39;, &#39;Nell1&#39;, &#39;Erbb4&#39;,
+       &#39;Tox2&#39;, &#39;Ror2&#39;, &#39;Greb1l&#39;, &#39;Neb&#39;, &#39;Neto1&#39;, &#39;Vat1l&#39;, &#39;C130073E24Rik&#39;,
+       &#39;Ptprt&#39;, &#39;Cntnap4&#39;, &#39;Kcns3&#39;, &#39;Amph&#39;, &#39;Maf&#39;, &#39;Dgkg&#39;, &#39;Gm47664&#39;,
+       &#39;Dpp6&#39;, &#39;Adamtsl1&#39;, &#39;Iqsec1&#39;, &#39;Fam135b&#39;, &#39;Dlx1as&#39;, &#39;Kcnc2&#39;, &#39;Lhx6&#39;,
+       &#39;Grm5&#39;, &#39;Gm38505&#39;, &#39;Dlgap1&#39;, &#39;Tafa5&#39;, &#39;Gabrg3&#39;, &#39;Rph3a&#39;, &#39;Pde4dip&#39;,
+       &#39;Edaradd&#39;, &#39;Gm20754&#39;, &#39;Fsip1&#39;, &#39;4930415C11Rik&#39;, &#39;4930509J09Rik&#39;,
+       &#39;Efcab6&#39;, &#39;Fgd3&#39;, &#39;Spats2l&#39;, &#39;Cdk14&#39;, &#39;Ptchd4&#39;, &#39;Ryr2&#39;, &#39;Gm14204&#39;,
+       &#39;Lhfpl3&#39;, &#39;Csrnp3&#39;, &#39;Sox1ot&#39;, &#39;Elfn1&#39;, &#39;Shisa6&#39;, &#39;Ripor2&#39;, &#39;Nrxn3&#39;,
+       &#39;Syt1&#39;, &#39;Rps6ka5&#39;, &#39;Grik1&#39;, &#39;Sox2ot&#39;, &#39;Gm26691&#39;, &#39;Xkr4&#39;, &#39;Tgfb3&#39;,
+       &#39;A330076H08Rik&#39;, &#39;Brinp3&#39;, &#39;Cbfa2t3&#39;, &#39;Fgf12&#39;, &#39;Bend4&#39;, &#39;Cdr1os&#39;,
+       &#39;Elmo1&#39;, &#39;Npy&#39;, &#39;Zfp536&#39;, &#39;Prickle2&#39;, &#39;Slc6a1&#39;, &#39;Cacnb4&#39;, &#39;Grip1&#39;,
+       &#39;Pde2a&#39;, &#39;Gm19938&#39;, &#39;Gad1os&#39;, &#39;Tbc1d9&#39;, &#39;Galnt13&#39;, &#39;Brinp1&#39;,
+       &#39;Kcnip1&#39;], dtype=object)
+</pre></div></div>
+</div>
+<p>The dot plot below displays the expression of the top marker genes from cluster 8 across all clusters. For cluster 8 to be considered high quality, its top marker genes should be primarily specific to cluster 8, showing little to no expression in other clusters.</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[35]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.dotplot(adata,
+              marker_gene[cluster_check].values[:50],
+              groupby=&#39;Leiden&#39;,
+              dendrogram=False,
+              swap_axes=True,
+              standard_scale=&#39;var&#39;,
+              cmap=&#39;Spectral_r&#39;)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_rnaSeqPipelineTutorial_E18_mouse_52_0.png" class="no-scaled-link" src="../_images/notebooks_rnaSeqPipelineTutorial_E18_mouse_52_0.png" style="width: 774px; height: 1163px;" />
+</div>
+</div>
+<p>We can visualize the expression of the top 12 genes from cluster 8 on UMAPs to assess whether their expression is specific to the cluster 8 region. This involves comparing the location of cluster 8 on the Leiden cluster UMAP with the gene expression UMAPs. In a high-quality cluster, marker gene expression should be predominantly localized to the cluster 8 area.</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[36]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(adata,
+           color=marker_gene[cluster_check][:12],
+           palette=piaso.pl.color.d_color1,
+           cmap=piaso.pl.color.c_color1,
+           layer=&#39;log1p&#39;,
+           legend_fontsize=12,
+           legend_fontoutline=2,
+           legend_loc=&#39;on data&#39;,
+           ncols=3,
+           size=30,
+           frameon=False)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_rnaSeqPipelineTutorial_E18_mouse_54_0.png" class="no-scaled-link" src="../_images/notebooks_rnaSeqPipelineTutorial_E18_mouse_54_0.png" style="width: 941px; height: 1124px;" />
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[37]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(adata,
+           color=[&#39;Leiden&#39;],
+           palette=piaso.pl.color.d_color1,
+           cmap=piaso.pl.color.c_color1,
+           legend_fontsize=12,
+           legend_fontoutline=2,
+           legend_loc=&#39;on data&#39;,
+           ncols=1,
+           size=10,
+           frameon=False)
+</pre></div>
+</div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+WARNING: Length of palette colors is smaller than the number of categories (palette length: 19, categories length: 24. Some categories will have the same color.
+</pre></div></div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_rnaSeqPipelineTutorial_E18_mouse_55_1.png" class="no-scaled-link" src="../_images/notebooks_rnaSeqPipelineTutorial_E18_mouse_55_1.png" style="width: 265px; height: 277px;" />
+</div>
+</div>
+<p>This pipeline is still in development. The next steps include using a reference dataset to annotate cell types with PIASO’s predictCellTypesByGDR, followed by multiple iterations of low-quality cluster removal and re-clustering until well-defined clusters are obtained.</p>
+</section>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#Load-the-data">Load the data</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#Doublet-prediction">Doublet prediction</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#Normalization">Normalization</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#INFOG-normalization">INFOG normalization</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#SVD-dimensionality-reduction-and-visualization">SVD dimensionality reduction and visualization</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#Leiden-clustering">Leiden clustering</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#Identify-marker-genes-with-COSG">Identify marker genes with COSG</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#Marker-genes-of-an-individual-cluster">Marker genes of an individual cluster</a></li>
+</ul>
+  </nav></div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf"></script>
+<script defer src="../_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2025, Min Dai.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 7.3.7.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  <!-- # L10n: Setting the PST URL as an argument as this does not need to be localized -->
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.16.1.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

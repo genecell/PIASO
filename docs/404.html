@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Page Not Found - PIASO</title>
+    <meta name="robots" content="noindex">
+    <meta http-equiv="refresh" content="8;url=index.html">
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    
+    <style>
+        :root {
+            --bg-primary: #FAF9F7;
+            --bg-secondary: #F5F3F0;
+            --bg-card: #FFFFFF;
+            --text-primary: #1a1a1a;
+            --text-secondary: #5c5c5c;
+            --text-muted: #8c8c8c;
+            --accent-primary: #2E6BB2;
+            --border-color: rgba(0, 0, 0, 0.08);
+            --border-color-strong: rgba(0, 0, 0, 0.12);
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { height: 100%; }
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            display: flex; flex-direction: column; line-height: 1.6;
+        }
+        .navbar {
+            padding: 0.75rem 2rem;
+            background: rgba(250, 249, 247, 0.85);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border-color);
+        }
+        .nav-container {
+            max-width: 1400px; margin: 0 auto;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .nav-logo { display: flex; align-items: center; text-decoration: none; }
+        .nav-logo-img { height: 36px; width: auto; }
+        .nav-links { display: flex; align-items: center; gap: 2rem; }
+        .nav-link {
+            color: var(--text-secondary); text-decoration: none;
+            font-size: 0.9rem; font-weight: 500; transition: color 0.2s ease;
+        }
+        .nav-link:hover { color: var(--text-primary); }
+        .nav-actions { display: flex; align-items: center; gap: 0.75rem; }
+        .nav-icon-btn {
+            width: 36px; height: 36px; border-radius: 8px;
+            border: 1px solid var(--border-color); background: transparent;
+            color: var(--text-secondary);
+            display: flex; align-items: center; justify-content: center;
+            transition: all 0.2s ease; text-decoration: none; font-size: 1.1rem;
+        }
+        .nav-icon-btn:hover { border-color: var(--border-color-strong); color: var(--text-primary); background: var(--bg-card); }
+        .nav-btn-primary {
+            padding: 0.5rem 1rem; border-radius: 8px; border: none;
+            background: var(--accent-primary); color: white;
+            font-weight: 600; font-size: 0.85rem;
+            text-decoration: none; display: flex; align-items: center; gap: 0.4rem;
+        }
+        .nav-btn-primary:hover { background: #245a96; }
+        .error-container {
+            flex: 1; display: flex; align-items: center; justify-content: center; padding: 2rem;
+        }
+        .error-content { text-align: center; max-width: 500px; }
+        .error-icon { font-size: 5rem; color: var(--accent-primary); margin-bottom: 1.5rem; opacity: 0.8; }
+        .error-code {
+            font-family: 'Source Serif 4', Georgia, serif;
+            font-size: 6rem; font-weight: 600; line-height: 1; margin-bottom: 0.5rem;
+        }
+        .error-title {
+            font-family: 'Source Serif 4', Georgia, serif;
+            font-size: 1.75rem; font-weight: 400; margin-bottom: 1rem;
+        }
+        .error-message { font-size: 1rem; color: var(--text-secondary); margin-bottom: 2rem; line-height: 1.7; }
+        .error-contact { font-size: 0.9rem; color: var(--text-muted); margin-bottom: 2rem; }
+        .error-contact a { color: var(--accent-primary); text-decoration: none; }
+        .error-contact a:hover { text-decoration: underline; }
+        .countdown {
+            display: inline-flex; align-items: center; gap: 0.5rem;
+            padding: 0.75rem 1.25rem; background: var(--bg-secondary);
+            border-radius: 8px; font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 1.5rem;
+        }
+        .countdown-number { font-weight: 600; color: var(--accent-primary); min-width: 1.5rem; }
+        .error-buttons { display: flex; gap: 0.75rem; justify-content: center; flex-wrap: wrap; }
+        .btn {
+            padding: 0.75rem 1.5rem; border-radius: 8px; font-weight: 600; font-size: 0.9rem;
+            text-decoration: none; display: inline-flex; align-items: center; gap: 0.5rem;
+            transition: all 0.2s ease; cursor: pointer;
+        }
+        .btn-primary { background: var(--accent-primary); color: white; border: none; }
+        .btn-primary:hover { background: #245a96; transform: translateY(-1px); }
+        .btn-secondary { background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border-color-strong); }
+        .btn-secondary:hover { border-color: var(--text-muted); }
+        .footer {
+            padding: 1.5rem 2rem; background: var(--bg-secondary);
+            border-top: 1px solid var(--border-color); text-align: center;
+        }
+        .footer-text { font-size: 0.85rem; color: var(--text-muted); }
+        .footer-text a { color: var(--accent-primary); text-decoration: none; }
+        .footer-text a:hover { text-decoration: underline; }
+        @media (max-width: 768px) {
+            .nav-links { display: none; }
+            .error-code { font-size: 4rem; }
+            .error-title { font-size: 1.5rem; }
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="index.html" class="nav-logo">
+                <img src="_static/PIASO_logo.png" alt="PIASO" class="nav-logo-img">
+            </a>
+            <div class="nav-links">
+                <a href="installation.html" class="nav-link">Installation</a>
+                <a href="tutorials.html" class="nav-link">Tutorials</a>
+                <a href="modules.html" class="nav-link">API</a>
+                <a href="about.html" class="nav-link">About</a>
+            </div>
+            <div class="nav-actions">
+                <a href="https://github.com/genecell/PIASO" target="_blank" rel="noopener" class="nav-icon-btn" title="GitHub">
+                    <i class="fa-brands fa-github"></i>
+                </a>
+                <a href="installation.html" class="nav-btn-primary">
+                    Get Started <i class="fa-solid fa-arrow-right"></i>
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="error-container">
+        <div class="error-content">
+            <div class="error-icon"><i class="fa-solid fa-microscope"></i></div>
+            <div class="error-code">404</div>
+            <h1 class="error-title">Page Not Found</h1>
+            <p class="error-message">
+                The page you're looking for doesn't exist or has been moved. This might be a tutorial or documentation page that's still being developed.
+            </p>
+            <p class="error-contact">
+                If you believe this is an error, please contact<br>
+                <strong>Min Dai</strong> at <a href="mailto:dai@broadinstitute.org">dai@broadinstitute.org</a>
+            </p>
+            <div class="countdown">
+                <i class="fa-solid fa-clock"></i>
+                Redirecting to homepage in <span class="countdown-number" id="countdown">8</span> seconds
+            </div>
+            <div class="error-buttons">
+                <a href="index.html" class="btn btn-primary">
+                    <i class="fa-solid fa-home"></i> Go to Homepage
+                </a>
+                <a href="tutorials.html" class="btn btn-secondary">
+                    <i class="fa-solid fa-book"></i> View Tutorials
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <footer class="footer">
+        <p class="footer-text">
+            PIASO is developed by the <a href="https://fishelllab.hms.harvard.edu/" target="_blank" rel="noopener">Fishell Laboratory</a> at Harvard Medical School and Broad Institute.
+        </p>
+    </footer>
+
+    <script

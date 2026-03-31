@@ -1,0 +1,1353 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Running GDR on mouse pancreatic endocrinogenesis data &#8212; PIASO 0.1.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../_static/styles/theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+<link href="../_static/styles/pydata-sphinx-theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=362ab14a" />
+    <link rel="stylesheet" type="text/css" href="../_static/nbsphinx-code-cells.css?v=2aa19091" />
+    <link rel="stylesheet" type="text/css" href="../_static/custom.css?v=0330b353" />
+  
+  <!-- So that users can add custom icons -->
+  <script src="../_static/scripts/fontawesome.js?digest=8878045cc6db502f8baf"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf" />
+<link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf" />
+
+    <script src="../_static/documentation_options.js?v=01f34227"></script>
+    <script src="../_static/doctools.js?v=9a2dae69"></script>
+    <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+    <script>window.MathJax = {"tex": {"inlineMath": [["$", "$"], ["\\(", "\\)"]], "processEscapes": true}, "options": {"ignoreHtmlClass": "tex2jax_ignore|mathjax_ignore|document", "processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+    <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'notebooks/PIASO_GDR_on_mousePancreaticEndocrinogenesis';</script>
+    <script src="../_static/sidebar_toggle.js?v=3b053ec6"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Pre-processing CellRanger outputs (single sample, Human PBMCs)" href="scRNAseqProcessingTutorial_SAN2.html" />
+    <link rel="prev" title="Running GDR on MNIST image data" href="PIASO_GDR_on_MNIST.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="" />
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class=" navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../_static/PIASO_logo.png" class="logo__image only-light" alt="PIASO 0.1.0 documentation - Home"/>
+    <img src="../_static/PIASO_logo.png" class="logo__image only-dark pst-js-only" alt="PIASO 0.1.0 documentation - Home"/>
+  
+  
+</a></div>
+    
+  </div>
+  
+  <div class=" navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../installation.html">
+    Installation
+  </a>
+</li>
+
+
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="../tutorials.html">
+    Tutorials
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../modules.html">
+    API
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../references.html">
+    References
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../releaseNotes.html">
+    Release notes
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/genecell/PIASO" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+    </div>
+  
+
+  
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../installation.html">
+    Installation
+  </a>
+</li>
+
+
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="../tutorials.html">
+    Tutorials
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../modules.html">
+    API
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../references.html">
+    References
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../releaseNotes.html">
+    Release notes
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/genecell/PIASO" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+<h3><a href="../index.html">Table of Contents</a></h3>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../tutorials.html">Tutorials</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../modules.html">API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../references.html">References</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../releaseNotes.html">Release notes</a></li>
+</ul>
+</div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
+  </div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../tutorials.html" class="nav-link">Tutorials</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Running GDR on mouse pancreatic endocrinogenesis data</span></li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section id="Running-GDR-on-mouse-pancreatic-endocrinogenesis-data">
+<h1>Running GDR on mouse pancreatic endocrinogenesis data<a class="headerlink" href="#Running-GDR-on-mouse-pancreatic-endocrinogenesis-data" title="Link to this heading">#</a></h1>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[1]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>import numpy as np
+import pandas as pd
+import scanpy as sc
+sc.set_figure_params(dpi=80,dpi_save=300, color_map=&#39;viridis&#39;,facecolor=&#39;white&#39;)
+from matplotlib import rcParams
+# To modify the default figure size, use rcParams.
+rcParams[&#39;figure.figsize&#39;] = 4, 4
+rcParams[&#39;font.sans-serif&#39;] = &quot;Arial&quot;
+rcParams[&#39;font.family&#39;] = &quot;Arial&quot;
+sc.settings.verbosity = 3
+sc.logging.print_header()
+</pre></div>
+</div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+/tmp/ipykernel_3801756/1353975569.py:11: RuntimeWarning: Failed to import dependencies for application/vnd.jupyter.widget-view+json representation. (ModuleNotFoundError: No module named &#39;ipywidgets&#39;)
+  sc.logging.print_header()
+</pre></div></div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[1]:
+</pre></div>
+</div>
+<div class="output_area rendered_html docutils container">
+<table class=table>
+            <thead style="position: sticky; top: 0; background-color: var(--jp-layout-color0, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));">
+        <tr><th>Component</th><th>Info</th></tr>
+    </thead>
+    <tbody>
+        <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>Python</td><td>3.10.19 (main, Oct 21 2025, 16:43:05) [GCC 11.2.0]</td></tr>
+        <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>OS</td><td>Linux-5.14.0-611.13.1.el9_7.x86_64-x86_64-with-glibc2.34</td></tr>
+        <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>CPU</td><td>96 logical CPU cores, x86_64</td></tr>
+        <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>GPU</td><td>No GPU found</td></tr>
+        <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>Updated</td><td>2025-12-19 21:24</td></tr>
+    </tbody>
+        </table>
+
+        <details>
+        <summary>Dependencies</summary>
+                <div style="max-height: min(500px, 80vh); overflow-y: auto;">
+    <table class=table>
+            <thead style="position: sticky; top: 0; background-color: var(--jp-layout-color0, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));">
+    <tr><th>Dependency</th><th>Version</th></tr>
+</thead>
+<tbody>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>six</td><td>1.17.0</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>jedi</td><td>0.19.2</td></tr>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>kiwisolver</td><td>1.4.9</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>prompt_toolkit</td><td>3.0.52</td></tr>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>wcwidth</td><td>0.2.13</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>texttable</td><td>1.7.0</td></tr>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>llvmlite</td><td>0.46.0</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>joblib</td><td>1.5.3</td></tr>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>igraph</td><td>0.11.9</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>tqdm</td><td>4.67.1</td></tr>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>decorator</td><td>5.2.1</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>cycler</td><td>0.12.1</td></tr>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>setuptools</td><td>80.9.0</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>h5py</td><td>3.15.1</td></tr>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>ipython</td><td>8.30.0</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>leidenalg</td><td>0.10.2</td></tr>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>asttokens</td><td>3.0.0</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>parso</td><td>0.8.5</td></tr>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>torch</td><td>2.9.1 (2.9.1+cu128)</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>tornado</td><td>6.5.4</td></tr>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>psutil</td><td>7.0.0</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>pytz</td><td>2025.2</td></tr>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>python-dateutil</td><td>2.9.0.post0</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>numba</td><td>0.63.1</td></tr>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>stack_data</td><td>0.6.3</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>pure_eval</td><td>0.2.3</td></tr>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>debugpy</td><td>1.8.16</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>natsort</td><td>8.4.0</td></tr>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>pillow</td><td>12.0.0</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>executing</td><td>2.2.1</td></tr>
+</tbody>
+    </table>
+</div>
+    </details>
+        <details>
+            <summary>Copyable Markdown</summary>
+            <pre>| Dependency      | Version             |
+| --------------- | ------------------- |
+| six             | 1.17.0              |
+| jedi            | 0.19.2              |
+| kiwisolver      | 1.4.9               |
+| prompt_toolkit  | 3.0.52              |
+| wcwidth         | 0.2.13              |
+| texttable       | 1.7.0               |
+| llvmlite        | 0.46.0              |
+| joblib          | 1.5.3               |
+| igraph          | 0.11.9              |
+| tqdm            | 4.67.1              |
+| decorator       | 5.2.1               |
+| cycler          | 0.12.1              |
+| setuptools      | 80.9.0              |
+| h5py            | 3.15.1              |
+| ipython         | 8.30.0              |
+| leidenalg       | 0.10.2              |
+| asttokens       | 3.0.0               |
+| parso           | 0.8.5               |
+| torch           | 2.9.1 (2.9.1+cu128) |
+| tornado         | 6.5.4               |
+| psutil          | 7.0.0               |
+| pytz            | 2025.2              |
+| python-dateutil | 2.9.0.post0         |
+| numba           | 0.63.1              |
+| stack_data      | 0.6.3               |
+| pure_eval       | 0.2.3               |
+| debugpy         | 1.8.16              |
+| natsort         | 8.4.0               |
+| pillow          | 12.0.0              |
+| executing       | 2.2.1               |
+
+| Component | Info                                                     |
+| --------- | -------------------------------------------------------- |
+| Python    | 3.10.19 (main, Oct 21 2025, 16:43:05) [GCC 11.2.0]       |
+| OS        | Linux-5.14.0-611.13.1.el9_7.x86_64-x86_64-with-glibc2.34 |
+| CPU       | 96 logical CPU cores, x86_64                             |
+| GPU       | No GPU found                                             |
+| Updated   | 2025-12-19 21:24                                         |</pre>
+        </details></div>
+</div>
+<section id="Setting-paths">
+<h2>Setting paths<a class="headerlink" href="#Setting-paths" title="Link to this heading">#</a></h2>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[2]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>save_dir=&#39;/n/data1/hms/neurobio/fishell/mindai/Result/single-cell/Methods/PIASO/GDR&#39;
+sc.settings.figdir = save_dir
+prefix=&#39;GDR_test_mousePancreaticEndocrinogenesis&#39;
+import os
+if not os.path.exists(save_dir):
+    os.makedirs(save_dir)
+</pre></div>
+</div>
+</div>
+</section>
+<section id="Import-PIASO">
+<h2>Import PIASO<a class="headerlink" href="#Import-PIASO" title="Link to this heading">#</a></h2>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[3]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>import piaso
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+/n/data1/hms/neurobio/fishell/mindai/.conda/envs/nca/lib/python3.10/site-packages/tqdm/auto.py:21: TqdmWarning: IProgress not found. Please update jupyter and ipywidgets. See https://ipywidgets.readthedocs.io/en/stable/user_install.html
+  from .autonotebook import tqdm as notebook_tqdm
+</pre></div></div>
+</div>
+</section>
+<section id="Load-data">
+<h2>Load data<a class="headerlink" href="#Load-data" title="Link to this heading">#</a></h2>
+<p><a class="reference external" href="https://cell2fate.readthedocs.io/en/latest/notebooks/publication_figures/cell2fate_PancreasWithCC.html">https://cell2fate.readthedocs.io/en/latest/notebooks/publication_figures/cell2fate_PancreasWithCC.html</a></p>
+<p>The orginal publication for this dataset: &gt; Aimée Bastidas-Ponce, Sophie Tritschler, Leander Dony, Katharina Scheibner, Marta Tarquis-Medina, Ciro Salinno, Silvia Schirge, Ingo Burtscher, Anika Böttcher, Fabian J. Theis, Heiko Lickert, Mostafa Bakhti, Allon Klein, Barbara Treutlein; Comprehensive single cell mRNA profiling reveals a detailed roadmap for pancreatic endocrinogenesis. Development 15 June 2019; 146 (12): dev173849. doi: <a class="reference external" href="https://doi.org/10.1242/dev.173849">https://doi.org/10.1242/dev.173849</a></p>
+<p><a class="reference external" href="https://scvelo.readthedocs.io/en/stable/scvelo.datasets.pancreas.html">Brief descriptions about this dataset</a>, which is widely used as an example dataset for RNA velocity analysis: &gt;Pancreatic epithelial and Ngn3-Venus fusion (NVF) cells during secondary transition with transcriptome profiles sampled from embryonic day 15.5.</p>
+<blockquote>
+<div><p>Endocrine cells are derived from endocrine progenitors located in the pancreatic epithelium. Endocrine commitment terminates in four major fates: glucagon- producing α-cells, insulin-producing β-cells, somatostatin-producing δ-cells and ghrelin-producing ε-cells.</p>
+</div></blockquote>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[4]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>data_name = &#39;Pancreas_with_cc&#39;
+os.system(&#39;cd &#39; + save_dir + &#39; &amp;&amp; wget -q https://cell2fate.cog.sanger.ac.uk/&#39; + data_name + &#39;/&#39; + data_name + &#39;_anndata.h5ad&#39;)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[4]:
+</pre></div>
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+0
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[5]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata=sc.read(save_dir+&#39;/Pancreas_with_cc_anndata.h5ad&#39;)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+/n/data1/hms/neurobio/fishell/mindai/.conda/envs/nca/lib/python3.10/site-packages/anndata/compat/__init__.py:371: FutureWarning: Moving element from .uns[&#39;neighbors&#39;][&#39;distances&#39;] to .obsp[&#39;distances&#39;].
+
+This is where adjacency matrices should go now.
+  warn(
+/n/data1/hms/neurobio/fishell/mindai/.conda/envs/nca/lib/python3.10/site-packages/anndata/compat/__init__.py:371: FutureWarning: Moving element from .uns[&#39;neighbors&#39;][&#39;connectivities&#39;] to .obsp[&#39;connectivities&#39;].
+
+This is where adjacency matrices should go now.
+  warn(
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[6]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata.X.data
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[6]:
+</pre></div>
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+array([ 2.,  2., 14., ...,  2.,  8.,  2.], shape=(9298890,), dtype=float32)
+</pre></div></div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[7]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata.layers[&#39;raw&#39;]=adata.layers[&#39;spliced&#39;]+adata.layers[&#39;unspliced&#39;].copy()
+</pre></div>
+</div>
+</div>
+</section>
+<section id="Normalization">
+<h2>Normalization<a class="headerlink" href="#Normalization" title="Link to this heading">#</a></h2>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[8]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pp.normalize_total(adata, target_sum=1e4)
+sc.pp.log1p(adata)
+adata.layers[&#39;log1p&#39;]=adata.X.copy()
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+normalizing counts per cell
+    finished (0:00:00)
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[9]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[9]:
+</pre></div>
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+AnnData object with n_obs × n_vars = 3696 × 27998
+    obs: &#39;clusters_coarse&#39;, &#39;clusters&#39;, &#39;S_score&#39;, &#39;G2M_score&#39;
+    var: &#39;highly_variable_genes&#39;
+    uns: &#39;clusters_coarse_colors&#39;, &#39;clusters_colors&#39;, &#39;day_colors&#39;, &#39;neighbors&#39;, &#39;pca&#39;, &#39;log1p&#39;
+    obsm: &#39;X_pca&#39;, &#39;X_umap&#39;
+    layers: &#39;spliced&#39;, &#39;unspliced&#39;, &#39;raw&#39;, &#39;log1p&#39;
+    obsp: &#39;distances&#39;, &#39;connectivities&#39;
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[10]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(adata,
+           color=[&#39;clusters&#39;],
+           palette=piaso.pl.color.d_color4,
+           cmap=piaso.pl.color.c_color1,
+           ncols=3,
+           size=10,
+           frameon=True)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_PIASO_GDR_on_mousePancreaticEndocrinogenesis_16_0.png" class="no-scaled-link" src="../_images/notebooks_PIASO_GDR_on_mousePancreaticEndocrinogenesis_16_0.png" style="width: 406px; height: 296px;" />
+</div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[11]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata.obs[&#39;CellTypes&#39;]=adata.obs[&#39;clusters&#39;].copy()
+</pre></div>
+</div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[12]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata.obsm[&#39;X_umap_author&#39;]=adata.obsm[&#39;X_umap&#39;].copy()
+</pre></div>
+</div>
+</div>
+</section>
+<section id="Run-GDR">
+<h2>Run GDR<a class="headerlink" href="#Run-GDR" title="Link to this heading">#</a></h2>
+<p>The 2D visualization of cells is important for the RNA velocity analysis and cell type diversification analayis in developmental datasets.</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[13]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>%%time
+piaso.tl.infog(adata,
+               layer=&#39;raw&#39;,
+               n_top_genes=3000,)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+The normalized data is saved as `infog` in `adata.layers`.
+The highly variable genes are saved as `highly_variable` in `adata.var`.
+Finished INFOG normalization.
+CPU times: user 587 ms, sys: 184 ms, total: 771 ms
+Wall time: 773 ms
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[14]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>%%time
+piaso.tl.runGDRParallel(adata,
+                        # batch_key=&#39;Sample&#39;,
+                        groupby=None,
+                        n_gene=20,
+                        mu=10,
+                        resolution=2.0,
+                        layer=&#39;infog&#39;,
+                        infog_layer=&#39;raw&#39;,
+                        score_layer=&#39;infog&#39;,
+                        scoring_method=&#39;piaso&#39;,
+                        use_highly_variable=True,
+                        n_highly_variable_genes=3000,
+                        n_svd_dims=30,
+                        key_added=&#39;X_gdr&#39;,
+                        max_workers=32,
+                        calculate_score_multiBatch=False,
+                        verbosity=0)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+The cell embeddings calculated by GDR were saved as `X_gdr` in adata.obsm.
+CPU times: user 9.92 s, sys: 433 ms, total: 10.4 s
+Wall time: 36.7 s
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[15]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>%%time
+sc.pp.neighbors(adata,
+                use_rep=&#39;X_gdr&#39;,
+               n_neighbors=15,random_state=10,knn=True,
+                method=&quot;umap&quot;)
+
+sc.tl.umap(adata)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+computing neighbors
+    finished: added to `.uns[&#39;neighbors&#39;]`
+    `.obsp[&#39;distances&#39;]`, distances for each pair of neighbors
+    `.obsp[&#39;connectivities&#39;]`, weighted adjacency matrix (0:00:00)
+computing UMAP
+    finished: added
+    &#39;X_umap&#39;, UMAP coordinates (adata.obsm)
+    &#39;umap&#39;, UMAP parameters (adata.uns) (0:00:04)
+CPU times: user 6.47 s, sys: 7.21 ms, total: 6.48 s
+Wall time: 4.74 s
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[16]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.embedding(
+    adata,
+    basis=&#39;X_umap&#39;,
+    color=[&#39;CellTypes&#39;],
+    palette=piaso.pl.color.d_color4,
+    cmap=piaso.pl.color.c_color1,
+    ncols=3,
+    size=10,
+    frameon=True
+)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_PIASO_GDR_on_mousePancreaticEndocrinogenesis_24_0.png" class="no-scaled-link" src="../_images/notebooks_PIASO_GDR_on_mousePancreaticEndocrinogenesis_24_0.png" style="width: 406px; height: 296px;" />
+</div>
+</div>
+<p>The UMAP plots based on GDR is slightly different from the original UMAP:</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[17]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.embedding(
+    adata,
+    basis=&#39;X_umap_author&#39;,
+    color=[&#39;CellTypes&#39;],
+    palette=piaso.pl.color.d_color4,
+    cmap=piaso.pl.color.c_color1,
+    ncols=3,
+    size=10,
+    frameon=True
+)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_PIASO_GDR_on_mousePancreaticEndocrinogenesis_26_0.png" class="no-scaled-link" src="../_images/notebooks_PIASO_GDR_on_mousePancreaticEndocrinogenesis_26_0.png" style="width: 406px; height: 296px;" />
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[18]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.embedding(
+    adata,
+    basis=&#39;X_umap&#39;,
+    color=[&#39;Mafb&#39;, &#39;Slc38a5&#39;, &#39;Nfib&#39;, &#39;Meis2&#39;, &#39;Sst&#39;, &#39;Npy&#39;],
+    layer=&#39;log1p&#39;,
+    palette=piaso.pl.color.d_color4,
+    cmap=piaso.pl.color.c_color1,
+    ncols=6,
+    # size=60,
+    frameon=False
+)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_PIASO_GDR_on_mousePancreaticEndocrinogenesis_27_0.png" class="no-scaled-link" src="../_images/notebooks_PIASO_GDR_on_mousePancreaticEndocrinogenesis_27_0.png" style="width: 1870px; height: 289px;" />
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[19]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.embedding(
+    adata,
+    basis=&#39;X_umap&#39;,
+    color=[&#39;CellTypes&#39;],
+    palette=piaso.pl.color.d_color4,
+    cmap=piaso.pl.color.c_color1,
+    ncols=1,
+    size=10,
+    frameon=False
+)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_PIASO_GDR_on_mousePancreaticEndocrinogenesis_28_0.png" class="no-scaled-link" src="../_images/notebooks_PIASO_GDR_on_mousePancreaticEndocrinogenesis_28_0.png" style="width: 387px; height: 277px;" />
+</div>
+</div>
+</section>
+<section id="Run-Clustering">
+<h2>Run Clustering<a class="headerlink" href="#Run-Clustering" title="Link to this heading">#</a></h2>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[20]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>%%time
+sc.tl.leiden(adata,resolution=2,key_added=&#39;Leiden&#39;)
+</pre></div>
+</div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+running Leiden clustering
+    finished: found 24 clusters and added
+    &#39;Leiden&#39;, the cluster labels (adata.obs, categorical) (0:00:00)
+CPU times: user 165 ms, sys: 2.06 ms, total: 167 ms
+Wall time: 166 ms
+</pre></div></div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+&lt;timed eval&gt;:1: FutureWarning: In the future, the default backend for leiden will be igraph instead of leidenalg.
+
+ To achieve the future defaults please pass: flavor=&#34;igraph&#34; and n_iterations=2.  directed must also be False to work with igraph&#39;s implementation.
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[21]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.embedding(
+    adata,
+    basis=&#39;X_umap&#39;,
+    color=[&#39;Leiden&#39;],
+    palette=piaso.pl.color.d_color4,
+    cmap=piaso.pl.color.c_color1,
+    ncols=3,
+    size=10,
+    frameon=True
+)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_PIASO_GDR_on_mousePancreaticEndocrinogenesis_31_0.png" class="no-scaled-link" src="../_images/notebooks_PIASO_GDR_on_mousePancreaticEndocrinogenesis_31_0.png" style="width: 389px; height: 296px;" />
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[22]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.umap(adata,
+           color=[&#39;Leiden&#39;],
+           palette=piaso.pl.color.d_color1,
+           cmap=piaso.pl.color.c_color1,
+           legend_fontsize=12,
+           legend_fontoutline=2,
+           legend_loc=&#39;on data&#39;,
+           ncols=1,
+           size=10,
+           frameon=False)
+</pre></div>
+</div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+WARNING: Length of palette colors is smaller than the number of categories (palette length: 19, categories length: 24. Some categories will have the same color.
+</pre></div></div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_PIASO_GDR_on_mousePancreaticEndocrinogenesis_32_1.png" class="no-scaled-link" src="../_images/notebooks_PIASO_GDR_on_mousePancreaticEndocrinogenesis_32_1.png" style="width: 265px; height: 277px;" />
+</div>
+</div>
+</section>
+<section id="Run-COSG">
+<h2>Run COSG<a class="headerlink" href="#Run-COSG" title="Link to this heading">#</a></h2>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[23]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>import cosg
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[24]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>%%time
+n_gene=30
+cosg.cosg(adata,
+          key_added=&#39;cosg&#39;,
+          use_raw=False,
+          layer=&#39;infog&#39;,
+          mu=100,
+          expressed_pct=0.1,
+          remove_lowly_expressed=True,
+          n_genes_user=100,
+          groupby=&#39;Leiden&#39;)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+CPU times: user 439 ms, sys: 51.9 ms, total: 491 ms
+Wall time: 492 ms
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[25]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.tl.dendrogram(adata,groupby=&#39;Leiden&#39;,use_rep=&#39;X_gdr&#39;)
+df_tmp=pd.DataFrame(adata.uns[&#39;cosg&#39;][&#39;names&#39;][:3,]).T
+df_tmp=df_tmp.reindex(adata.uns[&#39;dendrogram_&#39;+&#39;Leiden&#39;][&#39;categories_ordered&#39;])
+marker_genes_list={idx: list(row.values) for idx, row in df_tmp.iterrows()}
+marker_genes_list = {k: v for k, v in marker_genes_list.items() if not any(isinstance(x, float) for x in v)}
+
+sc.pl.dotplot(adata,
+              marker_genes_list,
+              groupby=&#39;Leiden&#39;,
+              layer=&#39;infog&#39;,
+              dendrogram=True,
+              swap_axes=False,
+              standard_scale=&#39;var&#39;,
+              cmap=&#39;Spectral_r&#39;)
+</pre></div>
+</div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Storing dendrogram info using `.uns[&#39;dendrogram_Leiden&#39;]`
+</pre></div></div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_PIASO_GDR_on_mousePancreaticEndocrinogenesis_36_1.png" class="no-scaled-link" src="../_images/notebooks_PIASO_GDR_on_mousePancreaticEndocrinogenesis_36_1.png" style="width: 1853px; height: 689px;" />
+</div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[26]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>marker_gene=pd.DataFrame(adata.uns[&#39;cosg&#39;][&#39;names&#39;])
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[27]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>cluster_check=&#39;21&#39;
+marker_gene[cluster_check].values
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[27]:
+</pre></div>
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+array([&#39;Arhgap22&#39;, &#39;Cdkn1a&#39;, &#39;Tox2&#39;, &#39;Tmem184c&#39;, &#39;Inhbb&#39;, &#39;St8sia2&#39;,
+       &#39;Rmst&#39;, &#39;Rgs17&#39;, &#39;Mboat4&#39;, &#39;Kcnh8&#39;, &#39;Zfpm2&#39;, &#39;Nefl&#39;, &#39;Nefm&#39;,
+       &#39;Fam107b&#39;, &#39;Nab2&#39;, &#39;Stxbp5l&#39;, &#39;Tspan12&#39;, &#39;Ctnna3&#39;, &#39;Gm609&#39;,
+       &#39;Cacna2d1&#39;, &#39;Mreg&#39;, &#39;Lancl3&#39;, &#39;Trp53cor1&#39;, &#39;Bambi&#39;,
+       &#39;6430573F11Rik&#39;, &#39;Trp53i13&#39;, &#39;Cacna1c&#39;, &#39;Cer1&#39;, &#39;Klhdc8a&#39;,
+       &#39;Mfhas1&#39;, &#39;Isl1&#39;, &#39;Lrrtm3&#39;, &#39;Sms&#39;, &#39;Tiparp&#39;, &#39;Spock2&#39;, &#39;Abhd15&#39;,
+       &#39;Lpcat3&#39;, &#39;Scin&#39;, &#39;Jam3&#39;, &#39;Irs4&#39;, &#39;Kcnb2&#39;, &#39;Celf3&#39;,
+       &#39;B630019K06Rik&#39;, &#39;Pla2g2f&#39;, &#39;Abca1&#39;, &#39;Rph3al&#39;, &#39;Fgf9&#39;, &#39;Igsf8&#39;,
+       &#39;Cck&#39;, &#39;Krt7&#39;, &#39;Gprc5b&#39;, &#39;Slc8a1&#39;, &#39;Prox1os&#39;, &#39;Fhl2&#39;, &#39;Nkx2-2&#39;,
+       &#39;Hacd1&#39;, &#39;Tox&#39;, &#39;Tm4sf4&#39;, &#39;Fitm1&#39;, &#39;Camk2n2&#39;, &#39;Kcnq5&#39;, &#39;Mfap4&#39;,
+       &#39;Tmem170&#39;, &#39;Cecr2&#39;, &#39;Dedd2&#39;, &#39;Sfxn2&#39;, &#39;St18&#39;, &#39;Pygl&#39;, &#39;Mid1&#39;,
+       &#39;A330009N23Rik&#39;, &#39;Olfml2b&#39;, &#39;Cd200&#39;, &#39;Ptpn3&#39;, &#39;Peg3&#39;, &#39;Pclo&#39;,
+       &#39;Tes&#39;, &#39;Ephb2&#39;, &#39;Bcar3&#39;, &#39;Gm13919&#39;, &#39;Fam151a&#39;, &#39;Nt5c2&#39;, &#39;Runx1t1&#39;,
+       &#39;Tox3&#39;, &#39;Dll3&#39;, &#39;Foxa2&#39;, &#39;E330009J07Rik&#39;, &#39;Gm26954&#39;,
+       &#39;1810008I18Rik&#39;, &#39;BC023829&#39;, &#39;N4bp3&#39;, &#39;Selm&#39;, &#39;Pdk3&#39;, &#39;Cldn23&#39;,
+       &#39;Rbfox3&#39;, &#39;Abr&#39;, &#39;Sytl5&#39;, &#39;Jund&#39;, &#39;Fam210b&#39;, &#39;Ell2&#39;, &#39;Gng4&#39;],
+      dtype=object)
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[28]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.embedding(
+    adata,
+    basis=&#39;X_umap&#39;,
+    layer=&#39;log1p&#39;,
+    color=marker_gene[cluster_check].values[:12],
+    palette=piaso.pl.color.d_color4,
+    cmap=piaso.pl.color.c_color1,
+    ncols=6,
+    # size=10,
+    frameon=False
+)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_PIASO_GDR_on_mousePancreaticEndocrinogenesis_39_0.png" class="no-scaled-link" src="../_images/notebooks_PIASO_GDR_on_mousePancreaticEndocrinogenesis_39_0.png" style="width: 1883px; height: 567px;" />
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[29]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>cluster_check=&#39;20&#39;
+marker_gene[cluster_check].values
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[29]:
+</pre></div>
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+array([&#39;Serpinb12&#39;, &#39;Tnfaip8l3&#39;, &#39;Plxna4&#39;, &#39;Slc4a10&#39;, &#39;Wif1&#39;, &#39;Dlg2&#39;,
+       &#39;Scn9a&#39;, &#39;Cntnap5b&#39;, &#39;Epha3&#39;, &#39;Ctnna2&#39;, &#39;Tmigd3&#39;, &#39;Hs6st3&#39;,
+       &#39;Pik3c2g&#39;, &#39;Inpp4b&#39;, &#39;Palld&#39;, &#39;Gm19590&#39;, &#39;Lrrc7&#39;, &#39;Sned1&#39;, &#39;Usp18&#39;,
+       &#39;Arx&#39;, &#39;Sez6l&#39;, &#39;Fam171b&#39;, &#39;Ptprm&#39;, &#39;Gm36975&#39;, &#39;Slc24a3&#39;, &#39;Prkg1&#39;,
+       &#39;BC048546&#39;, &#39;Gm2115&#39;, &#39;Entpd3&#39;, &#39;Fa2h&#39;, &#39;Cd55&#39;, &#39;Prss50&#39;, &#39;Aff2&#39;,
+       &#39;Ddc&#39;, &#39;Nell1&#39;, &#39;Sema3e&#39;, &#39;Serpinf2&#39;, &#39;Sdk1&#39;, &#39;A1cf&#39;, &#39;Suox&#39;,
+       &#39;Alcam&#39;, &#39;Gria3&#39;, &#39;C1galt1&#39;, &#39;Klb&#39;, &#39;Ocrl&#39;, &#39;Gpc4&#39;, &#39;AW551984&#39;,
+       &#39;Cyp4b1&#39;, &#39;Fxyd6&#39;, &#39;Rnf186&#39;, &#39;Gch1&#39;, &#39;Pcdh9&#39;, &#39;Zfp174&#39;, &#39;Mum1l1&#39;,
+       &#39;Rundc1&#39;, &#39;Kcnip4&#39;, &#39;Parm1&#39;, &#39;Ppp1r14c&#39;, &#39;Nup210&#39;, &#39;Oit1&#39;,
+       &#39;Smarca1&#39;, &#39;Cdh4&#39;, &#39;Serpinb1a&#39;, &#39;Gm43861&#39;, &#39;Pon2&#39;, &#39;Pam&#39;, &#39;Ikzf4&#39;,
+       &#39;Nr1h4&#39;, &#39;Cldn4&#39;, &#39;Fam213a&#39;, &#39;Ffar2&#39;, &#39;Drc1&#39;, &#39;Mapk15&#39;, &#39;Gm17484&#39;,
+       &#39;Gprasp2&#39;, &#39;Serpina10&#39;, &#39;Dnajc12&#39;, &#39;Fbxo32&#39;, &#39;Trim67&#39;, &#39;Gabrb3&#39;,
+       &#39;Ccdc184&#39;, &#39;Ankrd6&#39;, &#39;Mgst3&#39;, &#39;Ptbp3&#39;, &#39;A330017A19Rik&#39;, &#39;Gnai1&#39;,
+       &#39;Pax6&#39;, &#39;Hmgn3&#39;, &#39;AI467606&#39;, &#39;Gm12905&#39;, &#39;Sybu&#39;, &#39;Tmem163&#39;, &#39;Cd200&#39;,
+       &#39;Rundc3b&#39;, &#39;Glud1&#39;, &#39;Wnt4&#39;, &#39;Tmem117&#39;, &#39;Pdpr&#39;, &#39;Plag1&#39;, &#39;Anxa4&#39;],
+      dtype=object)
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[30]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.embedding(
+    adata,
+    basis=&#39;X_umap&#39;,
+    layer=&#39;log1p&#39;,
+    color=marker_gene[cluster_check].values[:12],
+    palette=piaso.pl.color.d_color4,
+    cmap=piaso.pl.color.c_color1,
+    ncols=6,
+    # size=10,
+    frameon=False
+)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_PIASO_GDR_on_mousePancreaticEndocrinogenesis_41_0.png" class="no-scaled-link" src="../_images/notebooks_PIASO_GDR_on_mousePancreaticEndocrinogenesis_41_0.png" style="width: 1883px; height: 567px;" />
+</div>
+</div>
+</section>
+<section id="Save-the-data">
+<h2>Save the data<a class="headerlink" href="#Save-the-data" title="Link to this heading">#</a></h2>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[31]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata.write(save_dir+&#39;/&#39;+prefix+&#39;_gdr.h5ad&#39;)
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[32]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>save_dir+&#39;/&#39;+prefix+&#39;_gdr.h5ad&#39;
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[32]:
+</pre></div>
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+&#39;/n/data1/hms/neurobio/fishell/mindai/Result/single-cell/Methods/PIASO/GDR/GDR_test_mousePancreaticEndocrinogenesis_gdr.h5ad&#39;
+</pre></div></div>
+</div>
+</section>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="PIASO_GDR_on_MNIST.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Running GDR on MNIST image data</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="scRNAseqProcessingTutorial_SAN2.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Pre-processing CellRanger outputs (single sample, Human PBMCs)</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#Setting-paths">Setting paths</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#Import-PIASO">Import PIASO</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#Load-data">Load data</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#Normalization">Normalization</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#Run-GDR">Run GDR</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#Run-Clustering">Run Clustering</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#Run-COSG">Run COSG</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#Save-the-data">Save the data</a></li>
+</ul>
+  </nav></div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf"></script>
+<script defer src="../_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2025, Min Dai.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 7.3.7.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  <!-- # L10n: Setting the PST URL as an argument as this does not need to be localized -->
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.16.1.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

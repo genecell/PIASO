@@ -1,0 +1,2438 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Running SCALAR on human cortex snRNA-seq data for ligand-receptor interaction analysis &#8212; PIASO 0.1.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../_static/styles/theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+<link href="../_static/styles/pydata-sphinx-theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=362ab14a" />
+    <link rel="stylesheet" type="text/css" href="../_static/nbsphinx-code-cells.css?v=2aa19091" />
+    <link rel="stylesheet" type="text/css" href="../_static/custom.css?v=0330b353" />
+  
+  <!-- So that users can add custom icons -->
+  <script src="../_static/scripts/fontawesome.js?digest=8878045cc6db502f8baf"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf" />
+<link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf" />
+
+    <script src="../_static/documentation_options.js?v=01f34227"></script>
+    <script src="../_static/doctools.js?v=9a2dae69"></script>
+    <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+    <script>window.MathJax = {"tex": {"inlineMath": [["$", "$"], ["\\(", "\\)"]], "processEscapes": true}, "options": {"ignoreHtmlClass": "tex2jax_ignore|mathjax_ignore|document", "processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+    <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'notebooks/67_SCALAR_tutorial_SEA-AD-Updated';</script>
+    <script src="../_static/sidebar_toggle.js?v=3b053ec6"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Finer clustering on selected cluster(s)" href="LeidenLocalTutorial.html" />
+    <link rel="prev" title="Python client and API for accessing PIASOmarkerDB" href="31_PIASO_PIASOmarkerDB_API_mouseCortex.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="" />
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class=" navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../_static/PIASO_logo.png" class="logo__image only-light" alt="PIASO 0.1.0 documentation - Home"/>
+    <img src="../_static/PIASO_logo.png" class="logo__image only-dark pst-js-only" alt="PIASO 0.1.0 documentation - Home"/>
+  
+  
+</a></div>
+    
+  </div>
+  
+  <div class=" navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../installation.html">
+    Installation
+  </a>
+</li>
+
+
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="../tutorials.html">
+    Tutorials
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../modules.html">
+    API
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../references.html">
+    References
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../releaseNotes.html">
+    Release notes
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/genecell/PIASO" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+    </div>
+  
+
+  
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../installation.html">
+    Installation
+  </a>
+</li>
+
+
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="../tutorials.html">
+    Tutorials
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../modules.html">
+    API
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../references.html">
+    References
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../releaseNotes.html">
+    Release notes
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/genecell/PIASO" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+<h3><a href="../index.html">Table of Contents</a></h3>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../tutorials.html">Tutorials</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../modules.html">API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../references.html">References</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../releaseNotes.html">Release notes</a></li>
+</ul>
+</div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
+  </div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../tutorials.html" class="nav-link">Tutorials</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Running SCALAR on human cortex snRNA-seq data for ligand-receptor interaction analysis</span></li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section id="Running-SCALAR-on-human-cortex-snRNA-seq-data-for-ligand-receptor-interaction-analysis">
+<h1>Running SCALAR on human cortex snRNA-seq data for ligand-receptor interaction analysis<a class="headerlink" href="#Running-SCALAR-on-human-cortex-snRNA-seq-data-for-ligand-receptor-interaction-analysis" title="Link to this heading">#</a></h1>
+<section id="Load-basic-settings">
+<h2>Load basic settings<a class="headerlink" href="#Load-basic-settings" title="Link to this heading">#</a></h2>
+<section id="Import-PIASO">
+<h3>Import PIASO<a class="headerlink" href="#Import-PIASO" title="Link to this heading">#</a></h3>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[1]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>import piaso
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+/n/data1/hms/neurobio/fishell/mindai/.conda/envs/nca/lib/python3.10/site-packages/tqdm/auto.py:21: TqdmWarning: IProgress not found. Please update jupyter and ipywidgets. See https://ipywidgets.readthedocs.io/en/stable/user_install.html
+  from .autonotebook import tqdm as notebook_tqdm
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[2]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>import numpy as np
+import pandas as pd
+import scanpy as sc
+sc.set_figure_params(dpi=80,dpi_save=300, color_map=&#39;viridis&#39;,facecolor=&#39;white&#39;)
+from matplotlib import rcParams
+# To modify the default figure size, use rcParams.
+rcParams[&#39;figure.figsize&#39;] = 4, 4
+rcParams[&#39;font.sans-serif&#39;] = &quot;Arial&quot;
+rcParams[&#39;font.family&#39;] = &quot;Arial&quot;
+sc.settings.verbosity = 3
+sc.logging.print_header()
+</pre></div>
+</div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+/tmp/ipykernel_4124333/1353975569.py:11: RuntimeWarning: Failed to import dependencies for application/vnd.jupyter.widget-view+json representation. (ModuleNotFoundError: No module named &#39;ipywidgets&#39;)
+  sc.logging.print_header()
+</pre></div></div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[2]:
+</pre></div>
+</div>
+<div class="output_area rendered_html docutils container">
+<table class=table>
+            <thead style="position: sticky; top: 0; background-color: var(--jp-layout-color0, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));">
+        <tr><th>Component</th><th>Info</th></tr>
+    </thead>
+    <tbody>
+        <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>Python</td><td>3.10.19 (main, Oct 21 2025, 16:43:05) [GCC 11.2.0]</td></tr>
+        <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>OS</td><td>Linux-5.14.0-570.23.1.el9_6.x86_64-x86_64-with-glibc2.34</td></tr>
+        <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>CPU</td><td>32 logical CPU cores, x86_64</td></tr>
+        <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>GPU</td><td>No GPU found</td></tr>
+        <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>Updated</td><td>2026-01-20 18:33</td></tr>
+    </tbody>
+        </table>
+
+        <details>
+        <summary>Dependencies</summary>
+                <div style="max-height: min(500px, 80vh); overflow-y: auto;">
+    <table class=table>
+            <thead style="position: sticky; top: 0; background-color: var(--jp-layout-color0, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));">
+    <tr><th>Dependency</th><th>Version</th></tr>
+</thead>
+<tbody>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>natsort</td><td>8.4.0</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>python-dateutil</td><td>2.9.0.post0</td></tr>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>tornado</td><td>6.5.4</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>llvmlite</td><td>0.46.0</td></tr>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>networkx</td><td>3.4.2</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>kiwisolver</td><td>1.4.9</td></tr>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>texttable</td><td>1.7.0</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>six</td><td>1.17.0</td></tr>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>h5py</td><td>3.15.1</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>setuptools</td><td>80.9.0</td></tr>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>prompt_toolkit</td><td>3.0.52</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>charset-normalizer</td><td>3.4.4</td></tr>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>patsy</td><td>1.0.2</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>pure_eval</td><td>0.2.3</td></tr>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>asttokens</td><td>3.0.0</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>cycler</td><td>0.12.1</td></tr>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>jedi</td><td>0.19.2</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>tqdm</td><td>4.67.1</td></tr>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>executing</td><td>2.2.1</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>joblib</td><td>1.5.3</td></tr>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>parso</td><td>0.8.5</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>igraph</td><td>0.11.9</td></tr>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>pytz</td><td>2025.2</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>torch</td><td>2.9.1 (2.9.1+cu128)</td></tr>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>leidenalg</td><td>0.10.2</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>numba</td><td>0.63.1</td></tr>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>decorator</td><td>5.2.1</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>statsmodels</td><td>0.14.6</td></tr>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>psutil</td><td>7.0.0</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>pillow</td><td>12.0.0</td></tr>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>debugpy</td><td>1.8.16</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>stack_data</td><td>0.6.3</td></tr>
+    <tr style="background-color: var(--jp-layout-color1, var(--vscode-editor-background, #f8f9fa)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>ipython</td><td>8.30.0</td></tr>
+    <tr style="background-color: var(--jp-layout-color2, var(--vscode-tree-tableOddRowsBackground, #f1f3f4)); color: var(--jp-ui-font-color1, var(--vscode-editor-foreground, #212529));"><td>wcwidth</td><td>0.2.13</td></tr>
+</tbody>
+    </table>
+</div>
+    </details>
+        <details>
+            <summary>Copyable Markdown</summary>
+            <pre>| Dependency         | Version             |
+| ------------------ | ------------------- |
+| natsort            | 8.4.0               |
+| python-dateutil    | 2.9.0.post0         |
+| tornado            | 6.5.4               |
+| llvmlite           | 0.46.0              |
+| networkx           | 3.4.2               |
+| kiwisolver         | 1.4.9               |
+| texttable          | 1.7.0               |
+| six                | 1.17.0              |
+| h5py               | 3.15.1              |
+| setuptools         | 80.9.0              |
+| prompt_toolkit     | 3.0.52              |
+| charset-normalizer | 3.4.4               |
+| patsy              | 1.0.2               |
+| pure_eval          | 0.2.3               |
+| asttokens          | 3.0.0               |
+| cycler             | 0.12.1              |
+| jedi               | 0.19.2              |
+| tqdm               | 4.67.1              |
+| executing          | 2.2.1               |
+| joblib             | 1.5.3               |
+| parso              | 0.8.5               |
+| igraph             | 0.11.9              |
+| pytz               | 2025.2              |
+| torch              | 2.9.1 (2.9.1+cu128) |
+| leidenalg          | 0.10.2              |
+| numba              | 0.63.1              |
+| decorator          | 5.2.1               |
+| statsmodels        | 0.14.6              |
+| psutil             | 7.0.0               |
+| pillow             | 12.0.0              |
+| debugpy            | 1.8.16              |
+| stack_data         | 0.6.3               |
+| ipython            | 8.30.0              |
+| wcwidth            | 0.2.13              |
+
+| Component | Info                                                     |
+| --------- | -------------------------------------------------------- |
+| Python    | 3.10.19 (main, Oct 21 2025, 16:43:05) [GCC 11.2.0]       |
+| OS        | Linux-5.14.0-570.23.1.el9_6.x86_64-x86_64-with-glibc2.34 |
+| CPU       | 32 logical CPU cores, x86_64                             |
+| GPU       | No GPU found                                             |
+| Updated   | 2026-01-20 18:33                                         |</pre>
+        </details></div>
+</div>
+</section>
+</section>
+<section id="Setting-paths">
+<h2>Setting paths<a class="headerlink" href="#Setting-paths" title="Link to this heading">#</a></h2>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[3]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>save_dir=&#39;/n/scratch/users/m/mid166/Result/single-cell/Methods/PIASO&#39;
+sc.settings.figdir = save_dir
+prefix=&#39;SEAAD_SCALAR_CCI_tutorial&#39;
+import os
+if not os.path.exists(save_dir):
+    os.makedirs(save_dir)
+
+sc.set_figure_params(dpi=80,dpi_save=300, color_map=&#39;viridis&#39;,facecolor=&#39;white&#39;)
+rcParams[&#39;figure.figsize&#39;] = 4, 4
+</pre></div>
+</div>
+</div>
+</section>
+<section id="Load-the-data">
+<h2>Load the data<a class="headerlink" href="#Load-the-data" title="Link to this heading">#</a></h2>
+<p>The 20k subsampled snRNA-seq data from Allen SEA-AD project is available in google drive: <a class="reference external" href="https://drive.google.com/file/d/1nH-CRaTQFxJ5pAVpy8_hUQn1nrIcakq2/view?usp=drive_link">https://drive.google.com/file/d/1nH-CRaTQFxJ5pAVpy8_hUQn1nrIcakq2/view?usp=drive_link</a>.</p>
+<p>The original data is available in <a class="reference external" href="https://portal.brain-map.org/explore/seattle-alzheimers-disease">https://portal.brain-map.org/explore/seattle-alzheimers-disease</a>.</p>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>mkdir -p /n/scratch/users/m/mid166/Result/single-cell/Enhancer/SEA-AD/
+cd /n/scratch/users/m/mid166/Result/single-cell/Enhancer/SEA-AD/
+gdrive files download 1nH-CRaTQFxJ5pAVpy8_hUQn1nrIcakq2
+</pre></div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[4]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata=sc.read(&#39;/n/scratch/users/m/mid166/Result/single-cell/Enhancer/SEA-AD/SEA-AD_RNA_MTG_subsample_excludeReference_20k_piaso.h5ad&#39;)
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[5]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[5]:
+</pre></div>
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+AnnData object with n_obs × n_vars = 20000 × 36601
+    obs: &#39;sample_id&#39;, &#39;Neurotypical reference&#39;, &#39;Donor ID&#39;, &#39;Organism&#39;, &#39;Brain Region&#39;, &#39;Sex&#39;, &#39;Gender&#39;, &#39;Age at Death&#39;, &#39;Race (choice=White)&#39;, &#39;Race (choice=Black/ African American)&#39;, &#39;Race (choice=Asian)&#39;, &#39;Race (choice=American Indian/ Alaska Native)&#39;, &#39;Race (choice=Native Hawaiian or Pacific Islander)&#39;, &#39;Race (choice=Unknown or unreported)&#39;, &#39;Race (choice=Other)&#39;, &#39;specify other race&#39;, &#39;Hispanic/Latino&#39;, &#39;Highest level of education&#39;, &#39;Years of education&#39;, &#39;PMI&#39;, &#39;Fresh Brain Weight&#39;, &#39;Brain pH&#39;, &#39;Overall AD neuropathological Change&#39;, &#39;Thal&#39;, &#39;Braak&#39;, &#39;CERAD score&#39;, &#39;Overall CAA Score&#39;, &#39;Highest Lewy Body Disease&#39;, &#39;Total Microinfarcts (not observed grossly)&#39;, &#39;Total microinfarcts in screening sections&#39;, &#39;Atherosclerosis&#39;, &#39;Arteriolosclerosis&#39;, &#39;LATE&#39;, &#39;Cognitive Status&#39;, &#39;Last CASI Score&#39;, &#39;Interval from last CASI in months&#39;, &#39;Last MMSE Score&#39;, &#39;Interval from last MMSE in months&#39;, &#39;Last MOCA Score&#39;, &#39;Interval from last MOCA in months&#39;, &#39;APOE Genotype&#39;, &#39;Primary Study Name&#39;, &#39;Secondary Study Name&#39;, &#39;NeuN positive fraction on FANS&#39;, &#39;RIN&#39;, &#39;cell_prep_type&#39;, &#39;facs_population_plan&#39;, &#39;rna_amplification&#39;, &#39;sample_name&#39;, &#39;sample_quantity_count&#39;, &#39;expc_cell_capture&#39;, &#39;method&#39;, &#39;pcr_cycles&#39;, &#39;percent_cdna_longer_than_400bp&#39;, &#39;rna_amplification_pass_fail&#39;, &#39;amplified_quantity_ng&#39;, &#39;load_name&#39;, &#39;library_prep&#39;, &#39;library_input_ng&#39;, &#39;r1_index&#39;, &#39;avg_size_bp&#39;, &#39;quantification_fmol&#39;, &#39;library_prep_pass_fail&#39;, &#39;exp_component_vendor_name&#39;, &#39;batch_vendor_name&#39;, &#39;experiment_component_failed&#39;, &#39;alignment&#39;, &#39;Genome&#39;, &#39;ar_id&#39;, &#39;bc&#39;, &#39;GEX_Estimated_number_of_cells&#39;, &#39;GEX_number_of_reads&#39;, &#39;GEX_sequencing_saturation&#39;, &#39;GEX_Mean_raw_reads_per_cell&#39;, &#39;GEX_Q30_bases_in_barcode&#39;, &#39;GEX_Q30_bases_in_read_2&#39;, &#39;GEX_Q30_bases_in_UMI&#39;, &#39;GEX_Percent_duplicates&#39;, &#39;GEX_Q30_bases_in_sample_index_i1&#39;, &#39;GEX_Q30_bases_in_sample_index_i2&#39;, &#39;GEX_Reads_with_TSO&#39;, &#39;GEX_Sequenced_read_pairs&#39;, &#39;GEX_Valid_UMIs&#39;, &#39;GEX_Valid_barcodes&#39;, &#39;GEX_Reads_mapped_to_genome&#39;, &#39;GEX_Reads_mapped_confidently_to_genome&#39;, &#39;GEX_Reads_mapped_confidently_to_intergenic_regions&#39;, &#39;GEX_Reads_mapped_confidently_to_intronic_regions&#39;, &#39;GEX_Reads_mapped_confidently_to_exonic_regions&#39;, &#39;GEX_Reads_mapped_confidently_to_transcriptome&#39;, &#39;GEX_Reads_mapped_antisense_to_gene&#39;, &#39;GEX_Fraction_of_transcriptomic_reads_in_cells&#39;, &#39;GEX_Total_genes_detected&#39;, &#39;GEX_Median_UMI_counts_per_cell&#39;, &#39;GEX_Median_genes_per_cell&#39;, &#39;Multiome_Feature_linkages_detected&#39;, &#39;Multiome_Linked_genes&#39;, &#39;Multiome_Linked_peaks&#39;, &#39;ATAC_Confidently_mapped_read_pairs&#39;, &#39;ATAC_Fraction_of_genome_in_peaks&#39;, &#39;ATAC_Fraction_of_high_quality_fragments_in_cells&#39;, &#39;ATAC_Fraction_of_high_quality_fragments_overlapping_TSS&#39;, &#39;ATAC_Fraction_of_high_quality_fragments_overlapping_peaks&#39;, &#39;ATAC_Fraction_of_transposition_events_in_peaks_in_cells&#39;, &#39;ATAC_Mean_raw_read_pairs_per_cell&#39;, &#39;ATAC_Median_high_quality_fragments_per_cell&#39;, &#39;ATAC_Non-nuclear_read_pairs&#39;, &#39;ATAC_Number_of_peaks&#39;, &#39;ATAC_Percent_duplicates&#39;, &#39;ATAC_Q30_bases_in_barcode&#39;, &#39;ATAC_Q30_bases_in_read_1&#39;, &#39;ATAC_Q30_bases_in_read_2&#39;, &#39;ATAC_Q30_bases_in_sample_index_i1&#39;, &#39;ATAC_Sequenced_read_pairs&#39;, &#39;ATAC_TSS_enrichment_score&#39;, &#39;ATAC_Unmapped_read_pairs&#39;, &#39;ATAC_Valid_barcodes&#39;, &#39;Number of mapped reads&#39;, &#39;Number of unmapped reads&#39;, &#39;Number of multimapped reads&#39;, &#39;Number of reads&#39;, &#39;Number of UMIs&#39;, &#39;Genes detected&#39;, &#39;Doublet score&#39;, &#39;Fraction mitochondrial UMIs&#39;, &#39;Used in analysis&#39;, &#39;Class confidence&#39;, &#39;Class&#39;, &#39;Subclass confidence&#39;, &#39;Subclass&#39;, &#39;Supertype confidence&#39;, &#39;Supertype (non-expanded)&#39;, &#39;Supertype&#39;, &#39;Continuous Pseudo-progression Score&#39;, &#39;Severely Affected Donor&#39;
+    var: &#39;gene_ids&#39;
+    uns: &#39;APOE4 Status_colors&#39;, &#39;Braak_colors&#39;, &#39;CERAD score_colors&#39;, &#39;Cognitive Status_colors&#39;, &#39;Great Apes Metadata&#39;, &#39;Highest Lewy Body Disease_colors&#39;, &#39;LATE_colors&#39;, &#39;Overall AD neuropathological Change_colors&#39;, &#39;Sex_colors&#39;, &#39;Subclass_colors&#39;, &#39;Supertype_colors&#39;, &#39;Thal_colors&#39;, &#39;UW Clinical Metadata&#39;, &#39;X_normalization&#39;, &#39;batch_condition&#39;, &#39;default_embedding&#39;, &#39;neighbors&#39;, &#39;title&#39;, &#39;umap&#39;
+    obsm: &#39;X_scVI&#39;, &#39;X_umap&#39;
+    layers: &#39;UMIs&#39;
+    obsp: &#39;connectivities&#39;, &#39;distances&#39;
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[6]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.embedding(adata,
+            basis=&#39;X_umap&#39;,
+           color=[&#39;Subclass&#39;],
+           palette=piaso.pl.color.d_color3,
+           legend_fontoutline=2,
+           legend_fontweight=5,
+           cmap=&#39;Spectral_r&#39;,
+           ncols=3,
+           size=10,
+           frameon=False)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_67_SCALAR_tutorial_SEA-AD-Updated_12_0.png" class="no-scaled-link" src="../_images/notebooks_67_SCALAR_tutorial_SEA-AD-Updated_12_0.png" style="width: 522px; height: 284px;" />
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[7]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sc.pl.embedding(adata,
+    basis=&#39;X_umap&#39;,
+    color=[&#39;Subclass&#39;],
+    palette=piaso.pl.color.d_color3,
+    legend_fontoutline=2,
+    legend_fontsize=7,
+    legend_fontweight=5,
+    legend_loc=&#39;on data&#39;,
+    cmap=&#39;Spectral_r&#39;,
+    ncols=3,
+    size=10,
+    frameon=False)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_67_SCALAR_tutorial_SEA-AD-Updated_13_0.png" class="no-scaled-link" src="../_images/notebooks_67_SCALAR_tutorial_SEA-AD-Updated_13_0.png" style="width: 265px; height: 277px;" />
+</div>
+</div>
+</section>
+<section id="Run-COSG">
+<h2>Run COSG<a class="headerlink" href="#Run-COSG" title="Link to this heading">#</a></h2>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[8]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>import cosg
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[9]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata.X.data
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[9]:
+</pre></div>
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+array([0.8813792 , 2.510722  , 0.8813792 , ..., 0.37347588, 0.37347588,
+       1.1829159 ], shape=(110359029,), dtype=float32)
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[10]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>%%time
+groupby=&#39;Subclass&#39;
+cosg.cosg(adata,
+    key_added=&#39;cosg&#39;,
+    # use_raw=False, layer=&#39;log1p&#39;, ## e.g., if you want to use the log1p layer in adata
+    mu=100,
+    expressed_pct=0.05,
+    remove_lowly_expressed=True,
+    n_genes_user=adata.n_vars, ### Use all the genes, to enable the calculation of transformed COSG scores
+    # n_genes_user=100,
+    groupby=groupby,
+    return_by_group=True,
+    verbosity=1
+)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Finished identifying marker genes by COSG, and the results are in adata.uns[&#39;cosg&#39;].
+CPU times: user 6.62 s, sys: 1.08 s, total: 7.69 s
+Wall time: 7.72 s
+</pre></div></div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[11]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>cosg_scores=cosg.indexByGene(
+    adata.uns[&#39;cosg&#39;][&#39;COSG&#39;],
+    # gene_key=&quot;names&quot;, score_key=&quot;scores&quot;,
+    set_nan_to_zero=True,
+    convert_negative_one_to_zero=True
+)
+</pre></div>
+</div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[12]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>cosg_scores=cosg.iqrLogNormalize(cosg_scores)
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[13]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>cosg_scores
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[13]:
+</pre></div>
+</div>
+<div class="output_area rendered_html docutils container">
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>Lamp5 Lhx6</th>
+      <th>Lamp5</th>
+      <th>Pax6</th>
+      <th>Sncg</th>
+      <th>Vip</th>
+      <th>Sst Chodl</th>
+      <th>Sst</th>
+      <th>Pvalb</th>
+      <th>Chandelier</th>
+      <th>L2/3 IT</th>
+      <th>...</th>
+      <th>L6 CT</th>
+      <th>L6b</th>
+      <th>L6 IT Car3</th>
+      <th>L5/6 NP</th>
+      <th>Astrocyte</th>
+      <th>OPC</th>
+      <th>Oligodendrocyte</th>
+      <th>Endothelial</th>
+      <th>VLMC</th>
+      <th>Microglia-PVM</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>SFTA3</th>
+      <td>9.777716</td>
+      <td>0.00000</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>...</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+    </tr>
+    <tr>
+      <th>NKX2-1</th>
+      <td>9.543856</td>
+      <td>0.00000</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.644213</td>
+      <td>0.000000</td>
+      <td>...</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+    </tr>
+    <tr>
+      <th>LINC01344</th>
+      <td>7.395006</td>
+      <td>2.06908</td>
+      <td>0.060524</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+      <td>0.006987</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>...</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.022696</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+    </tr>
+    <tr>
+      <th>AL355482.1</th>
+      <td>6.719415</td>
+      <td>0.00000</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>...</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+    </tr>
+    <tr>
+      <th>HCRTR2</th>
+      <td>6.574552</td>
+      <td>0.00000</td>
+      <td>2.462423</td>
+      <td>0.875931</td>
+      <td>0.0</td>
+      <td>0.007577</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.000000</td>
+      <td>0.018037</td>
+      <td>...</td>
+      <td>1.399146</td>
+      <td>2.520505</td>
+      <td>0.053144</td>
+      <td>0.050968</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+    </tr>
+    <tr>
+      <th>...</th>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+    </tr>
+    <tr>
+      <th>AC005104.1</th>
+      <td>0.000000</td>
+      <td>0.00000</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>...</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+    </tr>
+    <tr>
+      <th>AC104809.2</th>
+      <td>0.000000</td>
+      <td>0.00000</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>...</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+    </tr>
+    <tr>
+      <th>AC007483.1</th>
+      <td>0.000000</td>
+      <td>0.00000</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>...</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+    </tr>
+    <tr>
+      <th>AC018359.1</th>
+      <td>0.000000</td>
+      <td>0.00000</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>...</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+    </tr>
+    <tr>
+      <th>AQP12A</th>
+      <td>0.000000</td>
+      <td>0.00000</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>...</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+    </tr>
+  </tbody>
+</table>
+<p>36601 rows × 24 columns</p>
+</div></div>
+</div>
+<section id="Load-CellChat-DB">
+<h3>Load CellChat DB<a class="headerlink" href="#Load-CellChat-DB" title="Link to this heading">#</a></h3>
+<p>The prepared cellchatDB v2 files could be downloaded from <a class="reference external" href="https://drive.google.com/drive/folders/1cfj4IZxl5svnG4RO--Fcr2x-bmNokmQN?usp=sharing">https://drive.google.com/drive/folders/1cfj4IZxl5svnG4RO–Fcr2x-bmNokmQN?usp=sharing</a>. The CellChatDB v2 is from <a class="github reference external" href="https://github.com/jinworks/CellChat">jinworks/CellChat</a>.</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[14]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>### Load the mouse version
+# cellchatdb=pd.read_csv(&#39;/n/data1/hms/neurobio/fishell/mindai/Data/single-cell/Fezf2KO/LigandReceptorList/mouse_lr_database_CellChatDB_formatted_v2.csv&#39;)
+### Load the human version
+cellchatdb=pd.read_csv(&#39;/n/data1/hms/neurobio/fishell/mindai/Data/single-cell/Fezf2KO/LigandReceptorList/human_lr_database_CellChatDB_formatted_v2.csv&#39;)
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[15]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>cellchatdb.head()
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[15]:
+</pre></div>
+</div>
+<div class="output_area rendered_html docutils container">
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>interaction_name</th>
+      <th>pathway_name</th>
+      <th>ligand</th>
+      <th>receptor</th>
+      <th>agonist</th>
+      <th>antagonist</th>
+      <th>co_A_receptor</th>
+      <th>co_I_receptor</th>
+      <th>evidence</th>
+      <th>annotation</th>
+      <th>...</th>
+      <th>receptor.symbol</th>
+      <th>receptor.family</th>
+      <th>receptor.location</th>
+      <th>receptor.keyword</th>
+      <th>receptor.surfaceome_main</th>
+      <th>receptor.surfaceome_sub</th>
+      <th>receptor.adhesome</th>
+      <th>receptor.secreted_type</th>
+      <th>receptor.transmembrane</th>
+      <th>version</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>TGFB1_TGFBR1_TGFBR2</td>
+      <td>TGFb</td>
+      <td>TGFB1</td>
+      <td>TGFBR2</td>
+      <td>TGFb agonist</td>
+      <td>TGFb antagonist</td>
+      <td>NaN</td>
+      <td>TGFb inhibition receptor</td>
+      <td>KEGG: hsa04350</td>
+      <td>Secreted Signaling</td>
+      <td>...</td>
+      <td>TGFBR2, TGFBR1</td>
+      <td>Protein kinase superfamily, TKL Ser/Thr protei...</td>
+      <td>Cell membrane, Secreted, Membrane raft, Cell s...</td>
+      <td>Membrane, Secreted, Disulfide bond, Kinase, Tr...</td>
+      <td>Receptors</td>
+      <td>Act.TGFB;Kinase</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>True</td>
+      <td>CellChatDB v1</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>TGFB1_TGFBR1_TGFBR2</td>
+      <td>TGFb</td>
+      <td>TGFB1</td>
+      <td>TGFBR1</td>
+      <td>TGFb agonist</td>
+      <td>TGFb antagonist</td>
+      <td>NaN</td>
+      <td>TGFb inhibition receptor</td>
+      <td>KEGG: hsa04350</td>
+      <td>Secreted Signaling</td>
+      <td>...</td>
+      <td>TGFBR2, TGFBR1</td>
+      <td>Protein kinase superfamily, TKL Ser/Thr protei...</td>
+      <td>Cell membrane, Secreted, Membrane raft, Cell s...</td>
+      <td>Membrane, Secreted, Disulfide bond, Kinase, Tr...</td>
+      <td>Receptors</td>
+      <td>Act.TGFB;Kinase</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>True</td>
+      <td>CellChatDB v1</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>TGFB2_TGFBR1_TGFBR2</td>
+      <td>TGFb</td>
+      <td>TGFB2</td>
+      <td>TGFBR2</td>
+      <td>TGFb agonist</td>
+      <td>TGFb antagonist</td>
+      <td>NaN</td>
+      <td>TGFb inhibition receptor</td>
+      <td>KEGG: hsa04350</td>
+      <td>Secreted Signaling</td>
+      <td>...</td>
+      <td>TGFBR2, TGFBR1</td>
+      <td>Protein kinase superfamily, TKL Ser/Thr protei...</td>
+      <td>Cell membrane, Secreted, Membrane raft, Cell s...</td>
+      <td>Membrane, Secreted, Disulfide bond, Kinase, Tr...</td>
+      <td>Receptors</td>
+      <td>Act.TGFB;Kinase</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>True</td>
+      <td>CellChatDB v1</td>
+    </tr>
+    <tr>
+      <th>3</th>
+      <td>TGFB2_TGFBR1_TGFBR2</td>
+      <td>TGFb</td>
+      <td>TGFB2</td>
+      <td>TGFBR1</td>
+      <td>TGFb agonist</td>
+      <td>TGFb antagonist</td>
+      <td>NaN</td>
+      <td>TGFb inhibition receptor</td>
+      <td>KEGG: hsa04350</td>
+      <td>Secreted Signaling</td>
+      <td>...</td>
+      <td>TGFBR2, TGFBR1</td>
+      <td>Protein kinase superfamily, TKL Ser/Thr protei...</td>
+      <td>Cell membrane, Secreted, Membrane raft, Cell s...</td>
+      <td>Membrane, Secreted, Disulfide bond, Kinase, Tr...</td>
+      <td>Receptors</td>
+      <td>Act.TGFB;Kinase</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>True</td>
+      <td>CellChatDB v1</td>
+    </tr>
+    <tr>
+      <th>4</th>
+      <td>TGFB3_TGFBR1_TGFBR2</td>
+      <td>TGFb</td>
+      <td>TGFB3</td>
+      <td>TGFBR2</td>
+      <td>TGFb agonist</td>
+      <td>TGFb antagonist</td>
+      <td>NaN</td>
+      <td>TGFb inhibition receptor</td>
+      <td>KEGG: hsa04350</td>
+      <td>Secreted Signaling</td>
+      <td>...</td>
+      <td>TGFBR2, TGFBR1</td>
+      <td>Protein kinase superfamily, TKL Ser/Thr protei...</td>
+      <td>Cell membrane, Secreted, Membrane raft, Cell s...</td>
+      <td>Membrane, Secreted, Disulfide bond, Kinase, Tr...</td>
+      <td>Receptors</td>
+      <td>Act.TGFB;Kinase</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>True</td>
+      <td>CellChatDB v1</td>
+    </tr>
+  </tbody>
+</table>
+<p>5 rows × 28 columns</p>
+</div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[16]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>pd.Series(cellchatdb[&#39;annotation&#39;]).value_counts().head(30)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[16]:
+</pre></div>
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+annotation
+Secreted Signaling       1211
+Non-protein Signaling     749
+ECM-Receptor              515
+Cell-Cell Contact         476
+Name: count, dtype: int64
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[17]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>pd.Series(cellchatdb[&#39;pathway_name&#39;]).value_counts().head(30)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[17]:
+</pre></div>
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+pathway_name
+Glutamate        222
+COLLAGEN         221
+WNT              192
+LAMININ          165
+GABA-A           108
+5-HT              85
+CCL               66
+FGF               60
+Ach               58
+BMP               57
+MHC-I             51
+THBS              40
+EPHA              36
+TENASCIN          36
+SEMA3             35
+PARs              35
+IFN-I             34
+CXCL              33
+NRXN              32
+SLURP             32
+ncWNT             31
+Adrenaline        27
+ADGRL             25
+RA                24
+NOTCH             24
+ANGPTL            20
+Adenosine         20
+Dopamine          20
+Prostaglandin     20
+IL1               20
+Name: count, dtype: int64
+</pre></div></div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[18]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span># # cellchatdb=cellchatdb.loc[:,[&#39;ligand&#39;, &#39;receptor&#39;, &#39;pathway_name&#39;]].copy()
+cellchatdb=cellchatdb.loc[:,[&#39;ligand&#39;, &#39;receptor&#39;, &#39;annotation&#39;]].copy()
+</pre></div>
+</div>
+</div>
+</section>
+</section>
+<section id="Run-SCALAR">
+<h2>Run SCALAR<a class="headerlink" href="#Run-SCALAR" title="Link to this heading">#</a></h2>
+<p>Here we use the cellchatDB as the database of ligand-receptor interactions to run SCALAR:</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[19]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>%%time
+specific_interactions_cellchat = piaso.tl.runSCALAR(
+    adata=adata,
+    specificity_matrix=cosg_scores,
+    lr_pairs=cellchatdb,
+    ligand_col = &#39;ligand&#39;,
+    receptor_col = &#39;receptor&#39;,
+    annotation_col=&#39;annotation&#39;,
+    sender_cell_types=list(adata.obs[&#39;Subclass&#39;].cat.categories.values),
+    receiver_cell_types=list(adata.obs[&#39;Subclass&#39;].cat.categories.values),
+    n_permutations=1000,
+    n_nearest_neighbors=30,
+    chunk_size=500000,
+    random_seed=42
+)
+</pre></div>
+</div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+--- Step 1: Validating inputs and filtering LR pairs ---
+Filtered out 14 LR pairs that were not found in both the AnnData object and the specificity matrix.
+
+--- Step 2: Calculating all observed interaction scores ---
+Found 1691712 potential interactions to test.
+
+--- Step 3: Preparing background gene set for permutation testing ---
+Preparing background gene set by calculating mean and variance for all genes...
+Building KDTree to find 30 nearest neighbors for each gene...
+Finished preparing background gene set.
+
+--- Step 4: Calculating p-values via 1000 permutations (vectorized) ---
+</pre></div></div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+Processing cell type pairs: 100%|██████████| 576/576 [00:55&lt;00:00, 10.33it/s]
+</pre></div></div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+
+--- Step 5: Applying FDR (Benjamini/Hochberg) correction per cell-type pair ---
+</pre></div></div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+FDR Correction: 100%|██████████| 576/576 [00:01&lt;00:00, 325.56it/s]
+</pre></div></div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+
+Analysis complete.
+CPU times: user 1min 3s, sys: 1.68 s, total: 1min 4s
+Wall time: 1min 5s
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[20]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>specific_interactions_cellchat
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[20]:
+</pre></div>
+</div>
+<div class="output_area rendered_html docutils container">
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>ligand</th>
+      <th>receptor</th>
+      <th>annotation</th>
+      <th>sender</th>
+      <th>receiver</th>
+      <th>interaction_score</th>
+      <th>p_value</th>
+      <th>p_value_fdr</th>
+      <th>nlog10_p_value_fdr</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>NPY</td>
+      <td>NPY2R</td>
+      <td>Secreted Signaling</td>
+      <td>Sst Chodl</td>
+      <td>Sst Chodl</td>
+      <td>105.240697</td>
+      <td>0.000999</td>
+      <td>0.015984</td>
+      <td>1.796315</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>DLL4</td>
+      <td>NOTCH4</td>
+      <td>Cell-Cell Contact</td>
+      <td>Endothelial</td>
+      <td>Endothelial</td>
+      <td>87.273885</td>
+      <td>0.000999</td>
+      <td>0.013674</td>
+      <td>1.864110</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>DLL4</td>
+      <td>NOTCH3</td>
+      <td>Cell-Cell Contact</td>
+      <td>Endothelial</td>
+      <td>VLMC</td>
+      <td>84.300864</td>
+      <td>0.000999</td>
+      <td>0.014956</td>
+      <td>1.825171</td>
+    </tr>
+    <tr>
+      <th>3</th>
+      <td>CSF3</td>
+      <td>CSF3R</td>
+      <td>Secreted Signaling</td>
+      <td>Endothelial</td>
+      <td>Microglia-PVM</td>
+      <td>84.206412</td>
+      <td>0.012987</td>
+      <td>0.112013</td>
+      <td>0.950732</td>
+    </tr>
+    <tr>
+      <th>4</th>
+      <td>COL1A2</td>
+      <td>SDC4</td>
+      <td>ECM-Receptor</td>
+      <td>VLMC</td>
+      <td>Astrocyte</td>
+      <td>82.803029</td>
+      <td>0.000999</td>
+      <td>0.010209</td>
+      <td>1.991037</td>
+    </tr>
+    <tr>
+      <th>...</th>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+    </tr>
+    <tr>
+      <th>1691707</th>
+      <td>COL9A1</td>
+      <td>ITGA10</td>
+      <td>ECM-Receptor</td>
+      <td>Sncg</td>
+      <td>L5/6 NP</td>
+      <td>0.000000</td>
+      <td>1.000000</td>
+      <td>1.000000</td>
+      <td>0.000000</td>
+    </tr>
+    <tr>
+      <th>1691708</th>
+      <td>COL9A1</td>
+      <td>ITGA10</td>
+      <td>ECM-Receptor</td>
+      <td>Sncg</td>
+      <td>Astrocyte</td>
+      <td>0.000000</td>
+      <td>1.000000</td>
+      <td>1.000000</td>
+      <td>0.000000</td>
+    </tr>
+    <tr>
+      <th>1691709</th>
+      <td>COL9A1</td>
+      <td>ITGA10</td>
+      <td>ECM-Receptor</td>
+      <td>Sncg</td>
+      <td>OPC</td>
+      <td>0.000000</td>
+      <td>1.000000</td>
+      <td>1.000000</td>
+      <td>0.000000</td>
+    </tr>
+    <tr>
+      <th>1691710</th>
+      <td>COL9A1</td>
+      <td>ITGA10</td>
+      <td>ECM-Receptor</td>
+      <td>Sncg</td>
+      <td>Oligodendrocyte</td>
+      <td>0.000000</td>
+      <td>1.000000</td>
+      <td>1.000000</td>
+      <td>0.000000</td>
+    </tr>
+    <tr>
+      <th>1691711</th>
+      <td>COL9A1</td>
+      <td>ITGA10</td>
+      <td>ECM-Receptor</td>
+      <td>Vip</td>
+      <td>Astrocyte</td>
+      <td>0.000000</td>
+      <td>1.000000</td>
+      <td>1.000000</td>
+      <td>0.000000</td>
+    </tr>
+  </tbody>
+</table>
+<p>1691712 rows × 9 columns</p>
+</div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[21]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>pd.Series(specific_interactions_cellchat[&#39;nlog10_p_value_fdr&#39;]&gt;-np.log10(0.2)).value_counts()
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[21]:
+</pre></div>
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+nlog10_p_value_fdr
+False    1655922
+True       35790
+Name: count, dtype: int64
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[22]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>pd.Series(specific_interactions_cellchat[&#39;nlog10_p_value_fdr&#39;]&gt;-np.log10(0.05)).value_counts()
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[22]:
+</pre></div>
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+nlog10_p_value_fdr
+False    1677660
+True       14052
+Name: count, dtype: int64
+</pre></div></div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[23]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>specific_interactions_cellchat[&#39;CellTypeXCellType&#39;]=piaso.pp.getCrossCategories(specific_interactions_cellchat, &#39;sender&#39;, &#39;receiver&#39;)
+specific_interactions_cellchat[&#39;CellTypeXCellType&#39;]=specific_interactions_cellchat[&#39;CellTypeXCellType&#39;].astype(&#39;str&#39;)
+specific_interactions_cellchat[&#39;ligandXreceptor&#39;]=piaso.pp.getCrossCategories(specific_interactions_cellchat, &#39;ligand&#39;, &#39;receptor&#39;, delimiter=&#39;--&gt;&#39;)
+specific_interactions_cellchat[&#39;ligandXreceptor&#39;]=specific_interactions_cellchat[&#39;ligandXreceptor&#39;].astype(&#39;str&#39;)
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[24]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>specific_interactions_cellchat.head()
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[24]:
+</pre></div>
+</div>
+<div class="output_area rendered_html docutils container">
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>ligand</th>
+      <th>receptor</th>
+      <th>annotation</th>
+      <th>sender</th>
+      <th>receiver</th>
+      <th>interaction_score</th>
+      <th>p_value</th>
+      <th>p_value_fdr</th>
+      <th>nlog10_p_value_fdr</th>
+      <th>CellTypeXCellType</th>
+      <th>ligandXreceptor</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>NPY</td>
+      <td>NPY2R</td>
+      <td>Secreted Signaling</td>
+      <td>Sst Chodl</td>
+      <td>Sst Chodl</td>
+      <td>105.240697</td>
+      <td>0.000999</td>
+      <td>0.015984</td>
+      <td>1.796315</td>
+      <td>Sst Chodl@Sst Chodl</td>
+      <td>NPY--&gt;NPY2R</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>DLL4</td>
+      <td>NOTCH4</td>
+      <td>Cell-Cell Contact</td>
+      <td>Endothelial</td>
+      <td>Endothelial</td>
+      <td>87.273885</td>
+      <td>0.000999</td>
+      <td>0.013674</td>
+      <td>1.864110</td>
+      <td>Endothelial@Endothelial</td>
+      <td>DLL4--&gt;NOTCH4</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>DLL4</td>
+      <td>NOTCH3</td>
+      <td>Cell-Cell Contact</td>
+      <td>Endothelial</td>
+      <td>VLMC</td>
+      <td>84.300864</td>
+      <td>0.000999</td>
+      <td>0.014956</td>
+      <td>1.825171</td>
+      <td>Endothelial@VLMC</td>
+      <td>DLL4--&gt;NOTCH3</td>
+    </tr>
+    <tr>
+      <th>3</th>
+      <td>CSF3</td>
+      <td>CSF3R</td>
+      <td>Secreted Signaling</td>
+      <td>Endothelial</td>
+      <td>Microglia-PVM</td>
+      <td>84.206412</td>
+      <td>0.012987</td>
+      <td>0.112013</td>
+      <td>0.950732</td>
+      <td>Endothelial@Microglia-PVM</td>
+      <td>CSF3--&gt;CSF3R</td>
+    </tr>
+    <tr>
+      <th>4</th>
+      <td>COL1A2</td>
+      <td>SDC4</td>
+      <td>ECM-Receptor</td>
+      <td>VLMC</td>
+      <td>Astrocyte</td>
+      <td>82.803029</td>
+      <td>0.000999</td>
+      <td>0.010209</td>
+      <td>1.991037</td>
+      <td>VLMC@Astrocyte</td>
+      <td>COL1A2--&gt;SDC4</td>
+    </tr>
+  </tbody>
+</table>
+</div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[25]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>len(specific_interactions_cellchat[&#39;CellTypeXCellType&#39;].unique())
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[25]:
+</pre></div>
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+576
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[26]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata.obs[&#39;Subclass&#39;].cat.categories
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[26]:
+</pre></div>
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Index([&#39;Lamp5 Lhx6&#39;, &#39;Lamp5&#39;, &#39;Pax6&#39;, &#39;Sncg&#39;, &#39;Vip&#39;, &#39;Sst Chodl&#39;, &#39;Sst&#39;,
+       &#39;Pvalb&#39;, &#39;Chandelier&#39;, &#39;L2/3 IT&#39;, &#39;L6 IT&#39;, &#39;L4 IT&#39;, &#39;L5 IT&#39;, &#39;L5 ET&#39;,
+       &#39;L6 CT&#39;, &#39;L6b&#39;, &#39;L6 IT Car3&#39;, &#39;L5/6 NP&#39;, &#39;Astrocyte&#39;, &#39;OPC&#39;,
+       &#39;Oligodendrocyte&#39;, &#39;Endothelial&#39;, &#39;VLMC&#39;, &#39;Microglia-PVM&#39;],
+      dtype=&#39;object&#39;)
+</pre></div></div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[27]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>si_fdr=specific_interactions_cellchat[specific_interactions_cellchat[&#39;nlog10_p_value_fdr&#39;]&gt;-np.log10(0.5)].copy()
+</pre></div>
+</div>
+</div>
+</section>
+<section id="Plot-CCI-results:">
+<h2>Plot CCI results:<a class="headerlink" href="#Plot-CCI-results:" title="Link to this heading">#</a></h2>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[28]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>piaso.pl.plotLigandReceptorInteraction(
+    interactions_df=si_fdr,
+    specificity_df=cosg_scores,
+    cell_type_pairs=[&#39;L5 ET@Sst&#39;, &#39;L5/6 NP@Sst&#39;, &#39;L5 ET@Pvalb&#39;, &#39;L5/6 NP@Pvalb&#39;,],
+    ligand_receptor_sep=&#39;--&gt;&#39;,
+    top_n=50,
+    y_max=10,
+    heatmap_cmap=&#39;Purples&#39;,
+    shared_legend=True
+)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_67_SCALAR_tutorial_SEA-AD-Updated_40_0.png" class="no-scaled-link" src="../_images/notebooks_67_SCALAR_tutorial_SEA-AD-Updated_40_0.png" style="width: 1570px; height: 2322px;" />
+</div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[29]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span># specific_interactions_subset=specific_interactions.loc[
+#     specific_interactions[&#39;annotation&#39;].isin([&#39;Secreted Signaling&#39;])
+# ]
+
+specific_interactions_cellchat_subset=specific_interactions_cellchat.loc[
+    specific_interactions_cellchat[&#39;annotation&#39;].isin([&#39;ECM-Receptor&#39;])
+]
+
+
+# specific_interactions_subset=specific_interactions.loc[
+#     specific_interactions[&#39;annotation&#39;].isin([&#39;Cell-Cell Contact&#39;])
+# ]
+
+
+# specific_interactions_cellchat_subset=specific_interactions_cellchat.loc[
+#     specific_interactions_cellchat[&#39;annotation&#39;].isin([&#39;Non-protein Signaling&#39;])
+# ]
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[30]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>piaso.pl.plotLigandReceptorInteraction(
+    interactions_df=specific_interactions_cellchat_subset,
+    specificity_df=cosg_scores,
+    cell_type_pairs=[&#39;L5 ET@Sst&#39;, &#39;L5/6 NP@Sst&#39;, &#39;L5 ET@Pvalb&#39;, &#39;L5/6 NP@Pvalb&#39;,],
+    ligand_receptor_sep=&#39;--&gt;&#39;,
+    top_n=50,
+    y_max=10,
+    heatmap_cmap=&#39;Purples&#39;,
+    fig_height_per_pair=6,
+    fig_width=20,
+    shared_legend=True
+)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_67_SCALAR_tutorial_SEA-AD-Updated_42_0.png" class="no-scaled-link" src="../_images/notebooks_67_SCALAR_tutorial_SEA-AD-Updated_42_0.png" style="width: 1315px; height: 1585px;" />
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[31]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>piaso.pl.plotLigandReceptorInteraction(
+    interactions_df=si_fdr,
+    specificity_df=cosg_scores,
+    cell_type_pairs=[&#39;L5 ET@Sst&#39;, &#39;L5/6 NP@Sst&#39;, &#39;L5 ET@Pvalb&#39;, &#39;L5/6 NP@Pvalb&#39;,],
+    ligand_receptor_sep=&#39;--&gt;&#39;,
+    top_n=50,
+    y_max=10,
+    heatmap_cmap=&#39;Purples&#39;,
+    heatmap_cmap_ligand=&#39;Blues&#39;,
+    heatmap_cmap_receptor=&#39;Reds&#39;,
+    shared_legend=True,
+    vertical_layout=False,
+    fig_height_per_pair=6,
+    fig_width=20,
+    color_labels_by_annotation=True,
+
+)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_67_SCALAR_tutorial_SEA-AD-Updated_43_0.png" class="no-scaled-link" src="../_images/notebooks_67_SCALAR_tutorial_SEA-AD-Updated_43_0.png" style="width: 1330px; height: 1589px;" />
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[32]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>piaso.pl.plotLigandReceptorInteraction(
+    interactions_df=si_fdr,
+    specificity_df=cosg_scores,
+    cell_type_pairs=[&#39;L5 ET@Sst&#39;, &#39;L5/6 NP@Sst&#39;, &#39;L5 ET@Pvalb&#39;, &#39;L5/6 NP@Pvalb&#39;,],
+    # cell_type_pairs=[&#39;L5 NP@SST-Chrna2&#39;],
+    ligand_receptor_sep=&#39;--&gt;&#39;,
+    top_n=50,
+    y_max=10,
+    # heatmap_cmap=&#39;Purples&#39;,
+    heatmap_cmap_ligand=&#39;Purples&#39;,
+    heatmap_cmap_receptor=&#39;Reds&#39;,
+    shared_legend=True,
+    vertical_layout=True,
+    fig_height_per_pair=6,
+    fig_width=12,
+    color_labels_by_annotation=True
+)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_67_SCALAR_tutorial_SEA-AD-Updated_44_0.png" class="no-scaled-link" src="../_images/notebooks_67_SCALAR_tutorial_SEA-AD-Updated_44_0.png" style="width: 1548px; height: 757px;" />
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[33]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>piaso.pl.plotLigandReceptorInteraction(
+    interactions_df=si_fdr,
+    specificity_df=cosg_scores,
+    cell_type_pairs=[&#39;L5 ET@Sst&#39;, &#39;L5/6 NP@Sst&#39;, &#39;L5 ET@Pvalb&#39;, &#39;L5/6 NP@Pvalb&#39;,],
+    cell_type_sep=&#39;@&#39;,
+    ligand_receptor_sep=&#39;--&gt;&#39;,
+    top_n=50,
+    y_max=10,
+    # heatmap_cmap=&#39;Purples&#39;,
+    heatmap_cmap_ligand=&#39;Blues&#39;,
+    heatmap_cmap_receptor=&#39;Reds&#39;,
+    barplot_palette=piaso.pl.color.d_color10,
+    shared_legend=True,
+    vertical_layout=False,
+    fig_height_per_pair=6,
+    fig_width=20,
+    color_labels_by_annotation=True,
+    sort_by_category=True,
+    category_agg_method=&#39;sum&#39;
+)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_67_SCALAR_tutorial_SEA-AD-Updated_45_0.png" class="no-scaled-link" src="../_images/notebooks_67_SCALAR_tutorial_SEA-AD-Updated_45_0.png" style="width: 1333px; height: 1589px;" />
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[34]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>piaso.pl.plotLigandReceptorInteraction(
+    interactions_df=si_fdr,
+    specificity_df=cosg_scores,
+    cell_type_pairs=[&#39;L5 ET@Sst&#39;, &#39;L5/6 NP@Sst&#39;, &#39;L5 ET@Pvalb&#39;, &#39;L5/6 NP@Pvalb&#39;,],
+    # col_cell_type_pair=&#39;Category&#39;,
+    # col_annotation= &#39;ConfirmedCategories&#39;,
+    cell_type_sep=&#39;@&#39;,
+    ligand_receptor_sep=&#39;--&gt;&#39;,
+    top_n=50,
+    y_max=10,
+    # heatmap_cmap=&#39;Purples&#39;,
+    heatmap_cmap_ligand=&#39;Blues&#39;,
+    heatmap_cmap_receptor=&#39;Reds&#39;,
+    barplot_palette=piaso.pl.color.d_color10,
+    shared_legend=True,
+    vertical_layout=True,
+    fig_height_per_pair=6,
+    fig_width=12,
+    color_labels_by_annotation=True,
+    sort_by_category=True,
+    # category_agg_method=&#39;sum&#39;
+)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_67_SCALAR_tutorial_SEA-AD-Updated_46_0.png" class="no-scaled-link" src="../_images/notebooks_67_SCALAR_tutorial_SEA-AD-Updated_46_0.png" style="width: 1548px; height: 757px;" />
+</div>
+</div>
+</section>
+<section id="Lollipop-plot">
+<h2>Lollipop plot<a class="headerlink" href="#Lollipop-plot" title="Link to this heading">#</a></h2>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[35]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>si_fdr.head()
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[35]:
+</pre></div>
+</div>
+<div class="output_area rendered_html docutils container">
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>ligand</th>
+      <th>receptor</th>
+      <th>annotation</th>
+      <th>sender</th>
+      <th>receiver</th>
+      <th>interaction_score</th>
+      <th>p_value</th>
+      <th>p_value_fdr</th>
+      <th>nlog10_p_value_fdr</th>
+      <th>CellTypeXCellType</th>
+      <th>ligandXreceptor</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>NPY</td>
+      <td>NPY2R</td>
+      <td>Secreted Signaling</td>
+      <td>Sst Chodl</td>
+      <td>Sst Chodl</td>
+      <td>105.240697</td>
+      <td>0.000999</td>
+      <td>0.015984</td>
+      <td>1.796315</td>
+      <td>Sst Chodl@Sst Chodl</td>
+      <td>NPY--&gt;NPY2R</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>DLL4</td>
+      <td>NOTCH4</td>
+      <td>Cell-Cell Contact</td>
+      <td>Endothelial</td>
+      <td>Endothelial</td>
+      <td>87.273885</td>
+      <td>0.000999</td>
+      <td>0.013674</td>
+      <td>1.864110</td>
+      <td>Endothelial@Endothelial</td>
+      <td>DLL4--&gt;NOTCH4</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>DLL4</td>
+      <td>NOTCH3</td>
+      <td>Cell-Cell Contact</td>
+      <td>Endothelial</td>
+      <td>VLMC</td>
+      <td>84.300864</td>
+      <td>0.000999</td>
+      <td>0.014956</td>
+      <td>1.825171</td>
+      <td>Endothelial@VLMC</td>
+      <td>DLL4--&gt;NOTCH3</td>
+    </tr>
+    <tr>
+      <th>3</th>
+      <td>CSF3</td>
+      <td>CSF3R</td>
+      <td>Secreted Signaling</td>
+      <td>Endothelial</td>
+      <td>Microglia-PVM</td>
+      <td>84.206412</td>
+      <td>0.012987</td>
+      <td>0.112013</td>
+      <td>0.950732</td>
+      <td>Endothelial@Microglia-PVM</td>
+      <td>CSF3--&gt;CSF3R</td>
+    </tr>
+    <tr>
+      <th>4</th>
+      <td>COL1A2</td>
+      <td>SDC4</td>
+      <td>ECM-Receptor</td>
+      <td>VLMC</td>
+      <td>Astrocyte</td>
+      <td>82.803029</td>
+      <td>0.000999</td>
+      <td>0.010209</td>
+      <td>1.991037</td>
+      <td>VLMC@Astrocyte</td>
+      <td>COL1A2--&gt;SDC4</td>
+    </tr>
+  </tbody>
+</table>
+</div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[36]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>adata.obs[&#39;Subclass&#39;].cat.categories
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[36]:
+</pre></div>
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Index([&#39;Lamp5 Lhx6&#39;, &#39;Lamp5&#39;, &#39;Pax6&#39;, &#39;Sncg&#39;, &#39;Vip&#39;, &#39;Sst Chodl&#39;, &#39;Sst&#39;,
+       &#39;Pvalb&#39;, &#39;Chandelier&#39;, &#39;L2/3 IT&#39;, &#39;L6 IT&#39;, &#39;L4 IT&#39;, &#39;L5 IT&#39;, &#39;L5 ET&#39;,
+       &#39;L6 CT&#39;, &#39;L6b&#39;, &#39;L6 IT Car3&#39;, &#39;L5/6 NP&#39;, &#39;Astrocyte&#39;, &#39;OPC&#39;,
+       &#39;Oligodendrocyte&#39;, &#39;Endothelial&#39;, &#39;VLMC&#39;, &#39;Microglia-PVM&#39;],
+      dtype=&#39;object&#39;)
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[37]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>piaso.pl.plotLigandReceptorLollipop(
+    si_fdr,
+    specificity_df=cosg_scores,
+    cell_type_pairs=[
+                     &#39;Microglia-PVM@L6 CT&#39;
+                    ],
+    top_n=50,
+    col_cell_type_pair=&#39;CellTypeXCellType&#39;, ## Specify the cell type conlumn
+    # col_annotation= &#39;annotation&#39;,
+    sort_by_category=True,
+    fig_height_per_pair=4,
+    fig_width=16,
+    vertical_layout=False,
+    background_colors=True,
+    # show_grid=False,
+    logfc_range=1, ### To control the log fold chaneg range
+    base_circle_size=30,
+    # size_dramatic_level=1,
+    color_labels_by_annotation=True,
+    # score_range_max=8, score_range_min=-8, ### To control the y-axis ranges
+
+)
+</pre></div>
+</div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Warning: Column &#39;avg_log2FC&#39; not found. Using default circle size.
+Using external specificity dataframe with 36601 genes and 24 cell types.
+</pre></div></div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_67_SCALAR_tutorial_SEA-AD-Updated_50_1.png" class="no-scaled-link" src="../_images/notebooks_67_SCALAR_tutorial_SEA-AD-Updated_50_1.png" style="width: 1253px; height: 404px;" />
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[38]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>piaso.pl.plotLigandReceptorLollipop(
+    si_fdr,
+    specificity_df=cosg_scores,
+    cell_type_pairs=[&#39;L5 ET@Sst&#39;, &#39;L5/6 NP@Sst&#39;, &#39;L5 ET@Pvalb&#39;, &#39;L5/6 NP@Pvalb&#39;,
+                    ],
+    top_n=50,
+    col_cell_type_pair=&#39;CellTypeXCellType&#39;, ## Specify the cell type conlumn
+    # col_annotation= &#39;annotation&#39;,
+    sort_by_category=True,
+    fig_height_per_pair=4,
+    fig_width=16,
+    vertical_layout=False,
+    background_colors=True,
+    # show_grid=False,
+    logfc_range=1, ### To control the log fold chaneg range
+    base_circle_size=30,
+    # size_dramatic_level=1,
+    color_labels_by_annotation=True,
+    # score_range_max=8, score_range_min=-8, ### To control the y-axis ranges
+
+)
+</pre></div>
+</div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Warning: Column &#39;avg_log2FC&#39; not found. Using default circle size.
+Using external specificity dataframe with 36601 genes and 24 cell types.
+</pre></div></div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_67_SCALAR_tutorial_SEA-AD-Updated_51_1.png" class="no-scaled-link" src="../_images/notebooks_67_SCALAR_tutorial_SEA-AD-Updated_51_1.png" style="width: 1253px; height: 1332px;" />
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[39]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>piaso.pl.plotLigandReceptorLollipop(
+    si_fdr,
+    specificity_df=cosg_scores,
+    cell_type_pairs=[&#39;L5 ET@Sst&#39;, &#39;L5/6 NP@Sst&#39;, ],
+    top_n=50,
+    col_cell_type_pair=&#39;CellTypeXCellType&#39;, ## Specify the cell type conlumn
+    # col_annotation= &#39;annotation&#39;,
+    sort_by_category=True,
+    fig_height_per_pair=10,
+    fig_width=5,
+    vertical_layout=True,
+    background_colors=True,
+    # show_grid=False,
+    logfc_range=1, ### To control the log fold chaneg range
+    base_circle_size=30,
+    # size_dramatic_level=1,
+    color_labels_by_annotation=True,
+    # score_range_max=8, score_range_min=-8, ### To control the y-axis ranges
+
+)
+</pre></div>
+</div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Warning: Column &#39;avg_log2FC&#39; not found. Using default circle size.
+Using external specificity dataframe with 36601 genes and 24 cell types.
+</pre></div></div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/notebooks_67_SCALAR_tutorial_SEA-AD-Updated_52_1.png" class="no-scaled-link" src="../_images/notebooks_67_SCALAR_tutorial_SEA-AD-Updated_52_1.png" style="width: 976px; height: 734px;" />
+</div>
+</div>
+</section>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="31_PIASO_PIASOmarkerDB_API_mouseCortex.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Python client and API for accessing PIASOmarkerDB</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="LeidenLocalTutorial.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Finer clustering on selected cluster(s)</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#Load-basic-settings">Load basic settings</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#Import-PIASO">Import PIASO</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#Setting-paths">Setting paths</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#Load-the-data">Load the data</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#Run-COSG">Run COSG</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#Load-CellChat-DB">Load CellChat DB</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#Run-SCALAR">Run SCALAR</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#Plot-CCI-results:">Plot CCI results:</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#Lollipop-plot">Lollipop plot</a></li>
+</ul>
+  </nav></div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf"></script>
+<script defer src="../_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2025, Min Dai.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 7.3.7.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  <!-- # L10n: Setting the PST URL as an argument as this does not need to be localized -->
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.16.1.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

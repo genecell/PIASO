@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>About - PIASO Team</title>
+    <meta name="description" content="Meet the team behind PIASO - the Precise Integrative Analysis of Single-cell Omics toolkit developed at Harvard Medical School and Broad Institute.">
+    
+    <!-- Person Schema for Gord Fishell -->
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "Person",
+        "name": "Gord Fishell",
+        "honorificSuffix": "PhD",
+        "jobTitle": ["Professor of Neurobiology", "Professor"],
+        "affiliation": [
+            {
+                "@type": "EducationalOrganization",
+                "name": "Harvard Medical School",
+                "department": "Department of Neurobiology"
+            },
+            {
+                "@type": "ResearchOrganization",
+                "name": "Broad Institute of MIT and Harvard",
+                "department": "Stanley Center for Psychiatric Research"
+            }
+        ],
+        "sameAs": [
+            "https://scholar.google.com/citations?hl=en&user=eTJT9NAAAAAJ",
+            "https://twitter.com/GordFishell",
+            "https://bsky.app/profile/gordfishell.bsky.social",
+            "https://fishelllab.hms.harvard.edu/"
+        ]
+    }
+    </script>
+    
+    <!-- Person Schema for Min Dai -->
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "Person",
+        "name": "Min Dai",
+        "honorificSuffix": "PhD",
+        "jobTitle": "Senior Computational Scientist",
+        "affiliation": {
+            "@type": "ResearchOrganization",
+            "name": "Broad Institute of MIT and Harvard"
+        },
+        "sameAs": [
+            "https://scholar.google.com/citations?user=HtlDMqUAAAAJ&hl=en",
+            "https://twitter.com/artofbiology",
+            "https://bsky.app/profile/artofbiology.bsky.social"
+        ]
+    }
+    </script>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    
+    <style>
+        :root {
+            --bg-primary: #FAF9F7;
+            --bg-secondary: #F5F3F0;
+            --bg-card: #FFFFFF;
+            --text-primary: #1a1a1a;
+            --text-secondary: #5c5c5c;
+            --text-muted: #8c8c8c;
+            --accent-primary: #2E6BB2;
+            --accent-secondary: #7C5CDB;
+            --accent-tertiary: #2E9E6E;
+            --border-color: rgba(0, 0, 0, 0.08);
+            --border-color-strong: rgba(0, 0, 0, 0.12);
+            --shadow-sm: 0 1px 2px rgba(0,0,0,0.04);
+            --shadow-md: 0 4px 12px rgba(0,0,0,0.06);
+            --shadow-lg: 0 12px 40px rgba(0,0,0,0.08);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html { scroll-behavior: smooth; }
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            line-height: 1.6;
+        }
+
+        .navbar {
+            position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
+            padding: 0.75rem 2rem;
+            background: rgba(250, 249, 247, 0.85);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border-color);
+        }
+        .nav-container {
+            max-width: 1400px; margin: 0 auto;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .nav-logo { display: flex; align-items: center; text-decoration: none; }
+        .nav-logo-img { height: 36px; width: auto; }
+        .nav-links { display: flex; align-items: center; gap: 2rem; }
+        .nav-link {
+            color: var(--text-secondary); text-decoration: none;
+            font-size: 0.9rem; font-weight: 500; transition: color 0.2s ease;
+        }
+        .nav-link:hover, .nav-link.active { color: var(--text-primary); }
+        .nav-actions { display: flex; align-items: center; gap: 0.75rem; }
+        .nav-icon-btn {
+            width: 36px; height: 36px; border-radius: 8px;
+            border: 1px solid var(--border-color); background: transparent;
+            color: var(--text-secondary); cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            transition: all 0.2s ease; text-decoration: none; font-size: 1.1rem;
+        }
+        .nav-icon-btn:hover { border-color: var(--border-color-strong); color: var(--text-primary); background: var(--bg-card); }
+        .nav-btn-primary {
+            padding: 0.5rem 1rem; border-radius: 8px; border: none;
+            background: var(--accent-primary); color: white;
+            font-weight: 600; font-size: 0.85rem; cursor: pointer;
+            transition: all 0.2s ease; text-decoration: none;
+            display: flex; align-items: center; gap: 0.4rem;
+        }
+        .nav-btn-primary:hover { background: #245a96; transform: translateY(-1px); }
+        .mobile-menu-btn { display: none; background: none; border: none; color: var(--text-primary); font-size: 1.25rem; cursor: pointer; }
+
+        .page-header {
+            padding: 8rem 2rem 4rem;
+            background: var(--bg-secondary);
+            text-align: center;
+        }
+        .page-header-container { max-width: 800px; margin: 0 auto; }
+        .page-title {
+            font-family: 'Source Serif 4', Georgia, serif;
+            font-size: clamp(2rem, 4vw, 3rem);
+            font-weight: 400; margin-bottom: 1rem;
+        }
+        .page-subtitle {
+            font-size: 1.1rem; color: var(--text-secondary); line-height: 1.7;
+        }
+
+        .content-section { padding: 4rem 2rem; }
+        .content-container { max-width: 1000px; margin: 0 auto; }
+
+        .section-title {
+            font-family: 'Source Serif 4', Georgia, serif;
+            font-size: 1.75rem; font-weight: 400;
+            margin-bottom: 2rem; color: var(--text-primary);
+        }
+
+        .about-intro {
+            font-size: 1.05rem; color: var(--text-secondary);
+            line-height: 1.8; margin-bottom: 3rem;
+        }
+
+        .team-grid { display: grid; gap: 2rem; }
+        .team-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 2rem;
+            display: grid;
+            grid-template-columns: 140px 1fr;
+            gap: 2rem;
+            align-items: center;
+        }
+        .team-card.pi { border-left: 4px solid var(--accent-primary); }
+        .team-card.lead { border-left: 4px solid var(--accent-secondary); }
+
+        .team-photo {
+            width: 140px; height: 140px;
+            border-radius: 12px;
+            object-fit: cover;
+            background: var(--bg-secondary);
+            display: flex; align-items: center; justify-content: center;
+            color: var(--text-muted); font-size: 3rem;
+            overflow: hidden;
+        }
+        .team-photo img {
+            width: 100%; height: 100%;
+            border-radius: 12px; object-fit: cover;
+        }
+
+        .team-info h3 {
+            font-size: 1.25rem; font-weight: 600;
+            margin-bottom: 0.25rem;
+        }
+        .team-title {
+            font-size: 0.95rem; color: var(--accent-primary);
+            font-weight: 500; margin-bottom: 0.5rem;
+        }
+        .team-affiliation {
+            font-size: 0.9rem; color: var(--text-secondary);
+            margin-bottom: 1rem; line-height: 1.6;
+        }
+        .team-links {
+            display: flex; gap: 0.5rem; flex-wrap: wrap;
+        }
+        .team-link {
+            display: inline-flex; align-items: center; gap: 0.4rem;
+            padding: 0.35rem 0.75rem;
+            background: var(--bg-secondary);
+            border-radius: 6px;
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            text-decoration: none;
+            transition: all 0.2s ease;
+        }
+        .team-link:hover {
+            background: var(--accent-primary);
+            color: white;
+        }
+        .team-link i { font-size: 0.85rem; }
+
+        /* Previous Contributors - Mini Cards */
+        .alumni-section { margin-top: 3rem; }
+        .alumni-section h3 {
+            font-family: 'Source Serif 4', Georgia, serif;
+            font-size: 1.5rem; font-weight: 400;
+            margin-bottom: 1.5rem; color: var(--text-primary);
+        }
+        .alumni-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1rem;
+        }
+        .alumni-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 1.25rem;
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+            transition: all 0.2s ease;
+        }
+        .alumni-card:hover {
+            box-shadow: var(--shadow-md);
+            border-color: var(--border-color-strong);
+        }
+        .alumni-photo {
+            width: 70px; height: 70px;
+            border-radius: 10px;
+            background: var(--bg-secondary);
+            display: flex; align-items: center; justify-content: center;
+            color: var(--text-muted); font-size: 1.5rem;
+            flex-shrink: 0;
+            overflow: hidden;
+        }
+        .alumni-photo img {
+            width: 100%; height: 100%;
+            object-fit: cover; border-radius: 10px;
+        }
+        .alumni-info {
+            flex: 1;
+        }
+        .alumni-info h4 {
+            font-size: 1rem; font-weight: 600;
+            margin-bottom: 0.25rem;
+        }
+        .alumni-info p {
+            font-size: 0.85rem; color: var(--text-secondary);
+            line-height: 1.5; margin-bottom: 0.5rem;
+        }
+        .alumni-link {
+            display: inline-flex; align-items: center; gap: 0.3rem;
+            font-size: 0.8rem; color: var(--accent-primary);
+            text-decoration: none; transition: all 0.2s ease;
+        }
+        .alumni-link:hover { text-decoration: underline; }
+
+        .team-members-list {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 2rem;
+            margin-top: 2rem;
+        }
+        .team-members-list h4 {
+            font-size: 1rem; font-weight: 600;
+            margin-bottom: 1rem; color: var(--text-primary);
+            display: flex; align-items: center; gap: 0.5rem;
+        }
+        .team-members-list h4 i { color: var(--accent-primary); }
+        .team-members-list p {
+            color: var(--text-secondary); font-size: 0.9rem;
+        }
+
+        .contact-section {
+            background: var(--bg-secondary);
+            padding: 4rem 2rem;
+        }
+        .contact-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.5rem;
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+        .contact-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 1.5rem;
+        }
+        .contact-card h4 {
+            font-size: 0.9rem; font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 0.75rem;
+            display: flex; align-items: center; gap: 0.5rem;
+        }
+        .contact-card h4 i { color: var(--accent-primary); }
+        .contact-card p {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            line-height: 1.7;
+        }
+        .contact-card a {
+            color: var(--accent-primary);
+            text-decoration: none;
+        }
+        .contact-card a:hover { text-decoration: underline; }
+
+        .footer { padding: 3rem 2rem 2rem; background: var(--bg-secondary); border-top: 1px solid var(--border-color); }
+        .footer-container { max-width: 1200px; margin: 0 auto; }
+        .footer-content { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1.5rem; }
+        .footer-logo { display: flex; align-items: center; }
+        .footer-logo-img { height: 32px; width: auto; }
+        .footer-social { display: flex; gap: 0.75rem; }
+        .footer-social-link {
+            width: 32px; height: 32px; border-radius: 6px;
+            border: 1px solid var(--border-color);
+            display: flex; align-items: center; justify-content: center;
+            color: var(--text-secondary); text-decoration: none;
+            transition: all 0.2s ease; background: var(--bg-card);
+        }
+        .footer-social-link:hover { border-color: var(--border-color-strong); color: var(--text-primary); }
+        .footer-info { width: 100%; text-align: center; padding: 1.5rem 0; border-top: 1px solid var(--border-color); margin-top: 1.5rem; }
+        .footer-info-text { font-size: 0.9rem; color: var(--text-secondary); line-height: 1.7; }
+        .footer-info-text a { color: var(--accent-primary); text-decoration: none; }
+        .footer-info-text a:hover { text-decoration: underline; }
+        .footer-institutions { margin-top: 0.75rem; font-size: 0.85rem; color: var(--text-muted); }
+        .footer-links { display: flex; justify-content: center; gap: 1.5rem; margin-top: 1rem; flex-wrap: wrap; }
+        .footer-link { font-size: 0.8rem; color: var(--text-muted); text-decoration: none; transition: color 0.2s ease; }
+        .footer-link:hover { color: var(--accent-primary); }
+        .footer-bottom { margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; }
+        .footer-copyright { font-size: 0.8rem; color: var(--text-muted); }
+        .footer-version { font-size: 0.8rem; color: var(--text-muted); display: flex; align-items: center; gap: 0.4rem; }
+        .footer-version-badge { padding: 0.15rem 0.5rem; background: rgba(46, 107, 178, 0.1); border-radius: 100px; font-size: 0.7rem; color: var(--accent-primary); font-weight: 600; }
+
+        .mobile-nav { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: var(--bg-primary); z-index: 999; padding: 5rem 2rem 2rem; display: none; flex-direction: column; gap: 0.5rem; }
+        .mobile-nav.open { display: flex; }
+        .mobile-nav-link { color: var(--text-primary); text-decoration: none; font-size: 1.25rem; padding: 0.75rem 0; border-bottom: 1px solid var(--border-color); }
+        .mobile-nav-close { position: absolute; top: 1rem; right: 1.5rem; background: none; border: none; color: var(--text-primary); font-size: 1.5rem; cursor: pointer; }
+
+        @media (max-width: 768px) {
+            .nav-links { display: none; }
+            .mobile-menu-btn { display: block; }
+            .team-card { grid-template-columns: 1fr; text-align: center; }
+            .team-photo { margin: 0 auto; }
+            .team-links { justify-content: center; }
+            .alumni-grid { grid-template-columns: 1fr; }
+            .footer-content { flex-direction: column; text-align: center; }
+            .footer-links { flex-direction: column; gap: 0.75rem; }
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="index.html" class="nav-logo">
+                <img src="_static/PIASO_logo.png" alt="PIASO" class="nav-logo-img">
+            </a>
+            <div class="nav-links">
+                <a href="installation.html" class="nav-link">Installation</a>
+                <a href="tutorials.html" class="nav-link">Tutorials</a>
+                <a href="modules.html" class="nav-link">API</a>
+                <a href="about.html" class="nav-link active">About</a>
+                <a href="references.html" class="nav-link">References</a>
+                <a href="releaseNotes.html" class="nav-link">Release Notes</a>
+            </div>
+            <div class="nav-actions">
+                <a href="https://github.com/genecell/PIASO" target="_blank" rel="noopener" class="nav-icon-btn" title="GitHub">
+                    <i class="fa-brands fa-github"></i>
+                </a>
+                <a href="installation.html" class="nav-btn-primary">
+                    Get Started <i class="fa-solid fa-arrow-right"></i>
+                </a>
+            </div>
+            <button class="mobile-menu-btn" onclick="toggleMobileMenu()">
+                <i class="fa-solid fa-bars"></i>
+            </button>
+        </div>
+    </nav>
+
+    <div class="mobile-nav" id="mobileNav">
+        <button class="mobile-nav-close" onclick="toggleMobileMenu()">
+            <i class="fa-solid fa-times"></i>
+        </button>
+        <a href="installation.html" class="mobile-nav-link">Installation</a>
+        <a href="tutorials.html" class="mobile-nav-link">Tutorials</a>
+        <a href="modules.html" class="mobile-nav-link">API</a>
+        <a href="about.html" class="mobile-nav-link">About</a>
+        <a href="references.html" class="mobile-nav-link">References</a>
+        <a href="releaseNotes.html" class="mobile-nav-link">Release Notes</a>
+        <a href="https://github.com/genecell/PIASO" target="_blank" class="mobile-nav-link">GitHub</a>
+    </div>
+
+    <header class="page-header">
+        <div class="page-header-container">
+            <h1 class="page-title">About PIASO</h1>
+            <p class="page-subtitle">
+                PIASO is developed by the Gord Fishell Laboratory at Harvard Medical School and Broad Institute of MIT and Harvard, dedicated to advancing single-cell genomics and neurobiology research through computational methods.
+            </p>
+        </div>
+    </header>
+
+    <section class="content-section">
+        <div class="content-container">
+            <p class="about-intro">
+                <strong>PIASO</strong> (Precise Integrative Analysis of Single-cell Omics) is a Python toolkit designed to support researchers in analyzing complex single-cell omics data. Our mission is to provide efficient, accurate, and user-friendly tools that enable biological insights from scRNA-seq, scATAC-seq, and spatial transcriptomics datasets.
+            </p>
+
+            <h2 class="section-title">Core Team</h2>
+
+            <div class="team-grid">
+                <!-- Principal Investigator -->
+                <div class="team-card">
+                    <div class="team-photo">
+                        <img src="_static/Fishell_Gord+2024.jpg" alt="Gord Fishell, PhD" onerror="this.style.display='none'; this.parentElement.innerHTML='<i class=\'fa-solid fa-user\'></i>';">
+                    </div>
+                    <div class="team-info">
+                        <h3>Gord Fishell, PhD</h3>
+                        <div class="team-title">Principal Investigator</div>
+                        <div class="team-affiliation">
+                            Professor of Neurobiology, Harvard Medical School<br>
+                            Professor of Neurobiology, The Stanley Center, Broad Institute
+                        </div>
+                        <div class="team-links">
+                            <a href="https://scholar.google.com/citations?hl=en&user=eTJT9NAAAAAJ" target="_blank" rel="noopener" class="team-link">
+                                <i class="fa-brands fa-google-scholar"></i> Google Scholar
+                            </a>
+                            <a href="https://twitter.com/GordFishell" target="_blank" rel="noopener" class="team-link">
+                                <i class="fa-brands fa-x-twitter"></i> @GordFishell
+                            </a>
+                            <a href="https://bsky.app/profile/gordfishell.bsky.social" target="_blank" rel="noopener" class="team-link">
+                                <i class="fa-brands fa-bluesky"></i> Bluesky
+                            </a>
+                            <a href="mailto:gordon_fishell@hms.harvard.edu" class="team-link">
+                                <i class="fa-solid fa-envelope"></i> HMS Email
+                            </a>
+                            <a href="mailto:gfishell@broadinstitute.org" class="team-link">
+                                <i class="fa-solid fa-envelope"></i> Broad Email
+                            </a>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Lead Developer -->
+                <div class="team-card">
+                    <div class="team-photo">
+                        <img src="_static/Min_Dai_GitHub.jpeg" alt="Min Dai, PhD" onerror="this.style.display='none'; this.parentElement.innerHTML='<i class=\'fa-solid fa-user\'></i>';">
+                    </div>
+                    <div class="team-info">
+                        <h3>Min Dai, PhD</h3>
+                        <div class="team-title">Lead Developer & Maintainer</div>
+                        <div class="team-affiliation">
+                            Senior Computational Scientist, Broad Institute of MIT and Harvard
+                        </div>
+                        <div class="team-links">
+                            <a href="https://scholar.google.com/citations?user=HtlDMqUAAAAJ&hl=en" target="_blank" rel="noopener" class="team-link">
+                                <i class="fa-brands fa-google-scholar"></i> Google Scholar
+                            </a>
+                            <a href="https://twitter.com/artofbiology" target="_blank" rel="noopener" class="team-link">
+                                <i class="fa-brands fa-x-twitter"></i> @artofbiology
+                            </a>
+                            <a href="https://bsky.app/profile/artofbiology.bsky.social" target="_blank" rel="noopener" class="team-link">
+                                <i class="fa-brands fa-bluesky"></i> Bluesky
+                            </a>
+                            <a href="mailto:dai@broadinstitute.org" class="team-link">
+                                <i class="fa-solid fa-envelope"></i> Email
+                            </a>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Vallari Shende -->
+                <div class="team-card">
+                    <div class="team-photo">
+                        <img src="_static/Vallari_Shende_LinkedIn.jpeg" alt="Vallari Shende" onerror="this.style.display='none'; this.parentElement.innerHTML='<i class=\'fa-solid fa-user\'></i>';">
+                    </div>
+                    <div class="team-info">
+                        <h3>Vallari Shende</h3>
+                        <div class="team-title">Co-developer & Maintainer</div>
+                        <div class="team-affiliation">
+                            Computational Associate, Broad Institute of MIT and Harvard
+                        </div>
+                        <div class="team-links">
+                            <a href="https://www.linkedin.com/in/svallari/" target="_blank" rel="noopener" class="team-link">
+                                <i class="fa-brands fa-linkedin"></i> LinkedIn
+                            </a>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Jeongyeon (Paulina) Lee -->
+                <div class="team-card">
+                    <div class="team-photo">
+                        <img src="_static/Paulina_Lee_LinkedIn.jpeg" alt="Jeongyeon (Paulina) Lee" onerror="this.style.display='none'; this.parentElement.innerHTML='<i class=\'fa-solid fa-user\'></i>';">
+                    </div>
+                    <div class="team-info">
+                        <h3>Jeongyeon (Paulina) Lee</h3>
+                        <div class="team-title">Co-developer & Maintainer</div>
+                        <div class="team-affiliation">
+                            Undergraduate Student, Northeastern University
+                        </div>
+                        <div class="team-links">
+                            <a href="https://www.linkedin.com/in/paulina-ljy/" target="_blank" rel="noopener" class="team-link">
+                                <i class="fa-brands fa-linkedin"></i> LinkedIn
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Other Contributors -->
+            <div class="team-members-list">
+                <h4><i class="fa-solid fa-users"></i> Other Fishell Laboratory Contributors</h4>
+                <p>
+                    PIASO benefits from the collaborative efforts of many members of the Fishell Laboratory who contribute through testing, feedback, and scientific insights.
+                </p>
+            </div>
+
+            <!-- Previous Contributors -->
+            <div class="alumni-section">
+                <h3>Previous Contributors</h3>
+                <div class="alumni-grid">
+                    <div class="alumni-card">
+                        <div class="alumni-photo">
+                            <img src="_static/Alyssa+Rukshin.png" alt="Alyssa Rukshin" onerror="this.style.display='none'; this.parentElement.innerHTML='<i class=\'fa-solid fa-user\'></i>';">
+                        </div>
+                        <div class="alumni-info">
+                            <h4>Alyssa Rukshin</h4>
+                            <p>Undergraduate Student, Northeastern University</p>
+                            <a href="https://www.linkedin.com/in/alyssa-rukshin/" target="_blank" rel="noopener" class="alumni-link">
+                                <i class="fa-brands fa-linkedin"></i> LinkedIn Profile
+                            </a>
+                        </div>
+                    </div>
+                    <div class="alumni-card">
+                        <div class="alumni-photo">
+                            <img src="_static/Grace_Wang.jpeg" alt="Grace Wang" onerror="this.style.display='none'; this.parentElement.innerHTML='<i class=\'fa-solid fa-user\'></i>';">
+                        </div>
+                        <div class="alumni-info">
+                            <h4>Grace Wang</h4>
+                            <p>Undergraduate Student, Northeastern University, now a PhD student in Biostatistics, University of Pennsylvania</p>
+                            <a href="https://www.linkedin.com/in/grace-wang003/" target="_blank" rel="noopener" class="alumni-link">
+                                <i class="fa-brands fa-linkedin"></i> LinkedIn Profile
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="contact-section">
+        <div class="contact-grid">
+            <div class="contact-card">
+                <h4><i class="fa-solid fa-building"></i> Harvard Medical School</h4>
+                <p>
+                    Warren Alpert Building<br>
+                    200 Longwood Ave<br>
+                    Boston, MA 02115
+                </p>
+            </div>
+            <div class="contact-card">
+                <h4><i class="fa-solid fa-flask"></i> Broad Institute</h4>
+                <p>
+                    Stanley Center for Psychiatric Research<br>
+                    75 Ames St<br>
+                    Cambridge, MA 02142
+                </p>
+            </div>
+            <div class="contact-card">
+                <h4><i class="fa-solid fa-envelope"></i> Contact</h4>
+                <p>
+                    For questions about PIASO:<br>
+                    <a href="mailto:dai@broadinstitute.org">dai@broadinstitute.org</a><br><br>
+                    <a href="https://fishelllab.hms.harvard.edu/" target="_blank" rel="noopener">Visit the Fishell Lab website →</a>
+                </p>
+            </div>
+        </div>
+    </section>
+
+    <footer class="footer">
+        <div class="footer-container">
+            <div class="footer-content">
+                <div class="footer-logo">
+                    <img src="_static/PIASO_logo.png" alt="PIASO" class="footer-logo-img">
+                </div>
+                <div class="footer-social">
+                    <a href="https://github.com/genecell/PIASO" target="_blank" rel="noopener" class="footer-social-link" title="GitHub">
+                        <i class="fa-brands fa-github"></i>
+                    </a>
+                </div>
+            </div>
+            <div class="footer-info">
+                <p class="footer-info-text">
+                    PIASO is developed and maintained by the <a href="https://fishelllab.hms.harvard.edu/" target="_blank" rel="noopener"><strong>Gord Fishell Laboratory</strong></a> at Harvard Medical School and Broad Institute of MIT and Harvard.<br>
+                    Contact: Min Dai - <a href="mailto:dai@broadinstitute.org">dai@broadinstitute.org</a>
+                </p>
+                <p class="footer-institutions">Developed at Harvard Medical School • Broad Institute of MIT and Harvard</p>
+       
