@@ -10,6 +10,6 @@ name = "_piaso_score"
 crate-type = ["cdylib"]
 
 [dependencies]
-pyo3 = { version = "0.24", features = ["extension-module"] }
+pyo3 = { version = "0.24", features = ["extension-module", "generate-import-lib"] }
 numpy = "0.24"
 rayon = "1.10"
