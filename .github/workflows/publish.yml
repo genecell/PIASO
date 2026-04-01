@@ -23,11 +23,11 @@ jobs:
           # Linux aarch64 (cross-compiled)
           - os: ubuntu-latest
             target: aarch64
-          # macOS x86_64 (Intel)
-          - os: macos-13
+          # macOS x86_64 (Intel, cross-compiled on Apple Silicon runner)
+          - os: macos-latest
             target: x86_64
           # macOS arm64 (Apple Silicon)
-          - os: macos-14
+          - os: macos-latest
             target: aarch64
           # Windows x86_64
           - os: windows-latest
@@ -73,7 +73,13 @@ jobs:
     name: Publish to PyPI
     runs-on: ubuntu-latest
     needs: [build-wheels, build-sdist]
-
+    # Optional: use trusted publisher (OIDC) instead of API token
+    # See: https://docs.pypi.org/trusted-publishers/using-a-publisher/
+    # environment:
+    #   name: pypi
+    #   url: https://pypi.org/p/piaso-tools
+    # permissions:
+    #   id-token: write
 
     steps:
       - name: Download all artifacts
@@ -87,3 +93,5 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           password: ${{ secrets.PYPI_API_TOKEN }}
+          # For trusted publisher (OIDC), remove the password line above
+          # and uncomment the environment/permissions block above
