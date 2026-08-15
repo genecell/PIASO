@@ -52,6 +52,14 @@ dependencies = [
     "umap-learn>=0.5",
     "igraph>=0.10",
     "cosg>=1.0.3",
+    # Required, not optional. PIASO reads cytome datasets throughout tl/pp/pl,
+    # and cytome is a 124 KB pure-Python wheel whose own dependencies (numpy,
+    # scipy, pandas, lz4) are all already listed above -- so requiring it adds
+    # exactly one package and no transitive weight.
+    # Upper bound: cytome's public modality API is pinned by its own
+    # conformance test, so 0.x minors are safe; the bound exists to stop a
+    # future 1.0 API cleanup from reaching installs pinned to this release.
+    "cytome>=0.2.3,<1.0",
 ]
 
 # https://docs.pypi.org/project_metadata/#project-urls
@@ -63,9 +71,6 @@ Homepage = "https://piaso.org"
 [project.optional-dependencies]
 dev = [
     "pre-commit", # static checking
-]
-cytome = [
-    "cytome>=0.2.1",
 ]
 atac = [
     "pysam",

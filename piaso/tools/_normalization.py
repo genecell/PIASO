@@ -46,14 +46,14 @@ def _resolve_gene_names(ds, modality="RNA"):
     """Resolve the display gene-name array for a cytome.
 
     Round 25: delegate to the SINGLE SOURCE OF TRUTH
-    (``cytome.utils.modality.modality_feature_table_info``) so the names returned
+    (``cytome.modality_feature_table_info``) so the names returned
     here match the names COSG emits (populated symbol-first, else ``gene_id``).
     Before this, a hard-coded ``gene_id``-first order returned Ensembl ids while
     COSG (post-Round-24) returned symbols — the two never matched and runGDR/score
     raised "No valid gene sets found" on cellranger cytomes (gene_id != symbol).
     """
     try:
-        from cytome.utils.modality import modality_feature_table_info
+        from cytome import modality_feature_table_info
         feat_tbl, idx_col, name_col = modality_feature_table_info(ds, modality)
         rows = ds._conn.execute(
             f'SELECT "{name_col}" FROM {feat_tbl} ORDER BY {idx_col}'
@@ -92,8 +92,12 @@ def _gene_name_alias_map(ds, modality, var_names):
             f"'{modality}' (e.g. {dups[:5]}); each is scored over ALL its features. "
             f"Use the unique id column to disambiguate.", UserWarning, stacklevel=3)
     try:
-        from cytome.utils.modality import _registry_entry
-        _, feat_tbl, idx_col, candidate_cols = _registry_entry(modality)
+        # Looked up from the public registry rather than cytome's private
+        # _registry_entry: the top-level names are the surface cytome pins in
+        # its conformance test, so the 4-tuple shape cannot shift under us.
+        from cytome import MODALITY_REGISTRY
+        _, feat_tbl, idx_col, candidate_cols = next(
+            e for e in MODALITY_REGISTRY if e[0] == modality)
         feat_cols = [c[1] for c in ds._conn.execute(
             f"PRAGMA table_info({feat_tbl})").fetchall()]
         for c in (col for col in candidate_cols if col in feat_cols):

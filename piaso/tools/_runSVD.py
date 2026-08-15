@@ -73,7 +73,7 @@ def _resolve_selected_col_cytome(ds, modality, user_value):
     because the latter resolves to a ``Modality`` (not an ``EntityTable``)
     for tiles where the modality and entity share a name.
     """
-    from cytome.utils.modality import modality_var_entity
+    from cytome import modality_var_entity
     var_entity, _ = modality_var_entity(modality)
     cols = [r[1] for r in ds._conn.execute(
         f"PRAGMA table_info({var_entity})"

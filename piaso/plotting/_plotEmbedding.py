@@ -922,39 +922,78 @@ def _get_embedding_and_color(
 # colour-by, then GA (gene-named pseudo-counts), then ATAC (peak strings),
 # then tiles (binned-coord strings). Open for proteins later.
 # --------------------------------------------------------------------------
-# Modality registry sourced from cytome.utils.modality (cytome 0.1.1+).
-# We re-derive the legacy plot-side tuple shape (mod, entity, id_cols)
-# from the canonical cytome MODALITY_REGISTRY so existing call sites that
-# unpacked 3-tuples keep working without churn.
-from cytome.utils.modality import MODALITY_REGISTRY as _CYTOME_MODALITY_REGISTRY
-from cytome.utils.modality import (
-    modality_has_feature as _modality_has_feature_cytome,
-    read_feature_column as _read_feature_column_cytome,
-    read_feature_columns as _read_feature_columns_cytome,
-    modality_cell_depth as _modality_cell_depth_cytome,
+# Modality registry sourced from cytome's public API, resolved lazily.
+#
+# Two separate things, deliberately not conflated:
+#
+# * cytome is a *required* dependency (see pyproject.toml), so this import
+#   cannot fail on a correct install.
+# * It is still function-local, because `import piaso` should not pay to parse
+#   cytome for the AnnData path that never touches it. Every other cytome
+#   import in the package is function-local too; 1.2.0 briefly had this one at
+#   module scope and that made `import piaso` fail outright when cytome was
+#   merely an extra. See piaso/tests/test_declared_dependencies.py, which pins
+#   both properties.
+#
+# The names come from `cytome` directly rather than `cytome.utils.modality`:
+# the top level is cytome's documented, conformance-tested surface, so the
+# 4-tuple registry shape and these signatures cannot change under us without
+# cytome's own CI failing first.
+_CYTOME_HINT = (
+    "Reading features from a cytome dataset needs the `cytome` package, which "
+    "PIASO requires.\n"
+    "    pip install -U 'cytome>=0.2.3'\n"
+    "If you see this, the install is incomplete -- cytome is a hard dependency."
 )
-_PLOT_MODALITY_REGISTRY = [
-    (mod, entity, id_cols) for mod, entity, _idx, id_cols in _CYTOME_MODALITY_REGISTRY
-]
+
+
+def _cytome_modality():
+    """Return the cytome module, or raise with an actionable message."""
+    try:
+        import cytome
+    except ImportError as exc:  # pragma: no cover - only on a broken install
+        raise ImportError(_CYTOME_HINT) from exc
+    return cytome
+
+
+def _plot_modality_registry():
+    """``(modality, entity, id_cols)`` triples re-derived from cytome's registry.
+
+    The plot side has always unpacked 3-tuples while cytome's canonical
+    registry carries 4, so the projection lives here and call sites are
+    unchanged. Order matters for auto-detect: RNA first (gene names are the
+    typical colour-by), then GA, ATAC, tiles.
+    """
+    return [
+        (mod, entity, id_cols)
+        for mod, entity, _idx, id_cols in _cytome_modality().MODALITY_REGISTRY
+    ]
 
 
 def _modality_has_feature(ds, mod_name, entity, id_cols, feature):
     """Wrapper around cytome's helper preserving the plot-side calling
     convention (entity / id_cols already destructured by caller). Always
     delegates to the cytome registry under the hood."""
-    return _modality_has_feature_cytome(ds, mod_name, feature)
+    return _cytome_modality().modality_has_feature(ds, mod_name, feature)
 
 
 def _read_feature_column(ds, modality, layer_name, feat_idx, batch_size=2048):
-    """Delegates to ``cytome.utils.modality.read_feature_column``."""
-    return _read_feature_column_cytome(
+    """Delegates to ``cytome.read_feature_column``."""
+    return _cytome_modality().read_feature_column(
         ds, modality, layer_name, feat_idx, batch_size=batch_size,
     )
 
 
+def _read_feature_columns_cytome(ds, modality, layer_name, feat_idx, batch_size=2048):
+    """Delegates to ``cytome.read_feature_columns``."""
+    return _cytome_modality().read_feature_columns(
+        ds, modality, layer_name, feat_idx, batch_size,
+    )
+
+
 def _modality_cell_depth(ds, modality, use_cached_stats=True, batch_size=2048):
-    """Delegates to ``cytome.utils.modality.modality_cell_depth``."""
-    return _modality_cell_depth_cytome(
+    """Delegates to ``cytome.modality_cell_depth``."""
+    return _cytome_modality().modality_cell_depth(
         ds, modality, use_cached_stats=use_cached_stats, batch_size=batch_size,
     )
 
@@ -1133,16 +1172,17 @@ def _resolve_cytome_feature_values(
     # ------------------------------------------------------------------
     # 1. Determine candidate modalities.
     # ------------------------------------------------------------------
+    registry = _plot_modality_registry()
     if modality is None:
         # Search all registry entries.
         candidates = []
-        for mod, entity, id_cols in _PLOT_MODALITY_REGISTRY:
+        for mod, entity, id_cols in registry:
             hit = _modality_has_feature(ds, mod, entity, id_cols, feature)
             if hit is not None:
                 feat_idx, _ = hit
                 candidates.append((mod, entity, feat_idx))
         if not candidates:
-            tried = [m for m, _, _ in _PLOT_MODALITY_REGISTRY]
+            tried = [m for m, _, _ in registry]
             raise KeyError(
                 f"Feature '{feature}' not found in any modality. "
                 f"Modalities checked: {tried}."
@@ -1158,20 +1198,20 @@ def _resolve_cytome_feature_values(
     else:
         # Find the user-specified modality in the registry.
         match = next(
-            ((m, e, ic) for m, e, ic in _PLOT_MODALITY_REGISTRY if m == modality),
+            ((m, e, ic) for m, e, ic in registry if m == modality),
             None,
         )
         if match is None:
             raise ValueError(
                 f"Unknown modality '{modality}' for feature resolution. "
-                f"Known: {[m for m, _, _ in _PLOT_MODALITY_REGISTRY]}."
+                f"Known: {[m for m, _, _ in registry]}."
             )
         _, entity, id_cols = match
         hit = _modality_has_feature(ds, modality, entity, id_cols, feature)
         if hit is None:
             # Look in OTHER modalities so the error message is helpful.
             other_hits = []
-            for m, e, ic in _PLOT_MODALITY_REGISTRY:
+            for m, e, ic in registry:
                 if m == modality:
                     continue
                 if _modality_has_feature(ds, m, e, ic, feature) is not None:
@@ -1313,7 +1353,7 @@ def _resolve_cytome_feature_values_batch(
             resolved[feat] = (modality, hit[0])
         else:
             cands = [(m, _modality_has_feature(ds, m, e, ic, feat))
-                     for m, e, ic in _PLOT_MODALITY_REGISTRY]
+                     for m, e, ic in _plot_modality_registry()]
             cands = [(m, h[0]) for m, h in cands if h is not None]
             if not cands:
                 raise KeyError(f"Feature '{feat}' not found in any modality.")

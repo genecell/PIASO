@@ -167,7 +167,7 @@ def _calculateCellMetrics_anndata(adata, layer=None, modality="RNA",
 
 def _cytome_feature_names(ds, modality, feature_name_column):
     """Ordered feature-name array (by matrix column index) for a cytome modality."""
-    from cytome.utils.modality import modality_feature_table_info
+    from cytome import modality_feature_table_info
     feature_table, idx_col, name_col = modality_feature_table_info(ds, modality)
     col = feature_name_column or name_col
     rows = ds._conn.execute(
@@ -693,7 +693,7 @@ def _calculateFeatureMetrics_anndata(adata, layer=None):
 def _calculateFeatureMetrics_cytome(source, modality, measurement, batch_size, verbose):
     """Cytome streaming path — one pass accumulating col-wise nnz, written to
     the modality's var entity table."""
-    from cytome.utils.modality import modality_feature_table_info
+    from cytome import modality_feature_table_info
 
     ds = _open_cytome(source) if isinstance(source, str) else source
 

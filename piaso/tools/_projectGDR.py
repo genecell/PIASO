@@ -453,7 +453,7 @@ def _var_names(obj, modality="RNA"):
     unordered read silently mis-maps every gene.
     """
     if _is_cytome(obj):
-        from cytome.utils.modality import modality_feature_table_info as _mfi
+        from cytome import modality_feature_table_info as _mfi
         _tbl, _idx_col, name_col = _mfi(obj, modality)
         # Go through the public accessor rather than hand-rolling SQL: EntityTable.__getitem__
         # already does `ORDER BY ROWID`, so the ordering guarantee lives in one place instead of
