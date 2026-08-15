@@ -265,7 +265,7 @@ fn score_complete<'py>(
     let n_sets = gs_off.len() - 1;
     let n_ctrl_total = n_sets * n_ctrl_set;
 
-    // Reborrow slices with independent lifetimes for use inside allow_threads.
+    // Reborrow slices with independent lifetimes for use inside py.detach.
     // SAFETY: The numpy array buffers remain valid for the function's duration.
     // We only release the GIL for computation, the Python objects are not freed.
     let (ad, ai, ap, knn, gs_flat, gs_off, w_flat) = unsafe {
@@ -281,7 +281,7 @@ fn score_complete<'py>(
     };
 
     // Release GIL for all heavy computation (control gene sampling + matmul + reduce)
-    let (score_out, query_scores_vec, scaling_factors, pval_out) = py.allow_threads(|| {
+    let (score_out, query_scores_vec, scaling_factors, pval_out) = py.detach(|| {
 
     // --- Pre-compute control gene indices for all sets ---
     let mut ctrl_genes: Vec<Vec<(usize, usize, f64)>> = Vec::with_capacity(n_sets);
@@ -486,7 +486,7 @@ fn score_complete<'py>(
 
     (score_out, query_scores_vec, scaling_factors, pval_out)
 
-    }); // end py.allow_threads
+    }); // end py.detach
 
     // Convert to numpy arrays (requires GIL)
     let scores_arr = Array1::from_vec(score_out).into_pyarray(py);
@@ -502,11 +502,11 @@ fn score_complete<'py>(
 
 /// Run a Rust closure with GIL released, catching panics as PyRuntimeError.
 /// Converts serde_json::Value result to a native Python dict via pythonize.
-fn run_catching_panic<F>(py: Python<'_>, context: &str, f: F) -> PyResult<PyObject>
+fn run_catching_panic<F>(py: Python<'_>, context: &str, f: F) -> PyResult<Py<PyAny>>
 where
     F: FnOnce() -> serde_json::Value + Send,
 {
-    let result = py.allow_threads(|| std::panic::catch_unwind(std::panic::AssertUnwindSafe(f)));
+    let result = py.detach(|| std::panic::catch_unwind(std::panic::AssertUnwindSafe(f)));
     match result {
         Ok(value) => pythonize::pythonize(py, &value)
             .map(|bound| bound.unbind())
