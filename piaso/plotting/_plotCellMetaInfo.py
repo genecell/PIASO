@@ -58,10 +58,10 @@ def plotConfusionMatrix(
     
     Examples:
         Basic usage with AnnData object:
-        >>> import scanpy as sc
+        >>> import anndata
         >>> import pandas as pd
         >>> # Load your data
-        >>> adata = sc.read_h5ad('your_data.h5ad')
+        >>> adata = anndata.read_h5ad('your_data.h5ad')
         >>> # Plot confusion matrix between cell types and Leiden clusters
         >>> plotConfusionMatrix(adata, groupby_query='CellTypes', groupby_reference='Leiden')
         
@@ -134,17 +134,56 @@ def plotConfusionMatrix(
     """
     
     # Handle different data types
-    if hasattr(data, 'obs'):  # AnnData object
+    _uns = None  # for color bar support
+    if isinstance(data, str):
+        # Path to cytome file
+        import sqlite3
+        conn = sqlite3.connect(data)
+        cols = [r[1] for r in conn.execute("PRAGMA table_info(cells)").fetchall()]
+        missing = [c for c in [groupby_query, groupby_reference] if c not in cols]
+        if missing:
+            conn.close()
+            raise ValueError(
+                f"Column(s) {missing} not found in cytome cells table. "
+                f"Available columns: {cols}"
+            )
+        rows = conn.execute(
+            f"SELECT [{groupby_query}], [{groupby_reference}] FROM cells"
+        ).fetchall()
+        conn.close()
+        df = pd.DataFrame(rows, columns=[groupby_query, groupby_reference])
+    elif hasattr(data, '_conn'):
+        # Cytome Dataset object
+        cols = [r[1] for r in data._conn.execute("PRAGMA table_info(cells)").fetchall()]
+        missing = [c for c in [groupby_query, groupby_reference] if c not in cols]
+        if missing:
+            raise ValueError(
+                f"Column(s) {missing} not found in cytome cells table. "
+                f"Available columns: {cols}"
+            )
+        rows = data._conn.execute(
+            f"SELECT [{groupby_query}], [{groupby_reference}] FROM cells"
+        ).fetchall()
+        df = pd.DataFrame(rows, columns=[groupby_query, groupby_reference])
+    elif hasattr(data, 'obs'):  # AnnData object
         df = data.obs
+        _uns = getattr(data, 'uns', None)
     elif isinstance(data, pd.DataFrame):
         df = data
     else:
-        raise TypeError("Data must be a pandas DataFrame or AnnData object")
-    
+        raise TypeError(
+            "Data must be a pandas DataFrame, AnnData object, cytome Dataset, "
+            "or path to a .cytome file"
+        )
+
     # Validate required columns
     missing_cols = [col for col in [groupby_query, groupby_reference] if col not in df.columns]
     if missing_cols:
-        raise ValueError(f"Missing columns in data: {missing_cols}")
+        available = list(df.columns)
+        raise ValueError(
+            f"Column(s) {missing_cols} not found in data. "
+            f"Available columns: {available}"
+        )
     
     # Remove rows with NaN values in the specified columns
     df_clean = df[[groupby_query, groupby_reference]].dropna()
@@ -211,28 +250,29 @@ def plotConfusionMatrix(
     # Get color information if show_group_color_bars is True and data is AnnData
     query_colors = None
     reference_colors = None
-    if show_group_color_bars and hasattr(data, 'uns'):
+    if show_group_color_bars and (_uns is not None or hasattr(data, 'uns')):
+        uns = _uns if _uns is not None else getattr(data, 'uns', {})
         query_color_key = f"{groupby_query}_colors"
         reference_color_key = f"{groupby_reference}_colors"
-        
-        if query_color_key in data.uns:
+
+        if query_color_key in uns:
             # Get unique categories in original order, then reorder
             query_cats = conf_matrix_norm.index.tolist()
-            if len(data.uns[query_color_key]) >= len(query_cats):
+            if len(uns[query_color_key]) >= len(query_cats):
                 # Create mapping from category to color
-                original_query_cats = data.obs[groupby_query].cat.categories.tolist() if hasattr(data.obs[groupby_query], 'cat') else sorted(data.obs[groupby_query].unique())
-                query_color_map = {cat: data.uns[query_color_key][i] for i, cat in enumerate(original_query_cats) if i < len(data.uns[query_color_key])}
+                original_query_cats = df[groupby_query].astype('category').cat.categories.tolist() if hasattr(df[groupby_query], 'cat') else sorted(df[groupby_query].unique())
+                query_color_map = {cat: uns[query_color_key][i] for i, cat in enumerate(original_query_cats) if i < len(uns[query_color_key])}
                 # Get colors for reordered categories
                 query_colors = [query_color_map.get(cat, '#808080') for cat in query_cats]
                 query_colors = [query_colors[i] for i in row_order]
         
-        if reference_color_key in data.uns:
+        if reference_color_key in uns:
             # Get unique categories in original order, then reorder
             reference_cats = conf_matrix_norm.columns.tolist()
-            if len(data.uns[reference_color_key]) >= len(reference_cats):
+            if len(uns[reference_color_key]) >= len(reference_cats):
                 # Create mapping from category to color
-                original_ref_cats = data.obs[groupby_reference].cat.categories.tolist() if hasattr(data.obs[groupby_reference], 'cat') else sorted(data.obs[groupby_reference].unique())
-                reference_color_map = {cat: data.uns[reference_color_key][i] for i, cat in enumerate(original_ref_cats) if i < len(data.uns[reference_color_key])}
+                original_ref_cats = df[groupby_reference].astype('category').cat.categories.tolist() if hasattr(df[groupby_reference], 'cat') else sorted(df[groupby_reference].unique())
+                reference_color_map = {cat: uns[reference_color_key][i] for i, cat in enumerate(original_ref_cats) if i < len(uns[reference_color_key])}
                 # Get colors for reordered categories
                 reference_colors = [reference_color_map.get(cat, '#808080') for cat in reference_cats]
                 reference_colors = [reference_colors[i] for i in col_order]

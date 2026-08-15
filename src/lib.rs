@@ -1,3 +1,9 @@
+// --- Shared modules used by both PyO3 extension and piaso-atac CLI ---
+pub mod encoder;
+pub mod cytome_reader;
+pub mod motif_scan;
+
+// --- PyO3 gene set scoring ---
 use numpy::ndarray::{Array1, Array2};
 use numpy::{IntoPyArray, PyArray1, PyReadonlyArray1};
 use pyo3::prelude::*;
@@ -492,10 +498,53 @@ fn score_complete<'py>(
 }
 
 
+// --- PyO3 wrappers for PICCO peak calling + quantification ---
+
+/// Run a Rust closure with GIL released, catching panics as PyRuntimeError.
+/// Converts serde_json::Value result to a native Python dict via pythonize.
+fn run_catching_panic<F>(py: Python<'_>, context: &str, f: F) -> PyResult<PyObject>
+where
+    F: FnOnce() -> serde_json::Value + Send,
+{
+    let result = py.allow_threads(|| std::panic::catch_unwind(std::panic::AssertUnwindSafe(f)));
+    match result {
+        Ok(value) => pythonize::pythonize(py, &value)
+            .map(|bound| bound.unbind())
+            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(
+                format!("{context}: pythonize failed: {e}")
+            )),
+        Err(panic) => {
+            let msg = if let Some(s) = panic.downcast_ref::<&str>() {
+                s.to_string()
+            } else if let Some(s) = panic.downcast_ref::<String>() {
+                s.clone()
+            } else {
+                "unknown panic".to_string()
+            };
+            Err(pyo3::exceptions::PyRuntimeError::new_err(
+                format!("{context} panicked: {msg}")
+            ))
+        }
+    }
+}
+
+
+/// Call peaks using PICCO (Rust backend, in-process via PyO3).
+///
+/// Equivalent to `piaso-atac call-peaks` CLI but runs in-process,
+/// avoiding subprocess overhead and enabling direct Python dict return.
+
+
+/// Quantify peak activity per cell (Rust backend, in-process via PyO3).
+///
+/// Equivalent to `piaso-atac quantify` CLI but runs in-process.
+
+
 /// Python module
 #[pymodule]
-fn _piaso_score(m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn _piaso(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(fused_matmul_reduce, m)?)?;
     m.add_function(wrap_pyfunction!(score_complete, m)?)?;
+    m.add_function(wrap_pyfunction!(motif_scan::scan_motifs_fwd, m)?)?;
     Ok(())
 }

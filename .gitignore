@@ -6,3 +6,7 @@ Cargo.lock
 *.so
 *.pyd
 *.dll
+.snakemake/
+
+# compiled Rust binaries — build artifacts; piaso-atac embeds PICCO
+bin/

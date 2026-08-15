@@ -1,15 +1,26 @@
 [package]
-name = "piaso-score"
-version = "0.1.0"
+name = "piaso-rust"
+version = "0.3.0"
 edition = "2021"
 license = "BSD-3-Clause"
-description = "Rust-accelerated fused sparse matmul-reduce for PIASO gene set scoring"
+description = "Rust acceleration for PIASO: gene-set scoring + scATAC peak calling + quantification + fragment import"
 
 [lib]
-name = "_piaso_score"
-crate-type = ["cdylib"]
+name = "_piaso"
+crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 pyo3 = { version = "0.24", features = ["extension-module", "generate-import-lib"] }
 numpy = "0.24"
 rayon = "1.10"
+# piaso-atac + quantify dependencies
+rusqlite = { version = "0.31", features = ["bundled"] }
+lz4_flex = "0.11"
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rustc-hash = "2.0"
+libc = "0.2"
+pythonize = "0.24"
+# cytome-import-fragments dependency (pure-Rust bgzf reader)
+noodles-bgzf = "0.46"

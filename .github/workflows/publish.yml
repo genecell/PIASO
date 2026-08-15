@@ -1,97 +1,136 @@
-name: Publish to PyPI
+name: Build and publish wheels to PyPI
+
+# NOTE: this project builds a Rust (PyO3/maturin) extension `piaso._piaso`.
+# A pure-Python builder would NOT compile the Rust and would ship a wheel
+# missing the extension. We build manylinux wheels per Python version with
+# maturin. The extension is version-specific (rust-numpy does not support
+# abi3 here), so we run a cp310/cp311/cp312 matrix.
 
 on:
-  push:
-    branches:
-      - PyPI_publish
-
-permissions:
-  contents: read
+  release:
+    # `published`, not `created`: GitHub does not fire `created` for draft
+    # releases, and composing a release in the web UI saves a draft first, so
+    # a `created` trigger silently never fires on the normal path.
+    types: [published]
+  workflow_dispatch:
 
 jobs:
-  # ── Build platform wheels ──────────────────────────────────────────
   build-wheels:
-    name: Build wheels (${{ matrix.os }}, ${{ matrix.target }})
-    runs-on: ${{ matrix.os }}
+    name: Build wheel (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        include:
-          # Linux x86_64
-          - os: ubuntu-latest
-            target: x86_64
-          # Linux aarch64 (cross-compiled)
-          - os: ubuntu-latest
-            target: aarch64
-          # macOS x86_64 (Intel, cross-compiled on Apple Silicon runner)
-          - os: macos-latest
-            target: x86_64
-          # macOS arm64 (Apple Silicon)
-          - os: macos-latest
-            target: aarch64
-          # Windows x86_64
-          - os: windows-latest
-            target: x86_64
-
+        python-version: ["3.10", "3.11", "3.12"]
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build wheels
+      - name: Build manylinux wheel
         uses: PyO3/maturin-action@v1
         with:
-          target: ${{ matrix.target }}
-          args: --release --out dist --interpreter 3.9 3.10 3.11 3.12
-          manylinux: auto
+          command: build
+          args: >-
+            --release
+            --interpreter python${{ matrix.python-version }}
+            --out dist
+          manylinux: "2014"
 
-      - name: Upload wheels
+      # The unpublished kernels (call_peaks_pyo3, quantify_peaks_pyo3) sit
+      # behind Cargo features that are off by default, and piaso-atac declares
+      # required-features, so neither should be in a default build. A compiled
+      # extension cannot be partially shipped -- if a gate is ever removed,
+      # the capability goes out as machine code and cannot be recalled. Fail
+      # here rather than discover it after upload.
+      - name: Wheel must not contain gated kernels or the ATAC binary
+        run: |
+          python - <<'EOF'
+          import glob, zipfile, sys
+          BAD_SYMBOLS = (b"call_peaks_pyo3", b"quantify_peaks_pyo3")
+          BAD_FILES = ("piaso-atac", "cytome-import-fragments")
+          for whl in glob.glob("dist/*.whl"):
+              z = zipfile.ZipFile(whl)
+              for name in z.namelist():
+                  if any(b in name for b in BAD_FILES):
+                      sys.exit(f"::error::{whl} contains {name}")
+                  if name.endswith((".so", ".pyd")):
+                      blob = z.read(name)
+                      hit = [s.decode() for s in BAD_SYMBOLS if s in blob]
+                      if hit:
+                          sys.exit(
+                              f"::error::{whl}:{name} exports {hit} -- the Cargo "
+                              "feature gates are not in effect. Build with default "
+                              "features only."
+                          )
+              print(f"{whl}: clean")
+          EOF
+
+      - name: Upload wheel artifact
         uses: actions/upload-artifact@v4
         with:
-          name: wheels-${{ matrix.os }}-${{ matrix.target }}
-          path: dist/
+          name: wheels-py${{ matrix.python-version }}
+          path: dist/*.whl
 
-  # ── Build source distribution ──────────────────────────────────────
   build-sdist:
     name: Build sdist
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - name: Build sdist
         uses: PyO3/maturin-action@v1
         with:
           command: sdist
           args: --out dist
-
-      - name: Upload sdist
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
-          name: wheels-sdist
-          path: dist/
+          name: sdist
+          path: dist/*.tar.gz
 
-  # ── Publish to PyPI ────────────────────────────────────────────────
   publish:
     name: Publish to PyPI
-    runs-on: ubuntu-latest
     needs: [build-wheels, build-sdist]
-    # Optional: use trusted publisher (OIDC) instead of API token
-    # See: https://docs.pypi.org/trusted-publishers/using-a-publisher/
-    # environment:
-    #   name: pypi
-    #   url: https://pypi.org/p/piaso-tools
-    # permissions:
-    #   id-token: write
-
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write        # OIDC identity for PyPI Trusted Publishing
+      contents: read
+    # Only publish on an actual release (not manual dispatch test runs)
+    if: github.event_name == 'release'
     steps:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
-          pattern: wheels-*
           path: dist
           merge-multiple: true
 
+      - name: Tag must match the package version
+        if: github.event_name == 'release'
+        run: |
+          BUILT=$(ls dist/*.tar.gz | sed -E 's/.*-([0-9][^-]*)\.tar\.gz/\1/')
+          TAG=${GITHUB_REF_NAME#v}
+          echo "tag=$TAG built=$BUILT"
+          if [ "$TAG" != "$BUILT" ]; then
+            echo "::error::Release tag '$GITHUB_REF_NAME' does not match the" \
+                 "built version '$BUILT'. A PyPI version cannot be re-uploaded."
+            exit 1
+          fi
+
+      - name: Check metadata renders on PyPI
+        run: |
+          pip install twine
+          twine check dist/*
+
+      # Trusted Publishing (OIDC) -- no API token. ONE-TIME SETUP on
+      # pypi.org -> piaso-tools -> Publishing -> Add a trusted publisher:
+      #   owner        genecell
+      #   repository   PIASO
+      #   workflow     publish.yml
+      #   environment  (leave blank)
+      # Until that exists this step cannot authenticate; the old
+      # PYPI_API_TOKEN secret can be revoked once the first OIDC upload
+      # succeeds.
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          password: ${{ secrets.PYPI_API_TOKEN }}
-          # For trusted publisher (OIDC), remove the password line above
-          # and uncomment the environment/permissions block above
+          # Re-running a release whose version is already on PyPI becomes a
+          # no-op rather than a red build. A forgotten version bump is still
+          # caught by the tag-vs-version guard above.
+          skip-existing: true

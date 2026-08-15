@@ -1,10 +1,16 @@
 from ._runGDR import runGDR, calculateScoreParallel
 
+
+from ..utils._cytome_compat import _is_cytome_dataset_obj as _is_cytome
+from ..utils._cytome_compat import open_cytome_sync as _open_cytome
+
+
 import numpy as np
 import pandas as pd
 from scipy import stats
-import scanpy as sc
+from anndata import AnnData
 from sklearn.decomposition import TruncatedSVD
+from typing import Optional
 
 ### Predict cell types using GDR
 ### Firstly packaged as a function on April 10, 2024
@@ -24,8 +30,9 @@ def predictCellTypeByGDR(
     resolution:float=1.0,
     scoring_method:str=None,
     key_added:str=None,
-    verbosity: int=0
-
+    verbosity: int=0,
+    modality: Optional[str] = None,
+    cytome_layer: str = "counts",
 ):
     """
     Predicts cell types in a query dataset (`adata`) using the GDR dimensionality reduction method based on a reference dataset (`adata_ref`).
@@ -89,12 +96,12 @@ def predictCellTypeByGDR(
 
     Example
     -------
-    >>> import scanpy as sc
+    >>> import anndata
     >>> # Load query dataset
-    >>> adata = sc.read_h5ad("query_data.h5ad")
-    >>> 
+    >>> adata = anndata.read_h5ad("query_data.h5ad")
+    >>>
     >>> # Load reference dataset with known cell type annotations
-    >>> adata_ref = sc.read_h5ad("reference_data.h5ad")
+    >>> adata_ref = anndata.read_h5ad("reference_data.h5ad")
     >>> 
     >>> # Predict cell types for the query dataset
     >>> piaso.tl.predictCellTypeByGDR(
@@ -118,23 +125,32 @@ def predictCellTypeByGDR(
     >>> # Access the predicted cell types in the query dataset
     >>> print(adata.obs['CellTypes_gdr'])
     """
-    
-    sc.settings.verbosity=verbosity
-    
+    # --- Cytome dispatch ---
+    _cytome_ds = None
+    if isinstance(adata, str) or _is_cytome(adata):
+        _cytome_ds = _open_cytome(adata) if isinstance(adata, str) else adata
+        _modality_for_dispatch = modality if modality is not None else "RNA"
+        adata = _cytome_ds.to_anndata(
+            modality=_modality_for_dispatch, layer=cytome_layer,
+        )
+
+    shared_genes=np.intersect1d(adata_ref.var_names, adata.var_names)
+    ### Make a copy of the reference anndata before any mutations
+    adata_ref=adata_ref[:,shared_genes].copy()
     if layer_reference is not None:
         adata_ref.X=adata_ref.layers[layer_reference]
-    shared_genes=np.intersect1d(adata_ref.var_names, adata.var_names)
-    ### Make a copy of the reference anndata
-    adata_ref=adata_ref[:,shared_genes].copy()
-    
+
     adata_ref.obs['gdr_by']=adata_ref.obs[reference_groupby]
+
+    ### Copy query adata before mutating .X
+    adata = adata.copy()
     adata.obs['gdr_by']=adata.obs[query_groupby]
-    
-    
+
     if layer is not None:
         adata.X=adata.layers[layer]
         
-    adata_combine=sc.AnnData.concatenate(adata_ref, adata[:,adata_ref.var_names])
+    import anndata as ad
+    adata_combine = ad.concat([adata_ref, adata[:, adata_ref.var_names]], label='batch', keys=['0', '1'])
     ### Needs to be categorical variable
     adata_combine.obs['gdr_by']=adata_combine.obs['gdr_by'].astype('category')
     
@@ -166,18 +182,14 @@ def predictCellTypeByGDR(
 
     
     ### Run Harmony
-    import scanpy.external as sce
-    sce.pp.harmony_integrate(adata_combine,
-                                 key='batch',
-                                 basis='X_gdr_svd',
-                                 adjusted_basis='X_gdr_harmony')
-    
+    from .external import runHarmony as _piaso_harmony
+    _piaso_harmony(adata_combine, batch_key='batch', use_rep='X_gdr_svd', key_added='X_gdr_harmony')
+
     if return_integration:
-        sc.pp.neighbors(adata_combine,
-                    use_rep='X_gdr_harmony',
-                   n_neighbors=15,random_state=10,knn=True,
-                    method="umap")
-        sc.tl.umap(adata_combine)
+        from ._neighbors import neighbors as _piaso_neighbors
+        from ._umap import umap as _piaso_umap
+        _piaso_neighbors(adata_combine, use_rep='X_gdr_harmony', n_neighbors=15, random_state=10)
+        _piaso_umap(adata_combine)
 
     from sklearn import svm
     print("Predicting cell types:")
@@ -198,13 +210,19 @@ def predictCellTypeByGDR(
         print("All finished. The predicted cell types are saved as `CellTypes_gdr` in adata.obs.")
     
     
-    sc.settings.verbosity=3
-    
+    # --- Write predictions back to cytome ---
+    if _cytome_ds is not None:
+        _key = key_added if key_added is not None else 'CellTypes_gdr'
+        _cytome_ds.cells[_key] = adata.obs[_key].values
+        _cytome_ds.flush()
+        if verbosity > 0:
+            print(f"Predictions written to cytome cells table column '{_key}'")
+
     if return_integration:
         return(adata_combine)
 
 
-   
+
     
 import numpy as np
 import pandas as pd
@@ -261,7 +279,6 @@ def smoothCellTypePrediction(
         
     Examples
     --------
-    >>> import scanpy as sc
     >>> import piaso
     >>> 
     >>> # Basic usage
@@ -533,7 +550,6 @@ def smoothCellTypePrediction(
     
 import numpy as np
 import pandas as pd
-import scanpy as sc
 from typing import Literal, List, Dict, Union, Optional, Tuple
 from scipy.sparse import issparse
 from multiprocessing import shared_memory
@@ -560,7 +576,9 @@ def predictCellTypeByMarker(
     inplace: bool = True,
     random_seed: int = 1927,
     verbosity: int = 1,
-    n_jobs: int = -1
+    n_jobs: int = -1,
+    modality: Optional[str] = None,
+    cytome_layer: str = "counts",
 ):
     """
     Predict cell types using marker genes and optionally smooth predictions.
@@ -619,7 +637,6 @@ def predictCellTypeByMarker(
         
     Examples
     --------
-    >>> import scanpy as sc
     >>> import piaso
     >>> 
     >>> # Basic usage
@@ -632,27 +649,46 @@ def predictCellTypeByMarker(
     ...     inplace=True
     ... )
     """
+    # --- Cytome dispatch: build a minimal AnnData shim ---
+    _cytome_ds = None
+    if isinstance(adata, str) or _is_cytome(adata):
+        _cytome_ds = _open_cytome(adata) if isinstance(adata, str) else adata
+        # Build minimal AnnData with embedding for KNN smoothing
+        import anndata
+        _n_cells = _cytome_ds.n_cells
+        _obs = pd.DataFrame(index=[str(i) for i in range(_n_cells)])
+        adata = anndata.AnnData(obs=_obs)
+        # Load embedding for smoothing
+        if smooth_prediction and use_rep in _cytome_ds.embeddings:
+            adata.obsm[use_rep] = np.array(_cytome_ds.embeddings[use_rep])
+        # calculateScoreParallel will use _cytome_ds directly
+        inplace = True  # always in-place for cytome shim
+
     # Make a copy if not modifying in place
     if not inplace:
         adata = adata.copy()
-    
+
     if verbosity > 0:
         print(f"Calculating gene set scores using {score_method} method...")
         
     
     # Calculate gene set scores
+    # Use cytome dataset directly for scoring if available (it has full matrix access)
+    _score_input = _cytome_ds if _cytome_ds is not None else adata
     if score_method == 'piaso':
         marker_results = calculateScoreParallel(
-            adata,
+            _score_input,
             gene_set=marker_gene_set,
             score_method=score_method,
             score_layer=score_layer,
             max_workers=max_workers,
             return_pvals=True,
             random_seed=random_seed,
-            verbosity=verbosity
+            verbosity=verbosity,
+            **({"modality": modality, "cytome_layer": cytome_layer}
+               if modality is not None or cytome_layer != "counts" else {})
         )
-        
+
         # Extract results
         marker_gene_score = marker_results[0]
         gene_set_names = marker_results[1]
@@ -660,13 +696,15 @@ def predictCellTypeByMarker(
     else:
         # For scanpy method
         marker_results = calculateScoreParallel(
-            adata,
+            _score_input,
             gene_set=marker_gene_set,
             score_method=score_method,
             score_layer=score_layer,
             max_workers=max_workers,
             random_seed=random_seed,
-            verbosity=verbosity
+            verbosity=verbosity,
+            **({"modality": modality, "cytome_layer": cytome_layer}
+               if modality is not None or cytome_layer != "counts" else {})
         )
         
         # Extract results
@@ -784,6 +822,16 @@ def predictCellTypeByMarker(
                 print(f"  - adata.obs['{key_added}_confidence_smoothed']: smoothing confidence scores")
 
     
+    # --- Write predictions back to cytome ---
+    if _cytome_ds is not None:
+        _cytome_ds.cells[key_added] = adata.obs[key_added].values
+        if f"{key_added}_confidence_smoothed" in adata.obs:
+            _cytome_ds.cells[f"{key_added}_confidence_smoothed"] = adata.obs[f"{key_added}_confidence_smoothed"].values
+        _cytome_ds.flush()
+        if verbosity > 0:
+            print(f"Predictions written to cytome cells table column '{key_added}'")
+        return None
+
     if not inplace:
         return adata
     return None

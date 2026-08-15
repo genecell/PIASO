@@ -11,8 +11,8 @@
 
 import numpy as np
 import pandas as pd
-import scanpy as sc
 import scipy.sparse as sp
+from anndata import AnnData
 from sklearn.preprocessing import normalize
 from tqdm.auto import tqdm
 import itertools 
@@ -58,8 +58,8 @@ def calculate_jaccard(set1: set, set2: set) -> float:
     return intersection / union if union > 0 else 0.0 
 
 # Helper Function for Building the Pruned Graph
-def _build_marker_filtered_graph_dual( 
-    adata: sc.AnnData,
+def _build_marker_filtered_graph_dual(
+    adata: AnnData,
     batch_key: str,
     use_rep: str,
     neighbors_within_batch: int,
@@ -134,9 +134,6 @@ def _build_marker_filtered_graph_dual(
     # Step 1: Build Initial BBKNN Graph using bbknn.matrix.bbknn with version checking
     if verbosity > 0: print(f"Building initial graph via BBKNN (neighbors_within_batch={neighbors_within_batch})...")
 
-    original_verbosity_bbknn = sc.settings.verbosity
-    sc.settings.verbosity = 3 if verbosity > 0 else 1
-    
 
     try:
         # Check BBKNN version
@@ -229,10 +226,7 @@ def _build_marker_filtered_graph_dual(
 
     except Exception as e:
         print(f"Error during BBKNN graph construction: {e}")
-        sc.settings.verbosity = original_verbosity_bbknn
         return None, None, None, None
-    finally:
-        sc.settings.verbosity = original_verbosity_bbknn
         
     
 
@@ -243,9 +237,8 @@ def _build_marker_filtered_graph_dual(
     adata.obs[cluster_key_added] = "N/A" 
     adata.obs[batch_key] = adata.obs[batch_key].astype('category') 
 
-    # Control verbosity for Leiden
-    original_verbosity_leiden = sc.settings.verbosity
-    sc.settings.verbosity = 0  # Always silence Leiden
+    from ._neighbors import neighbors as _piaso_neighbors
+    from ._leiden import leiden as _piaso_leiden
 
     try:
         # Use tqdm only if available and verbosity is enabled
@@ -277,23 +270,23 @@ def _build_marker_filtered_graph_dual(
                 # Create a copy of the batch data to work with
                 adata_batch = adata[batch_mask].copy()
 
-                # Compute neighbors
-                sc.pp.neighbors(
-                    adata_batch, 
-                    n_neighbors=leiden_n_neighbors, 
-                    use_rep=use_rep, 
+                # Compute neighbors (self-contained: leiden reads obsp via adjacency_key)
+                _piaso_neighbors(
+                    adata_batch,
+                    use_rep=use_rep,
+                    n_neighbors=leiden_n_neighbors,
+                    random_state=random_state,
                     key_added='cluster_graph',
-                    random_state=random_state
                 )
 
                 # Run Leiden clustering
-                sc.tl.leiden(
-                    adata_batch, 
-                    resolution=leiden_resolution, 
-                    key_added='leiden_labels', 
-                    neighbors_key='cluster_graph', 
-                    random_state=random_state
-                ) 
+                _piaso_leiden(
+                    adata_batch,
+                    resolution=leiden_resolution,
+                    key_added='leiden_labels',
+                    adjacency_key='cluster_graph_connectivities',
+                    random_state=random_state,
+                )
 
                 # Create combined labels and transfer back to main object
                 batch_labels = [f"{batch}{delimiter}{cluster}" for cluster in adata_batch.obs['leiden_labels']]
@@ -321,10 +314,6 @@ def _build_marker_filtered_graph_dual(
 
     except Exception as e:
         print(f"Error during batch clustering process: {str(e)}")
-
-    finally:
-        # Restore original verbosity
-        sc.settings.verbosity = original_verbosity_leiden
 
     # Convert result to categorical
     adata.obs[cluster_key_added] = adata.obs[cluster_key_added].astype('category')
@@ -381,7 +370,7 @@ def _build_marker_filtered_graph_dual(
                     current_cosg_args['layer'] = cosg_layer
                 else:
                     warnings.warn(f"Layer '{cosg_layer}' not found in batch {batch}. Using adata.X for COSG.")
-                    # Don't add layer param - COSG will default to using adata.X
+                    current_cosg_args.pop('layer', None)
 
             # Run COSG directly on adata_batch with appropriate parameters
             cosg.cosg(adata_batch, 
@@ -613,8 +602,8 @@ def _build_marker_filtered_graph_dual(
 
 
 # --- Main Function Combining Filtering and Single-Step Correction ---
-def stitchSpace( 
-    adata: sc.AnnData,
+def stitchSpace(
+    adata: AnnData,
     batch_key: str,
     use_rep: str = 'X_pca',
     key_added: str = 'X_stitch', 
@@ -640,7 +629,7 @@ def stitchSpace(
     correction_use_mutual_sqrt_weights: bool = False, 
     copy: bool = False,
     verbosity: int = 0 # Control overall verbosity (0=minimal, 1+=more info)
-) -> typing.Union[sc.AnnData, None]:
+) -> typing.Union[AnnData, None]:
     """
     Performs a batch correction using a BBKNN graph that has been pruned based on marker gene overlap between batch-specific 
     clusters. Overlap check uses local markers and optionally global markers (controlled by `filter_use_global_markers`).
@@ -725,35 +714,66 @@ def stitchSpace(
         
     Example
     -------
-    >>> import scanpy as sc
-    >>> import stitchSpaceModule # Assuming the code is saved as stitchSpaceModule.py
-    >>> adata = sc.datasets.pbmc68k_reduced() 
+    >>> import anndata
+    >>> import piaso
+    >>> adata = anndata.read_h5ad('pbmc68k.h5ad')
     >>> # Simulate batches (replace with actual batch info)
     >>> adata.obs['batch'] = ['A' if i % 2 == 0 else 'B' for i in range(adata.n_obs)]
     >>> # Assume normalized data is in adata.layers['log1p']
-    >>> adata.layers['log1p'] = adata.X.copy() 
-    >>> # Precompute PCA if not done
-    >>> sc.tl.pca(adata) 
+    >>> adata.layers['log1p'] = adata.X.copy()
     >>> # Run correction using log1p layer for COSG, increased verbosity
     >>> piaso.tl.stitchSpace(
-    ...     adata, 
-    ...     batch_key='batch', 
-    ...     use_rep='X_pca', 
+    ...     adata,
+    ...     batch_key='batch',
+    ...     use_rep='X_pca',
     ...     key_added='X_stitch_corrected',
-    ...     filter_cluster_key_added='batch@cluster_stitch', # Optional: specify key
-    ...     filter_cosg_layer='log1p', # Specify layer for COSG
-    ...     random_state=1927, 
-    ...     verbosity=1 
+    ...     filter_cluster_key_added='batch@cluster_stitch',
+    ...     filter_cosg_layer='log1p',
+    ...     random_state=1927,
+    ...     verbosity=1
     ... )
     >>> # Visualize results
-    >>> sc.pp.neighbors(adata, use_rep='X_stitch_corrected') # Compute neighbors on corrected embedding
-    >>> sc.tl.umap(adata)
-    >>> sc.pl.umap(adata, color=['batch', 'batch@cluster_stitch']) 
-    >>> # Visualize UMAP based on the pruned graph itself
-    >>> sc.tl.umap(adata, neighbors_key='pruned_markers') # Use default key or specify if changed
-    >>> sc.pl.umap(adata, color=['batch', 'batch@cluster_stitch'], title="UMAP on Pruned Graph")
+    >>> piaso.tl.neighbors(adata, use_rep='X_stitch_corrected')
+    >>> piaso.tl.umap(adata)
+    >>> piaso.pl.plotEmbedding(adata, color='batch')
+    >>> piaso.pl.plotEmbedding(adata, color='batch@cluster_stitch')
     """
         
+    # --- Cytome dispatch ---
+    # For cytome inputs, read the embedding + batch column into a lightweight
+    # AnnData, run stitchSpace in-memory, and write corrected embedding back.
+    from ._normalization import _is_cytome_dataset, _open_cytome
+    _is_cytome = _is_cytome_dataset(adata) or isinstance(adata, str)
+    _cytome_ds = None
+    if _is_cytome:
+        import anndata
+        _cytome_ds = _open_cytome(adata) if isinstance(adata, str) else adata
+        # Read embedding
+        emb_key = use_rep.lstrip('X_') if use_rep.startswith('X_') else use_rep
+        X_emb_arr = np.array(_cytome_ds.embeddings[emb_key])
+        # Read batch column
+        cols = {r[1] for r in _cytome_ds._conn.execute("PRAGMA table_info(cells)").fetchall()}
+        if batch_key not in cols:
+            raise ValueError(f"batch_key '{batch_key}' not found in cytome cells table. Available: {sorted(cols)}")
+        batch_vals = [r[0] for r in _cytome_ds._conn.execute(
+            f"SELECT [{batch_key}] FROM cells ORDER BY cell_idx"
+        ).fetchall()]
+        # Build minimal AnnData
+        n_cells = X_emb_arr.shape[0]
+        adata = anndata.AnnData(
+            X=sp.csr_matrix((n_cells, 1)),  # dummy X
+            obs=pd.DataFrame({batch_key: batch_vals}),
+        )
+        adata.obsm[use_rep] = X_emb_arr
+        # If COSG layer is needed, it runs on the tile matrix — not supported
+        # in this cytome shim. Use filter_cosg_layer=None (default).
+        if filter_cosg_layer is not None:
+            raise ValueError(
+                "filter_cosg_layer is not supported for cytome inputs. "
+                "stitchSpace on cytome uses the embedding only."
+            )
+        copy = False  # operate in-place on the temporary AnnData
+
     # --- Input Validation ---
     if filter_n_markers <= 0:
         raise ValueError("filter_n_markers must be greater than 0")
@@ -761,7 +781,7 @@ def stitchSpace(
         raise ValueError("filter_marker_overlap_threshold must be between 0 and 1")
     if filter_bbknn_neighbors_within_batch <= 0:
         raise ValueError("filter_bbknn_neighbors_within_batch must be greater than 0")
-        
+
     X_emb = adata.obsm[use_rep]
     # Check for NaNs
     if np.isnan(X_emb).any():
@@ -1004,4 +1024,14 @@ def stitchSpace(
 
 
     # Return the modified adata if copy=False, otherwise return the copy
+    # Write corrected embedding back to cytome if applicable
+    if _is_cytome and _cytome_ds is not None and key_added in adata.obsm:
+        corrected_emb = adata.obsm[key_added]
+        emb_out_key = key_added.lstrip('X_') if key_added.startswith('X_') else key_added
+        _cytome_ds.embeddings[emb_out_key] = corrected_emb
+        _cytome_ds.flush()
+        if verbosity > 0:
+            print(f"Corrected embedding written to cytome: embeddings['{emb_out_key}']")
+        return None
+
     return adata if copy else None 

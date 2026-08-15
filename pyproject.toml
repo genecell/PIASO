@@ -4,10 +4,10 @@ build-backend = "maturin"
 
 [project]
 name = "piaso-tools"
-version = "1.1.0"
+version = "1.2.0"
 description = "Precise Integrative Analysis of Single-cell Omics."
 requires-python = ">=3.9"
-license = "BSD-3-clause"
+license = {text = "BSD-3-Clause"}
 authors = [
     { name = "Min Dai", email = "dai@broadinstitute.org" }
 ]
@@ -17,7 +17,6 @@ maintainers = [
 ]
 readme = "README.md"
 classifiers = [
-    "License :: OSI Approved :: BSD License",
     "Development Status :: 5 - Production/Stable",
     "Environment :: Console",
     "Framework :: Jupyter",
@@ -37,8 +36,6 @@ classifiers = [
 ]
 dependencies = [
     "anndata>=0.8",
-    "scanpy>=1.9.1",
-    "cosg>=1.0.3",
     "numpy>=1.21.6",
     "matplotlib>=3.5.2",
     "pandas>=1.4.4",
@@ -48,7 +45,13 @@ dependencies = [
     "statsmodels>=0.13.2",
     "tqdm",
     "typing-extensions",
-    "requests"
+    "requests",
+    "lz4",
+    "zstandard",
+    "h5py",
+    "umap-learn>=0.5",
+    "igraph>=0.10",
+    "cosg>=1.0.3",
 ]
 
 # https://docs.pypi.org/project_metadata/#project-urls
@@ -61,7 +64,22 @@ Homepage = "https://piaso.org"
 dev = [
     "pre-commit", # static checking
 ]
+cytome = [
+    "cytome>=0.2.1",
+]
+atac = [
+    "pysam",
+]
+harmony = [
+    "harmonypy>=0.0.6",
+]
+leiden = [
+    "leidenalg>=0.9",
+]
+scanpy = [
+    "scanpy>=1.9.1",  # optional: for interop with scanpy-based workflows
+]
 
 [tool.maturin]
 features = ["pyo3/extension-module"]
-module-name = "piaso._piaso_score"
+module-name = "piaso._piaso"
