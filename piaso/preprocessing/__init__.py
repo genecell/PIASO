@@ -15,7 +15,7 @@ except ImportError:
     pass
 
 try:
-    from ._importCellRanger import importCellRanger
+    from ._readwrite import importCellRanger
 except ImportError:
     pass
 
@@ -45,6 +45,10 @@ try:
     from ._streaming_io import _open_fragments, _build_barcode_index
 except ImportError:
     pass
+
+# Cell Ranger readers. h5py and scipy are hard dependencies, so this cannot
+# fail on a correct install and is deliberately not guarded.
+from ._readwrite import read_10x, read_10x_h5, read_10x_mtx
 
 try:
     from ._calculateMetrics import (

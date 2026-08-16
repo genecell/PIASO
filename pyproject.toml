@@ -51,7 +51,11 @@ dependencies = [
     "h5py",
     "umap-learn>=0.5",
     "igraph>=0.10",
-    "cosg>=1.0.3",
+    # >=1.1.0, not 1.0.3: runGDR's cytome path calls cosg.run_cosg_cytome,
+    # which does not exist before 1.1.0. The import is lazy, so a stale cosg
+    # does not break `import piaso` -- it fails partway through a GDR run with
+    # ModuleNotFoundError, which is the worst time to find out.
+    "cosg>=1.1.0",
     # Required, not optional. PIASO reads cytome datasets throughout tl/pp/pl,
     # and cytome is a 124 KB pure-Python wheel whose own dependencies (numpy,
     # scipy, pandas, lz4) are all already listed above -- so requiring it adds
@@ -59,7 +63,7 @@ dependencies = [
     # Upper bound: cytome's public modality API is pinned by its own
     # conformance test, so 0.x minors are safe; the bound exists to stop a
     # future 1.0 API cleanup from reaching installs pinned to this release.
-    "cytome>=0.2.3,<1.0",
+    "cytome>=0.2.4,<1.0",
 ]
 
 # https://docs.pypi.org/project_metadata/#project-urls

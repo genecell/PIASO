@@ -240,7 +240,7 @@ def load_dataset(name: str, return_type: str = "anndata",
     backed : bool, default True
         For h5ad → cytome, use the streaming (bounded-RAM) ``from_h5ad`` path.
     **kwargs
-        Passed to ``anndata.read_h5ad()`` / ``scanpy.read_10x_h5()`` (AnnData
+        Passed to ``anndata.read_h5ad()`` / :func:`piaso.pp.read_10x_h5` (AnnData
         path, or the 10x/csv → cytome conversion).
 
     Returns
@@ -265,8 +265,13 @@ def load_dataset(name: str, return_type: str = "anndata",
             import anndata
             return anndata.read_h5ad(path, **kwargs)
         elif fmt == "10x_h5":
-            import scanpy as sc
-            return sc.read_10x_h5(str(path), **kwargs)
+            # PIASO's own reader, not scanpy's: six of the datasets in this
+            # registry are 10x_h5, and scanpy is an optional extra -- so
+            # load_dataset used to need a package the rest of the workflow
+            # does not. Byte-for-byte equivalent to scanpy.read_10x_h5 (see
+            # tests/test_read10x.py).
+            from ..preprocessing import read_10x_h5
+            return read_10x_h5(str(path), **kwargs)
         elif fmt == "csv":
             import pandas as pd
             return pd.read_csv(path, **kwargs)

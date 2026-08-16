@@ -1881,7 +1881,7 @@ def _runGDRParallel_cytome(
     if verbosity > 0:
         print(f"  Running COSG on {modality} ({n_features} features) via streaming...")
 
-    from cosg._cytome_streaming import run_cosg_cytome
+    from cosg import run_cosg_cytome
 
     # Bug fix: pass cytome_layer + compute_on_fly to COSG so the marker
     # identification respects the user's requested layer (e.g. 'infog'
@@ -2028,7 +2028,7 @@ def _runGDR_multibatch_cytome(
     temp ``gdr_local_TMP_GDR`` column at masked positions.
     """
     from sklearn.preprocessing import normalize
-    from cosg._cytome_streaming import run_cosg_cytome
+    from cosg import run_cosg_cytome
     import piaso as _piaso_mod
 
     batch_labels = np.asarray(ds.cells[batch_key])
