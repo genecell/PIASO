@@ -62,23 +62,8 @@ regulonNetwork = _forward("cytorete.plotting", "regulonNetwork", "pl.regulonNetw
 regulonEmbedding = _forward("cytorete.plotting", "regulonEmbedding", "pl.regulonEmbedding")
 regulonSpecificityScatter = _forward("cytorete.plotting", "regulonSpecificityScatter", "pl.regulonSpecificityScatter")
 
-# --- piaso.data (motif DBs + .2bit sequence access; PWM stays in PIASO) ---
-load_meme = _forward("cytorete.data", "load_meme", "data.load_meme")
-load_jaspar_meme = _forward("cytorete.data", "load_jaspar_meme", "data.load_jaspar_meme")
-load_cisbp_meme = _forward("cytorete.data", "load_cisbp_meme", "data.load_cisbp_meme")
-load_cisbp = _forward("cytorete.data", "load_cisbp", "data.load_cisbp")
-load_tf_list = _forward("cytorete.data", "load_tf_list", "data.load_tf_list")
-fetch_jaspar = _forward("cytorete.data", "fetch_jaspar", "data.fetch_jaspar")
-resolve_jaspar_path = _forward("cytorete.data", "resolve_jaspar_path", "data.resolve_jaspar_path")
-fetch_cisbp = _forward("cytorete.data", "fetch_cisbp", "data.fetch_cisbp")
-resolve_cisbp_meme_path = _forward("cytorete.data", "resolve_cisbp_meme_path", "data.resolve_cisbp_meme_path")
-fetch_cistarget_motifs = _forward("cytorete.data", "fetch_cistarget_motifs", "data.fetch_cistarget_motifs")
-load_cistarget_motifs = _forward("cytorete.data", "load_cistarget_motifs", "data.load_cistarget_motifs")
-resolve_cistarget_paths = _forward("cytorete.data", "resolve_cistarget_paths", "data.resolve_cistarget_paths")
-write_meme = _forward("cytorete.data", "write_meme", "data.write_meme")
-fetch_animaltfdb_tf_list = _forward("cytorete.data", "fetch_animaltfdb_tf_list", "data.fetch_animaltfdb_tf_list")
-build_tf_motif_map = _forward("cytorete.data", "build_tf_motif_map", "data.build_tf_motif_map")
-fetch_2bit = _forward("cytorete.data", "fetch_2bit", "data.fetch_2bit")
-resolve_2bit_path = _forward("cytorete.data", "resolve_2bit_path", "data.resolve_2bit_path")
-extract_sequences = _forward("cytorete.data", "extract_sequences", "data.extract_sequences")
-revcomp = _forward("cytorete.data", "revcomp", "data.revcomp")
+# The motif-DB loaders and .2bit sequence access are NOT forwarded here.
+# They live in PIASO (piaso/data/_motifs.py, piaso/data/_fasta.py) because
+# they are the inputs to piaso.pp.scan_motifs, which ships publicly --
+# forwarding them to an unpublished package left the scanner with no
+# supported way to obtain a sequence or a PWM.

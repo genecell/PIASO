@@ -26,31 +26,18 @@ def _decompress_blob(blob, compression):
     return blob
 
 
-def _load_embedding_from_cytome(data, key):
+def _load_embedding_from_cytome(data, key, modality="RNA"):
     """Load embedding from Cytome dense_chunks table.
 
     Tries exact name first, then common prefixed variants
     (e.g. X_svd -> ATAC_svd, RNA_svd).
     """
-    candidates = [key]
-    # runSVD stores as {modality}_{key.replace('X_', '')}
-    if key.startswith('X_'):
-        suffix = key[2:]
-        for prefix in ('ATAC', 'RNA'):
-            candidates.append(f'{prefix}_{suffix}')
-
-    # Get dtype from embedding_meta
-    meta_row = None
-    for name in candidates:
-        meta_row = data._conn.execute(
-            "SELECT n_cols, dtype FROM embedding_meta WHERE array_name = ?",
-            (name,),
-        ).fetchone()
-        if meta_row:
-            break
-        name = None
-    if meta_row is None or name is None:
-        raise KeyError(f"Embedding not found: {key} (tried: {candidates})")
+    from ._embedding_names import resolve_embedding_name
+    name = resolve_embedding_name(data, key, modality)
+    meta_row = data._conn.execute(
+        "SELECT n_cols, dtype FROM embedding_meta WHERE array_name = ?",
+        (name,),
+    ).fetchone()
 
     n_cols = meta_row[0]
     dtype = np.dtype(meta_row[1])
@@ -67,7 +54,7 @@ def _load_embedding_from_cytome(data, key):
     return np.concatenate(parts).reshape(-1, n_cols).astype(np.float32)
 
 
-def _neighbors_graph_keys(key_added):
+def _neighbors_graph_keys(key_added, modality=None):
     """Resolve the (connectivities, distances, n_neighbors) storage keys for a
     given ``key_added``. Mirrors the naming in :func:`neighbors` so that
     ``umap`` / ``leiden`` can locate the graphs a prior ``neighbors`` call wrote.
@@ -78,14 +65,39 @@ def _neighbors_graph_keys(key_added):
     ``'neighbors'`` is kept as a back-compat alias for "no prefix" (so existing
     cytomes' graph names are unchanged).
     """
+    # NOTE: the un-prefixed default is a tested contract
+    # (test_round12_neighbors_key_added). It is also a multimodality hazard:
+    # an RNA graph and an ATAC graph in one cytome both land on
+    # 'connectivities', so running neighbors on the second silently overwrites
+    # the first, and `key_added` is the only way to avoid it with nothing
+    # telling the user so. Changing the default is a migration, not a patch,
+    # so it is left alone here; `modality` is accepted and used for READS so a
+    # future prefixed write is already readable.
     if key_added is None or key_added == 'neighbors':
+        if modality:
+            return (f'{modality}_connectivities',
+                    f'{modality}_distances',
+                    f'{modality}_n_neighbors')
         return 'connectivities', 'distances', 'n_neighbors'
     return (f'{key_added}_connectivities',
             f'{key_added}_distances',
             f'{key_added}_n_neighbors')
 
 
-def reconstruct_knn_from_cytome(ds, neighbors_key='neighbors'):
+def _neighbors_graph_keys_for_read(key_added, modality=None):
+    """Every (conn, dist, n_neighbors) triple a prior run might have written.
+
+    New writes are modality-prefixed; files written before that are not, so a
+    reader has to accept both or every existing cytome stops working.
+    """
+    out = [_neighbors_graph_keys(key_added, modality)]
+    plain = _neighbors_graph_keys(key_added, None)
+    if plain not in out:
+        out.append(plain)
+    return out
+
+
+def reconstruct_knn_from_cytome(ds, neighbors_key='neighbors', modality='RNA'):
     """Rebuild ``(knn_indices, knn_dists)`` from the ``distances`` graph a prior
     ``neighbors()`` call persisted to the cytome.
 
@@ -100,7 +112,13 @@ def reconstruct_knn_from_cytome(ds, neighbors_key='neighbors'):
     This avoids persisting separate dense kNN arrays — the graph machinery
     already holds everything needed.
     """
-    _conn_key, dist_key, nn_key = _neighbors_graph_keys(neighbors_key)
+    _conn_key = dist_key = nn_key = None
+    for _c, _d, _n in _neighbors_graph_keys_for_read(neighbors_key, modality):
+        if ds.metadata.get(_n) is not None:
+            _conn_key, dist_key, nn_key = _c, _d, _n
+            break
+    if nn_key is None:
+        _conn_key, dist_key, nn_key = _neighbors_graph_keys(neighbors_key)
 
     n_neighbors = ds.metadata.get(nn_key)
     if n_neighbors is None:
@@ -152,6 +170,7 @@ def neighbors(
     data,
     use_rep='X_svd',
     n_neighbors=15,
+    modality='RNA',
     metric='euclidean',
     random_state=42,
     key_added=None,
@@ -193,6 +212,14 @@ def neighbors(
         ``piaso.tl.leiden`` read it back from there. The function is
         self-contained: no value passing required.
     """
+    # A cytome path is as valid an input as it is for infog / runSVD / runGDR.
+    # Without this a pipeline written entirely with a path worked for three
+    # calls and then raised "'str' object has no attribute 'obsm'" on the
+    # fourth, which reads like the caller passed the wrong type.
+    if isinstance(data, str):
+        from ._normalization import _open_cytome
+        data = _open_cytome(data)
+
     from pynndescent import NNDescent
     from umap.umap_ import fuzzy_simplicial_set
 
@@ -203,7 +230,7 @@ def neighbors(
     if _is_array_input:
         X = data
     elif _is_cytome_dataset(data):
-        X = _load_embedding_from_cytome(data, use_rep)
+        X = _load_embedding_from_cytome(data, use_rep, modality)
         # Truncate if embedding has more rows than cells (stale metadata)
         true_n = data.n_cells
         if X.shape[0] > true_n:

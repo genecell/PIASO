@@ -97,3 +97,4 @@ except ImportError:      # pragma: no cover - public-package path
 from .external import runHarmony
 
 from .._grn_shim import inferRegulon, regulonActivity, regulonSpecificity
+from ._normalize_resolve import ensure_infog_params, ensure_tfidf_params

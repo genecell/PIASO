@@ -14,8 +14,10 @@ from sklearn.preprocessing import normalize
 
 import cosg
 
+import functools
 import warnings
 
+import time
 import os
 import multiprocessing
 
@@ -33,6 +35,24 @@ def _sc_score_genes(adata, gene_list, score_name='score', random_state=0, **kwar
     import scanpy as sc
     sc.settings.verbosity = 0
     sc.tl.score_genes(adata, gene_list, score_name=score_name, random_state=random_state, **kwargs)
+
+
+# Per-batch COSG threads past this help nothing and hurt a lot; see the
+# measurements quoted where it is applied.
+_COSG_THREAD_CAP = 2
+
+def _piaso_version():
+    """Installed PIASO version, so a stored embedding says what produced it."""
+    try:
+        from importlib.metadata import version
+        return version("piaso")
+    except Exception:
+        try:
+            from .. import __version__
+            return str(__version__)
+        except Exception:
+            return "unknown"
+
 
 
 def _determine_parallelism(n_batches, max_workers):
@@ -75,6 +95,14 @@ def runGDR(
     write_to_cytome: bool = True,
     cytome_marker_gene_key: str = "runGDR_marker_genes",
     save_reference: bool = True,
+    max_batch_cache_bytes: int = 512 * 1024 ** 2,
+    expressed_pct: float = 0.1,
+    allow_non_integer: bool = False,
+    score_chunk_size: Optional[int] = None,
+    max_score_chunk_bytes: int = 256 * 1024 ** 2,
+    max_score_batch_cache_bytes: int = 512 * 1024 ** 2,
+    stage1_workers: int = None,
+    stage3_workers: int = None,
     # ---- deprecated aliases (back-compat; see _compat / docstring) ----
     adata=_UNSET,
 ):
@@ -109,8 +137,35 @@ def runGDR(
         (matches the recommended ``layer`` default — both COSG and score read the
         same INFOG-normalised matrix). Pass ``None`` to score on ``adata.X``
         directly. **Important:** for equivalence with the cytome path, AnnData
-        and cytome MUST score on the same data; ``score_layer='infog'`` matches
-        the cytome default ``score_cytome_layer='infog'``.
+        and cytome MUST score on the same data — ``score_layer`` means the same
+        thing on both backends.
+    score_chunk_size : int, optional
+        **Cytome only.** Rows handed to the scoring kernel per call in stage 3.
+        ``None`` (default) derives it from ``max_score_chunk_bytes``, the
+        dataset's nonzeros per cell and the number of marker sets. Note it also
+        blocks the first pass's per-feature sums, so changing it perturbs the
+        embedding in the last bits — it is not a free tuning knob.
+    max_score_chunk_bytes : int, default 256 MB
+        **Cytome only.** Memory budget behind ``score_chunk_size``, TOTAL across
+        the concurrent scoring workers (each holds one chunk). Past a few
+        thousand rows per call the speed curve is flat, so there is little
+        reason to raise it.
+    max_score_batch_cache_bytes : int, default 512 MB
+        **Cytome only.** Budget for holding a batch's chunks between stage 3's
+        two streaming passes, so the second does not re-read and re-decompress
+        rows the first just read. TOTAL across the concurrent scoring workers.
+        A batch needs roughly ``n_cells * nnz_per_cell * 8`` bytes; batches that
+        do not fit stream twice, as before.
+
+        Sizing it, measured on a 200k-cell / 35-batch dataset whose batches run
+        384 to 13,105 cells: the 512 MB default covers 30 of the 35 and buys
+        roughly 10 s per 100 MB until every batch fits, then nothing. Raise it
+        if your batches are large and you have the memory; 0 disables caching.
+    allow_non_integer : bool, default False
+        INFOG refuses input whose values are not integers, because its
+        dispersion model is defined on raw UMI counts. Set True to run on
+        Smart-seq2 TPM/FPKM, imputed or already-corrected matrices; prefer
+        ``infog_layer`` when raw counts do exist somewhere in the object.
     infog_layer : str, optional
         Source layer for ``piaso.tl.infog`` when INFOG is auto-computed (only
         when ``groupby=None`` and ``layer='infog'`` triggers de novo clustering).
@@ -148,7 +203,7 @@ def runGDR(
     random_seed : int, optional
         Random seed for reproducibility. Default is 1927.
     modality : str, optional
-        Modality for cytome datasets. Defaults to ``'ATAC'``.
+        Modality for cytome datasets. Defaults to ``'RNA'``.
     layer : str, optional
         Layer used for COSG marker identification, on **both** backends.
         Defaults to ``'infog'`` (INFOG is the recommended normalization). For a
@@ -240,6 +295,11 @@ def runGDR(
             )
         return _runGDRParallel_cytome(
             adata, groupby=groupby, n_gene=n_gene, mu=mu,
+            expressed_pct=expressed_pct,
+            allow_non_integer=allow_non_integer,
+            score_chunk_size=score_chunk_size,
+            max_score_chunk_bytes=max_score_chunk_bytes,
+            max_score_batch_cache_bytes=max_score_batch_cache_bytes,
             scoring_method=scoring_method or 'piaso',
             key_added=key_added, max_workers=max_workers,
             random_seed=random_seed, verbosity=verbosity,
@@ -254,7 +314,11 @@ def runGDR(
             batch_key=batch_key,
             n_svd_dims=n_svd_dims,
             n_svd_iter=n_svd_iter,
+            n_highly_variable_genes=n_highly_variable_genes,
             resolution=resolution,
+            max_batch_cache_bytes=max_batch_cache_bytes,
+            stage1_workers=stage1_workers,
+            stage3_workers=stage3_workers,
         )
 
     ### Check the scoring method, improve this part of codes later
@@ -352,7 +416,8 @@ def runGDR(
                     infog_layer=infog_layer,
                     infog_trim=True,
                     key_added='X_svd_TMP_GDR',
-                    random_state=random_seed
+                    random_state=random_seed,
+                    allow_non_integer=allow_non_integer,
                 )
                 # Run clustering
                 if verbosity > 0:
@@ -386,7 +451,7 @@ def runGDR(
             cosg_params = {
                 'key_added': 'cosg_TMP_GDR',
                 'mu': mu,
-                'expressed_pct': 0.1,
+                'expressed_pct': expressed_pct,
                 'remove_lowly_expressed': True,
                 'n_genes_user': n_gene,
                 'groupby': groupby
@@ -450,146 +515,78 @@ def runGDR(
 
         ### Have multiple batches
         else:
-            _use_parallel = max_workers > 1
+            # Markers first for every batch, then score each batch against the
+            # combined set. max_workers is a worker count here, not an
+            # algorithm switch -- see the note below.
+            marker_gene, batch_n_groups = runCOSGParallel(
+                adata,
+                batch_key=batch_key,
+                groupby=groupby,
+                n_gene=n_gene,
+                mu=mu,
+                use_highly_variable=use_highly_variable,
+                n_highly_variable_genes=n_highly_variable_genes,
+                layer=layer,
+                infog_layer=infog_layer,
+                n_svd_dims=n_svd_dims,
+                n_svd_iter=n_svd_iter,
+                resolution=resolution,
+                verbosity=verbosity,
+                return_gene_names=True,
+                max_workers=max_workers,
+                random_seed=random_seed,
+                expressed_pct=expressed_pct,
+                allow_non_integer=allow_non_integer,
+            )
 
-            if _use_parallel:
-                ### Parallel path: use runCOSGParallel + calculateScoreParallel_multiBatch
-                marker_gene, batch_n_groups = runCOSGParallel(
+            batch_n_groups_indices = np.cumsum([0] + batch_n_groups)
+
+            if calculate_score_multiBatch:
+                score_list_collection, cellbarcode_info, gene_set_names_collection = calculateScoreParallel_multiBatch(
                     adata,
                     batch_key=batch_key,
-                    groupby=groupby,
-                    n_gene=n_gene,
-                    mu=mu,
-                    use_highly_variable=use_highly_variable,
-                    n_highly_variable_genes=n_highly_variable_genes,
-                    layer=layer,
-                    infog_layer=infog_layer,
-                    n_svd_dims=n_svd_dims,
-                    n_svd_iter=n_svd_iter,
-                    resolution=resolution,
-                    verbosity=verbosity,
-                    return_gene_names=True,
+                    marker_gene=marker_gene,
+                    marker_gene_n_groups_indices=batch_n_groups_indices,
+                    score_layer=score_layer,
                     max_workers=max_workers,
+                    n_concurrent_batches=n_concurrent_batches,
+                    score_method=scoring_method,
                     random_seed=random_seed,
                 )
-
-                batch_n_groups_indices = np.cumsum([0] + batch_n_groups)
-
-                if calculate_score_multiBatch:
-                    score_list_collection, cellbarcode_info, gene_set_names_collection = calculateScoreParallel_multiBatch(
-                        adata,
-                        batch_key=batch_key,
-                        marker_gene=marker_gene,
-                        marker_gene_n_groups_indices=batch_n_groups_indices,
-                        score_layer=score_layer,
-                        max_workers=max_workers,
-                        n_concurrent_batches=n_concurrent_batches,
-                        score_method=scoring_method,
-                        random_seed=random_seed,
-                    )
-                else:
-                    from tqdm import tqdm
-                    score_list_collection = []
-                    cellbarcode_info = list()
-                    for batch_u in tqdm(batch_list, desc="Calculating cell embeddings", unit="batch"):
-                        cellbarcode_info.append(adata.obs_names[adata.obs[batch_key] == batch_u].values)
-                        with warnings.catch_warnings():
-                            warnings.simplefilter("ignore", FutureWarning)
-                            adata_batch_u = adata[adata.obs[batch_key] == batch_u].copy()
-                        score_list, gene_set_names = calculateScoreParallel(
-                            adata_batch_u, gene_set=marker_gene,
-                            score_method=scoring_method, score_layer=score_layer,
-                            max_workers=max_workers, random_seed=random_seed,
-                        )
-                        score_list = normalize(score_list, norm='l2', axis=0)
-                        for start, end in zip(batch_n_groups_indices[:-1], batch_n_groups_indices[1:]):
-                            score_list[:, start:end] = normalize(score_list[:, start:end], norm='l2', axis=1)
-                        score_list_collection.append(score_list)
-
-                score_list_collection = np.vstack(score_list_collection)
-                marker_gene_scores = pd.DataFrame(score_list_collection)
-                marker_gene_scores.index = np.hstack(cellbarcode_info)
-                marker_gene_scores = marker_gene_scores.loc[adata.obs_names]
-
             else:
-                ### Sequential path (max_workers=1): process batches one by one
+                from tqdm import tqdm
+                score_list_collection = []
                 cellbarcode_info = list()
-                for batch_idx, batch_i in enumerate(batch_list):
-                    if verbosity > 0:
-                        print(f"Processing batch {batch_idx+1}/{nbatches}: '{batch_i}'")
-
+                for batch_u in tqdm(batch_list, desc="Calculating cell embeddings", unit="batch"):
+                    cellbarcode_info.append(adata.obs_names[adata.obs[batch_key] == batch_u].values)
                     with warnings.catch_warnings():
                         warnings.simplefilter("ignore", FutureWarning)
-                        adata_i = adata[adata.obs[batch_key] == batch_i].copy()
+                        adata_batch_u = adata[adata.obs[batch_key] == batch_u].copy()
+                    score_list, gene_set_names = calculateScoreParallel(
+                        adata_batch_u, gene_set=marker_gene,
+                        score_method=scoring_method, score_layer=score_layer,
+                        max_workers=max_workers, random_seed=random_seed,
+                    )
+                    score_list = normalize(score_list, norm='l2', axis=0)
+                    for start, end in zip(batch_n_groups_indices[:-1], batch_n_groups_indices[1:]):
+                        score_list[:, start:end] = normalize(score_list[:, start:end], norm='l2', axis=1)
+                    score_list_collection.append(score_list)
 
-                    if groupby is None:
-                        infog_svd(
-                            adata_i, copy=False, n_components=n_svd_dims,
-                            n_top_genes=n_highly_variable_genes,
-                            use_highly_variable=use_highly_variable, verbosity=0,
-                            batch_key=None, scale_data=False, n_iter=n_svd_iter,
-                            layer=layer, infog_layer=infog_layer, infog_trim=True,
-                            key_added='X_svd', random_state=random_seed,
-                        )
-                        _piaso_neighbors(adata_i, use_rep='X_svd', n_neighbors=15, random_state=random_seed)
-                        _piaso_leiden(adata_i, resolution=resolution, key_added='gdr_local', random_state=random_seed)
-                        groupby_i = 'gdr_local'
-                    else:
-                        groupby_i = groupby
+            score_list_collection = np.vstack(score_list_collection)
+            marker_gene_scores = pd.DataFrame(score_list_collection)
+            marker_gene_scores.index = np.hstack(cellbarcode_info)
+            marker_gene_scores = marker_gene_scores.loc[adata.obs_names]
 
-                    if verbosity > 0:
-                        print(f"Identified {len(np.unique(adata_i.obs[groupby_i]))} clusters in batch '{batch_i}'")
-
-                    cellbarcode_info.append(adata_i.obs_names.values)
-
-                    cosg_params = {
-                        'key_added': 'cosg', 'mu': mu, 'expressed_pct': 0.1,
-                        'remove_lowly_expressed': True, 'n_genes_user': n_gene,
-                        'groupby': groupby_i,
-                    }
-                    if layer is not None:
-                        cosg_params['use_raw'] = False
-                        cosg_params['layer'] = layer
-                    cosg.cosg(adata_i, **cosg_params)
-                    marker_gene = pd.DataFrame(adata_i.uns['cosg']['names'])
-
-                    score_list_collection = []
-                    for batch_u in batch_list:
-                        with warnings.catch_warnings():
-                            warnings.simplefilter("ignore", FutureWarning)
-                            adata_u = adata[adata.obs[batch_key] == batch_u].copy()
-                        if scoring_method == 'piaso':
-                            from ._normalization import score as _score
-                            score_list, _, _ = _score(
-                                adata_u, gene_list=marker_gene,
-                                layer=score_layer, random_seed=random_seed,
-                                compute_pvalues=False,
-                            )
-                        elif scoring_method == 'scanpy':
-                            score_list = []
-                            if score_layer is not None:
-                                adata_u.X = adata_u.layers[score_layer]
-                            for i in marker_gene.columns:
-                                marker_gene_i = marker_gene[i].values
-                                with warnings.catch_warnings():
-                                    warnings.simplefilter("ignore", category=FutureWarning)
-                                    _sc_score_genes(adata_u, marker_gene_i, score_name='markerGeneFeatureScore_i', random_state=random_seed)
-                                score_list.append(adata_u.obs['markerGeneFeatureScore_i'].values.copy())
-                            score_list = np.vstack(score_list).T
-                        else:
-                            raise ValueError(f"Invalid scoring_method: '{scoring_method}'.")
-                        score_list = normalize(score_list, norm='l2', axis=0)
-                        score_list = normalize(score_list, norm='l2', axis=1)
-                        score_list_collection.append(score_list)
-
-                    score_list_collection = np.vstack(score_list_collection)
-                    score_list_collection_collection.append(score_list_collection)
-
-                marker_gene_scores = np.hstack(score_list_collection_collection)
-                marker_gene_scores = pd.DataFrame(marker_gene_scores)
-                marker_gene_scores.index = np.hstack(cellbarcode_info)
-                marker_gene_scores = marker_gene_scores.loc[adata.obs_names]
-
+            # max_workers=1 used to take a SEPARATE branch here, and it was not
+            # "the same thing, serially" -- it was a different algorithm. It
+            # computed one batch's markers, then scored EVERY batch against
+            # them, giving n_batches**2 score calls each rebuilding its own
+            # KNN: 1,225 calls against 35 on a 35-batch dataset. Anyone setting
+            # max_workers=1 to debug or to save memory silently got a different
+            # and far more expensive result than the default.
+            #
+            # Both settings now take the markers-first route above and
+            # max_workers=1 simply means one worker.
         ### Set the low-dimensional representations
         if key_added is not None:
             output_key = key_added
@@ -601,13 +598,27 @@ def runGDR(
         # Store metadata about the GDR run
         adata.uns['gdr'] = {
             'params': {
+                # Enough to re-derive this embedding. The previous set recorded
+                # neither groupby nor batch_key nor resolution, so a stored
+                # X_gdr could not be reproduced or even classified as
+                # supervised-vs-de-novo -- which made a later comparison
+                # against it impossible to interpret.
                 'n_gene': n_gene,
                 'mu': mu,
                 'layer': layer,
                 'score_layer': score_layer,
                 'infog_layer': infog_layer,
                 'scoring_method': scoring_method,
-                'random_seed': random_seed
+                'random_seed': random_seed,
+                'batch_key': batch_key,
+                'groupby': groupby,
+                'resolution': resolution,
+                'n_svd_dims': n_svd_dims,
+                'n_svd_iter': n_svd_iter,
+                'n_highly_variable_genes': n_highly_variable_genes,
+                'use_highly_variable': use_highly_variable,
+                'max_workers': max_workers,
+                'piaso_version': _piaso_version(),
             }
         }
 
@@ -825,7 +836,10 @@ def _calculate_gene_set_score_shared(gene_indices, metadata, score_name, is_spar
         If score_method is 'scanpy', returns only scores for the gene set.
     """
     
-    # Force single-threaded mode inside the worker, to prevent OpenMP from trying to create threads inside a process
+    # These assignments are inoperative for OpenBLAS, which reads them when it
+    # LOADS -- already done by the time this function runs. Kept for libraries
+    # that consult them lazily. Measured: limiting the pools properly with
+    # threadpoolctl changed nothing here, so it is not worth doing.
     import os
     os.environ["OMP_NUM_THREADS"] = "1"
     os.environ["MKL_NUM_THREADS"] = "1"
@@ -944,6 +958,9 @@ def calculateScoreParallel(
     cytome_layer: str = "counts",
     batch_size: int = 1024,
     cell_mask=None,
+    score_chunk_size: Optional[int] = None,
+    max_score_chunk_bytes: int = 256 * 1024 ** 2,
+    max_score_batch_cache_bytes: int = 512 * 1024 ** 2,
 ):
     """
     Compute gene set scores in parallel using shared memory for efficiency.
@@ -1051,6 +1068,9 @@ def calculateScoreParallel(
             verbosity=verbosity,
             modality=modality, batch_size=batch_size,
             cell_mask=cell_mask,
+            score_chunk_size=score_chunk_size,
+            max_score_chunk_bytes=max_score_chunk_bytes,
+            max_score_batch_cache_bytes=max_score_batch_cache_bytes,
         )
         if return_pvals:
             # Convert raw p-values to -log10 format to match original score() behavior
@@ -1150,7 +1170,9 @@ def _calculateScoreParallel_single_batch(batch_key, shared_data, batch_i, marker
     """
     Process a single batch to calculate scores, different marker gene sets will be calculated in parallel with `calculateScoreParallel` function. Note: max_workers here refers to INNER workers passed from the parent.
     """
-    # Force single threading for linear algebra to avoid oversubscription
+    # Force single threading for linear algebra to avoid oversubscription.
+    # NOTE: inoperative for OpenBLAS post-import; see the note in
+    # _calculateScoreParallel_worker.
     os.environ["OMP_NUM_THREADS"] = "1"
 
     # Reconstruct matrix from shared memory
@@ -1279,6 +1301,14 @@ def calculateScoreParallel_multiBatch(
                 warnings.simplefilter("ignore", FutureWarning)
                 adata_batch = adata[batch_mask].copy()
 
+            # NOTE: the OMP_NUM_THREADS / OPENBLAS_NUM_THREADS assignments in
+            # the workers are inoperative -- OpenBLAS reads them when it loads,
+            # which already happened when this module imported numpy
+            # (threadpoolctl reports [('blas', 20)] both before and after).
+            # Limiting them properly with threadpoolctl was tried and measured:
+            # no difference (19.6/10.5/6.2/6.7 s with, 18.1/9.9/6.1/6.6 s
+            # without), because this path is Rust + sklearn KDTree, not BLAS
+            # bound. Not worth mutating loaded native thread pools for.
             score_list, gene_set_names = calculateScoreParallel(
                 adata_batch,
                 gene_set=marker_gene,
@@ -1393,7 +1423,7 @@ import sys
 import logging
 
 def _runCOSGParallel_single_batch(
-    batch_key, shared_data, batch_i, groupby, n_svd_dims, n_svd_iter, n_highly_variable_genes, verbosity, resolution, mu, n_gene, use_highly_variable, layer, random_seed):
+    batch_key, shared_data, batch_i, groupby, n_svd_dims, n_svd_iter, n_highly_variable_genes, verbosity, resolution, mu, n_gene, use_highly_variable, layer, random_seed, expressed_pct=0.1, allow_non_integer=False):
     """
     Process a single batch using shared memory and perform clustering and marker gene identification.
 
@@ -1496,7 +1526,8 @@ def _runCOSGParallel_single_batch(
                     infog_layer=None, ### By default, adata.X will be used for INFOG normalization
                     infog_trim=True,
                     key_added='X_svd',
-                    random_state=random_seed
+                    random_state=random_seed,
+                    allow_non_integer=allow_non_integer,
                 )
             else:
                 infog_svd(
@@ -1513,7 +1544,8 @@ def _runCOSGParallel_single_batch(
                     infog_layer=None,
                     infog_trim=True,
                     key_added='X_svd',
-                    random_state=random_seed
+                    random_state=random_seed,
+                    allow_non_integer=allow_non_integer,
                 )
 
 
@@ -1539,7 +1571,7 @@ def _runCOSGParallel_single_batch(
             adata,
             key_added='cosg',
             mu=mu,
-            expressed_pct=0.1,
+            expressed_pct=expressed_pct,
             remove_lowly_expressed=True,
             n_genes_user=n_gene,
             groupby=groupby_i
@@ -1575,7 +1607,9 @@ def runCOSGParallel(
     use_highly_variable: bool = True,
     return_gene_names: bool = False,
     max_workers: int = 8,
-    random_seed: int=1927
+    random_seed: int = 1927,
+    expressed_pct: float = 0.1,
+    allow_non_integer: bool = False,
 ):
     """
     Run COSG on batches in parallel using shared memory and multiprocessing.
@@ -1663,7 +1697,18 @@ def runCOSGParallel(
         shared_data = _setup_shared_memory_sparse(gene_expression_data)
     else:
         shared_data = _setup_shared_memory_dense(gene_expression_data)
-        
+        # _setup_shared_memory_dense returns {"shm", "shape", "dtype"}, but the
+        # worker below reads {"shm_data", "shapes": {...}, "dtypes": {...}} —
+        # the schema the sparse setup returns. Other callers still use the
+        # dense keys, so translate here rather than changing that function.
+        # Without this, runGDR(batch_key=...) on a dense matrix died with
+        # KeyError: 'shapes' inside the worker.
+        shared_data = {
+            "shm_data": shared_data["shm"],
+            "shapes": {"matrix_shape": shared_data["shape"]},
+            "dtypes": {"data_dtype": shared_data["dtype"]},
+        }
+
     shared_data['obs'] = adata.obs[[batch_key] + ([groupby] if groupby else [])].copy()
 
     
@@ -1685,7 +1730,8 @@ def runCOSGParallel(
                     executor.submit(
                         _runCOSGParallel_single_batch, batch_key, shared_data, batch_i, groupby,
                         n_svd_dims, n_svd_iter, n_highly_variable_genes, verbosity, resolution,
-                        mu, n_gene, use_highly_variable, layer, random_seed
+                        mu, n_gene, use_highly_variable, layer, random_seed,
+                        expressed_pct, allow_non_integer,
                     )
                 )
             # Collect results into a list first
@@ -1705,14 +1751,19 @@ def runCOSGParallel(
             batch_n_groups.append(marker_gene.shape[1])
     
     finally:
-        # Robust Cleanup
-        shared_data['shm_data'].close()
-        shared_data['shm_data'].unlink()
-        if 'shm_indices' in shared_data:
-            shared_data['shm_indices'].close()
-            shared_data['shm_indices'].unlink()
-            shared_data['shm_indptr'].close()
-            shared_data['shm_indptr'].unlink()
+        # Robust cleanup: tolerate a shared_data that was never fully built.
+        # This block used to index 'shm_data' unconditionally, so a failure
+        # during setup raised KeyError here and *replaced* the real traceback
+        # with a misleading one.
+        for key in ('shm_data', 'shm_indices', 'shm_indptr'):
+            shm = shared_data.get(key) if isinstance(shared_data, dict) else None
+            if shm is None:
+                continue
+            try:
+                shm.close()
+                shm.unlink()
+            except FileNotFoundError:
+                pass
 
     # Merge and Format
     marker_genes = pd.concat(marker_genes, axis=1)
@@ -1732,18 +1783,97 @@ def runCOSGParallel(
 
 
 
+def _numba_threading_is_safe():
+    """Whether numba's threading layer tolerates concurrent access.
+
+    Numba documents ``tbb`` as both fork- and thread-safe and ``omp`` as
+    thread-safe (not fork-safe on Linux); ``workqueue`` is neither, and under it
+    a concurrent call aborts the process outright with "Numba workqueue
+    threading layer is terminating: Concurrent access has been detected."
+
+    Reading NUMBA_THREADING_LAYER is NOT enough, and assuming it was cost a
+    core dump: pynndescent rewrites the setting at import time as a workaround
+    for numba issue #3341 —
+
+        if numba.config.THREADING_LAYER == "omp":
+            try:    from numba.np.ufunc import tbbpool
+                    numba.config.THREADING_LAYER = "tbb"
+            except ImportError:
+                    numba.config.THREADING_LAYER = "workqueue"
+
+    so asking for ``omp`` without tbb installed silently yields ``workqueue``.
+    Import pynndescent first, then read the resolved value.
+
+    Returns (safe, layer_name).
+    """
+    try:
+        import numba
+    except Exception:
+        return False, "unknown"
+    try:
+        import pynndescent  # noqa: F401 — mutates THREADING_LAYER on import
+    except Exception:
+        pass
+    layer = str(getattr(numba.config, "THREADING_LAYER", "") or "").strip().lower()
+    if layer in ("tbb", "omp", "threadsafe", "safe"):
+        return True, layer
+    if layer == "default":
+        # 'default' tries tbb, then omp, then workqueue.
+        for name, mod in (("tbb", "tbbpool"), ("omp", "omppool")):
+            try:
+                __import__(f"numba.np.ufunc.{mod}")
+                return True, name
+            except Exception:
+                continue
+        return False, "workqueue"
+    return False, layer or "unknown"
+
+
+def _estimate_batch_cache_bytes(ds, modality, layer, n_batch_cells):
+    """Bytes a batch would occupy if its chunks were cached in memory.
+
+    Deliberately an OVER-estimate: it prices the batch at the layer's average
+    nnz per cell across all columns, while the cache actually holds only the
+    HVG columns. Erring high means the guard declines to cache a batch it could
+    have held, which costs time; erring low would blow the memory bound the
+    cytome format exists to provide. Returns None when the layer's nnz is not
+    recorded, in which case the caller should not cache.
+    """
+    row = ds._conn.execute(
+        "SELECT n_rows, n_nonzero, dtype FROM matrix_meta WHERE matrix_name = ?",
+        (f"{modality}_{layer}",),
+    ).fetchone()
+    if row is None or row[0] in (None, 0) or row[1] is None:
+        return None
+    n_rows, n_nonzero, dtype = int(row[0]), int(row[1]), row[2]
+    itemsize = np.dtype(dtype).itemsize if dtype else 4
+    per_cell_nnz = n_nonzero / n_rows
+    # CSR: data (itemsize) + indices (int32) per nnz, plus indptr, which has
+    # n_rows + 1 entries — dropping the +1 made the estimate under-count, and
+    # this guard is only safe if it errs high.
+    return int(n_batch_cells * per_cell_nnz * (itemsize + 4) + (n_batch_cells + 1) * 4)
+
+
 def _runGDRParallel_cytome(
     ds, groupby, n_gene, mu, scoring_method, key_added, max_workers,
     random_seed, verbosity, modality, cytome_layer, batch_size_cytome,
     score_layer, score_cytome_layer=None, expressed_pct: float = 0.1,
+    allow_non_integer: bool = False,
+    score_chunk_size=None,
+    max_score_chunk_bytes: int = 256 * 1024 ** 2,
+    max_score_batch_cache_bytes: int = 512 * 1024 ** 2,
     write_to_cytome: bool = True,
     cytome_marker_gene_key: str = "runGDR_marker_genes",
     save_reference: bool = True,
+    max_batch_cache_bytes: int = 512 * 1024 ** 2,
+    stage1_workers: int = None,
+    stage3_workers: int = None,
     # Auto-cluster knobs (used when groupby is None — mirrors the
     # AnnData path in runGDR which runs SVD + neighbors + Leiden inline)
     batch_key=None,
     n_svd_dims: int = 50,
     n_svd_iter: int = 7,
+    n_highly_variable_genes: int = 5000,
     resolution: float = 1.0,
 ):
     """Cytome streaming path for runGDRParallel.
@@ -1832,8 +1962,16 @@ def _runGDRParallel_cytome(
             cytome_marker_gene_key=cytome_marker_gene_key,
             save_reference=save_reference,
             expressed_pct=expressed_pct,
+            allow_non_integer=allow_non_integer,
+            score_chunk_size=score_chunk_size,
+            max_score_chunk_bytes=max_score_chunk_bytes,
+            max_score_batch_cache_bytes=max_score_batch_cache_bytes,
             n_svd_dims=n_svd_dims, n_svd_iter=n_svd_iter,
+            n_highly_variable_genes=n_highly_variable_genes,
             resolution=resolution,
+            max_batch_cache_bytes=max_batch_cache_bytes,
+            stage1_workers=stage1_workers,
+            stage3_workers=stage3_workers,
             _opened_here=_opened_here,
         )
 
@@ -1962,7 +2100,13 @@ def _runGDRParallel_cytome(
     # the AnnData path's in-place behaviour.
     if write_to_cytome:
         emb_name = key_added if key_added is not None else "X_gdr"
-        ds.add_embedding(emb_name, np.asarray(score_list, dtype=np.float32))
+        from ..settings import _resolve_layer_dtype
+        ds.add_embedding(
+            emb_name, np.asarray(score_list, dtype=np.float32),
+            dtype=_resolve_layer_dtype(None),
+            provenance={"modality": modality, "function": "piaso.tl.runGDR",
+                        "key_added": emb_name},
+        )
         # Frozen-reference recipe for piaso.tl.projectGDR (cytome path). Mirrors the AnnData
         # branch: only the cheap recipe is written here; projectGDR completes and caches the rest.
         if save_reference:
@@ -2011,9 +2155,17 @@ def _runGDR_multibatch_cytome(
     # cosg_expressed_pct was threaded through), so every multi-batch cytome runGDR raised
     # NameError. Declared here and forwarded from _runGDRParallel_cytome.
     expressed_pct: float = 0.1,
+    allow_non_integer: bool = False,
+    score_chunk_size=None,
+    max_score_chunk_bytes: int = 256 * 1024 ** 2,
+    max_score_batch_cache_bytes: int = 512 * 1024 ** 2,
     n_svd_dims: int = 50,
     n_svd_iter: int = 7,
+    n_highly_variable_genes: int = 5000,
     resolution: float = 1.0,
+    max_batch_cache_bytes: int = 512 * 1024 ** 2,
+    stage1_workers: int = None,
+    stage3_workers: int = None,
     _opened_here: bool = False,
 ):
     """Multi-batch cytome streaming GDR — mirrors AnnData multi-batch path.
@@ -2042,38 +2194,192 @@ def _runGDR_multibatch_cytome(
     )
 
     # Step 1: cluster labels — either from groupby column or per-batch de novo
+    # Stage timings are printed rather than inferred: attributing GDR cost by
+    # subtracting a projected stage 1 from a total produced a wrong answer once
+    # already, and summing per-call wall times under concurrency produced
+    # another.
+    # Imported here, not inside the groupby-is-None branch: stage 3 also needs
+    # it, and that branch does not run when a groupby column is supplied.
+    from ._normalization import _open_cytome as _open_cy
+    from ._normalization import _infog_streaming
+
+    _t_stage1 = time.time()
     if groupby is None:
         if verbosity > 0:
             print(
                 "  No groupby; running per-batch SVD + Leiden via cell_mask"
             )
         gdr_local_col = np.full(n_cells, "", dtype=object)
-        for batch in batches:
+
+        # This is 97% of a cytome GDR run: on ADVIS it was 13,052 s of a
+        # 14,057 s pipeline, all of it on one core. Each batch's SVD, KNN and
+        # Leiden are independent, so run them across batches.
+        #
+        # Each worker opens the cytome from its PATH rather than sharing the
+        # caller's connection: SQLite connections are not safe to use from
+        # several threads, and this is the same arrangement the COSG loop
+        # below already uses. Memory scales with the number of workers, since
+        # each holds its own SVD sketch (n_features x (n_components +
+        # oversampling)) and chunk buffer, so max_workers is the knob that
+        # trades RAM for time.
+        # SERIAL, deliberately, and this is 97% of a cytome GDR run (13,052 s
+        # of a 14,057 s ADVIS pipeline). Two ways to parallelise it were tried
+        # and both failed in ways worth recording before the next attempt:
+        #
+        #   threads   -> numba's default workqueue threading layer is not
+        #                threadsafe and aborts the process outright:
+        #                "Numba workqueue threading layer is terminating:
+        #                 Concurrent access has been detected." Leiden enters
+        #                numba parallel code, so this is not avoidable by
+        #                being careful.
+        #   processes -> a spawned worker opening the cytome by path does not
+        #                see `genes.highly_variable`, even after flush(),
+        #                commit() and PRAGMA wal_checkpoint(FULL) in the
+        #                parent; and each worker re-imports piaso, which is
+        #                tens of seconds of startup per batch.
+        #
+        # The COSG loop below IS parallel: it calls run_cosg_cytome by path,
+        # which neither enters numba nor needs the parent's uncommitted state.
+        # Default ONE worker. Measured on ADVIS after the HVG fix, warm, with
+        # the first arm repeated last to prove the reading (83.4 s then 83.4 s):
+        #
+        #   workers   cache ON            cache OFF
+        #   1          83.4 s / 4.60 GB   259.4 s
+        #   2         141.2 s             563.8 s     <- worst in BOTH arms
+        #   4          96.4 s             321.0 s
+        #   8          78.6 s / 6.33 GB   224.2 s
+        #
+        # With caching on, eight workers buy 6% for 37% more memory, and two
+        # are reproducibly the worst setting tried. The earlier default of two
+        # came from a 1-vs-2 comparison on the PRE-fix file, where every SVD
+        # read 32,285 genes instead of 3,000 and the extra I/O was worth
+        # overlapping; with a tenth as much to read, cache_chunks has already
+        # removed what threads were hiding. Raise it only when caching is off
+        # or batches are large enough to still be I/O bound.
+        #
+        # Cross-batch parallelism. Each worker opens the cytome from its own
+        # PATH: SQLite connections must not cross threads, and Python's sqlite3
+        # raises rather than corrupting if one does. Only enabled when numba's
+        # threading layer tolerates it — see _numba_threading_is_safe.
+        _safe, _layer = _numba_threading_is_safe()
+        # max_workers is a TOTAL core budget. stage1_workers=None spends it via
+        # _determine_parallelism (the helper the AnnData scoring pool already
+        # uses); an explicit int overrides. Before this, stage1_workers and
+        # max_workers MULTIPLIED -- one name meant "outer batches" at three
+        # call sites and "inner threads" at two.
+        # Stage 1 spends the budget on OUTER workers: each batch's INFOG + SVD
+        # is serial inside, so concurrency across batches is the only axis that
+        # pays. Measured on ADVIS (cache on): 244.2 s at one worker, 140.5 at
+        # two, 93.4 at four, 76.8 at eight, 86.9 at twenty -- so it saturates
+        # at eight, and twenty costs 9.16 GB against 5.57 for less speed.
+        #
+        # With cache_chunks OFF the curve keeps climbing (998.7 / 544.3 / 307.2
+        # / 221.8 / 205.7) because there is still I/O to overlap, but it never
+        # catches up: its best is 2.7x slower than cache-on's, for twice the
+        # memory. Hence cache on, workers capped by the budget.
+        if stage1_workers is None:
+            _n_workers = max(1, min(len(batches), max_workers or 1))
+        else:
+            _n_workers = int(stage1_workers)
+        if _n_workers > 1 and not _safe:
+            _asked = os.environ.get("NUMBA_THREADING_LAYER")
+            _because = (
+                f"NUMBA_THREADING_LAYER={_asked!r} was requested, and "
+                f"pynndescent rewrites that to 'workqueue' when tbb is absent "
+                f"(numba issue #3341). "
+                if (_asked or "").strip().lower() == "omp" else ""
+            )
+            _fix = (
+                "unset NUMBA_THREADING_LAYER — numba's default resolves to "
+                "'omp', which is thread-safe and needs nothing installed"
+                if _asked else
+                "install the tbb pool with `pip install piaso[tbb]`"
+            )
+            warnings.warn(
+                f"runGDR: stage1_workers={_n_workers} requested, but numba's "
+                f"resolved threading layer is '{_layer}', which is not "
+                f"thread-safe and would abort the process on concurrent "
+                f"access. Falling back to serial, which is roughly 3x slower "
+                f"for this stage. {_because}Fix: {_fix}.",
+                RuntimeWarning, stacklevel=2,
+            )
+            _n_workers = 1
+
+        # Priced in the main thread: the estimate is a metadata query on the
+        # parent's connection, and sqlite3 refuses (loudly) to let a connection
+        # cross threads.
+        _cache_plan = {}
+        for _b in batches:
+            _n = int((batch_labels == _b).sum())
+            _e = _estimate_batch_cache_bytes(ds, modality, cytome_layer, _n)
+            _cache_plan[_b] = _e is not None and _e <= max_batch_cache_bytes
+
+        def _stage1_one(batch):
             cell_mask = batch_labels == batch
+            use_cache = _cache_plan[batch]
+            _ds = _open_cy(str(ds.path)) if _n_workers > 1 else ds
+            try:
+                # INFOG is recomputed FOR THIS BATCH, and its HVGs selected from
+                # this batch's variance -- matching what the AnnData path has
+                # always done via infog_svd(adata_i, ...). The cytome path used
+                # to reuse the whole-dataset INFOG layer and the global
+                # highly_variable column, which is a different method, not a
+                # faster one.
+                #
+                # write=False: 35 batches writing `highly_variable` and
+                # `{modality}_infog_params` into one shared file would clobber
+                # each other and race under stage1_workers>1.
+                _info = _infog_streaming(
+                    _ds, n_top_genes=n_highly_variable_genes,
+                    cell_mask=cell_mask, write=False, verbosity=0,
+                    modality=modality, batch_size=batch_size_cytome,
+                    allow_non_integer=allow_non_integer,
+                )
+                svd_emb, _S, _Vt = _piaso_mod.tl.runSVD(
+                    _ds, modality=modality, n_components=n_svd_dims,
+                    n_iter=n_svd_iter, random_state=random_seed,
+                    key_added='X_svd_TMP_GDR_BATCH',
+                    verbosity=0, streaming=True,
+                    cell_mask=cell_mask,
+                    cache_chunks=use_cache,
+                    infog_params=_info['infog_params'],
+                    hvg_indices_override=_info['hvg_indices'],
+                )
+                knn_batch = _piaso_mod.tl.neighbors(
+                    svd_emb, n_neighbors=15, random_state=random_seed,
+                )
+                labels_batch = _piaso_mod.tl.leiden(
+                    _ds, knn_result=knn_batch,
+                    resolution=resolution, random_state=random_seed,
+                    key_added='gdr_local_TMP_GDR_BATCH',
+                    n_iterations=10,
+                    cell_mask=np.ones(svd_emb.shape[0], dtype=bool),
+                )
+            finally:
+                if _n_workers > 1:
+                    _ds.close()
+            return cell_mask, np.asarray(labels_batch)
+
+        if _n_workers > 1:
             if verbosity > 0:
-                print(f"    batch '{batch}': {int(cell_mask.sum())} cells")
-            # SVD on masked cells (returns in-memory ndarray, no cytome write)
-            svd_emb, _S, _Vt = _piaso_mod.tl.runSVD(
-                ds, modality=modality, n_components=n_svd_dims,
-                n_iter=n_svd_iter, random_state=random_seed,
-                key_added='X_svd_TMP_GDR_BATCH',
-                verbosity=0, streaming=True,
-                measurement=cytome_layer,
-                cell_mask=cell_mask,
-            )
-            # KNN on the in-memory SVD subset (passes ndarray, not cytome)
-            knn_batch = _piaso_mod.tl.neighbors(
-                svd_emb, n_neighbors=15,
-                random_state=random_seed,
-            )
-            # Leiden on the in-memory knn_result (no cytome write)
-            labels_batch = _piaso_mod.tl.leiden(
-                ds, knn_result=knn_batch,
-                resolution=resolution, random_state=random_seed,
-                key_added='gdr_local_TMP_GDR_BATCH',
-                n_iterations=10,
-                cell_mask=np.ones(svd_emb.shape[0], dtype=bool),
-            )
+                print(f"    {_n_workers} batches at a time "
+                      f"(numba threading layer '{_layer}')", flush=True)
+            from concurrent.futures import ThreadPoolExecutor
+            with ThreadPoolExecutor(max_workers=_n_workers) as pool:
+                # Collected in batch order, not completion order, so labels do
+                # not depend on scheduling.
+                stage1 = list(pool.map(_stage1_one, batches))
+        else:
+            # The SAME body, one batch at a time. There used to be a second
+            # copy of stage 1 here for the serial case and the two drifted:
+            # per-batch INFOG was added to _stage1_one only, so with the
+            # default stage1_workers=1 every caller silently got the old
+            # whole-dataset INFOG. It also made every worker sweep compare two
+            # different algorithms, which is what produced the "two workers is
+            # anomalously slow" reading -- w=1 was simply doing less work.
+            stage1 = [_stage1_one(b) for b in batches]
+
+        for cell_mask, labels_batch in stage1:
             gdr_local_col[cell_mask] = labels_batch.astype(str)
         ds.cells['gdr_local_TMP_GDR'] = gdr_local_col
         ds.flush()
@@ -2082,13 +2388,21 @@ def _runGDR_multibatch_cytome(
     cluster_labels = np.asarray(ds.cells[groupby])
 
     # Step 2: per-batch COSG via cell_mask
+    _t_stage2 = time.time()
     if verbosity > 0:
+        print(f"  [stage 1] {_t_stage2 - _t_stage1:.1f}s", flush=True)
         print(f"  Per-batch COSG (cell_mask) across {len(batches)} batches")
-    marker_gene_per_batch = []
-    batch_n_groups = []
-    for batch in batches:
+    # Parallel across batches. run_cosg_cytome takes a PATH, so each call
+    # opens its own read-only SQLite connection and nothing is shared; threads
+    # are enough because the work is numpy/scipy that releases the GIL, and
+    # they avoid pickling the dataset to subprocesses.
+    #
+    # This loop was serial while the AnnData path used a ProcessPoolExecutor
+    # across batches, so a 35-batch cytome run sat on one core: 106% CPU for
+    # over two hours on a 20-core machine.
+    def _cosg_one(batch):
         cell_mask = batch_labels == batch
-        cosg_result = run_cosg_cytome(
+        return batch, run_cosg_cytome(
             cytome_path=str(ds.path),
             groupby=groupby,
             cell_mask=cell_mask,
@@ -2104,6 +2418,29 @@ def _runGDR_multibatch_cytome(
             compute_on_fly=True,
             use_cached_stats=True,
         )
+
+    _n_cosg_workers = max(1, min(int(max_workers or 1), len(batches)))
+    # COSG's per-chunk work is Python-level and holds the GIL, so this pool
+        # has a sharp optimum and then falls off a cliff. Measured on 8 ADVIS
+        # batches: sequential 13.2 s, 2 threads 7.1 s, 4 threads 25.7 s, 8
+        # threads 41.8 s. max_workers defaults to 8, which was the worst value
+        # of the five tried, so cap it here rather than inherit it.
+    _n_cosg_workers = min(_n_cosg_workers, _COSG_THREAD_CAP)
+    if _n_cosg_workers > 1:
+        if verbosity > 0:
+            print(f"    {_n_cosg_workers} batches at a time")
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=_n_cosg_workers) as _ex:
+            results = list(_ex.map(_cosg_one, batches))
+    else:
+        results = [_cosg_one(b) for b in batches]
+
+    # Order is the batch order, not completion order: the marker columns are
+    # concatenated and then indexed by cumulative per-batch group counts, so a
+    # reordering here would silently mis-assign every marker block.
+    marker_gene_per_batch = []
+    batch_n_groups = []
+    for batch, cosg_result in results:
         mg_i = pd.DataFrame(
             cosg_result['names'],
             columns=[f"{batch}_{g}" for g in cosg_result['groups_order']],
@@ -2120,29 +2457,91 @@ def _runGDR_multibatch_cytome(
     # built on that batch's cells only — mirrors the AnnData parallel
     # multi-batch path (per-batch KDTree, full-marker scoring).
     if verbosity > 0:
+        _t_stage3 = time.time()
         print(
+            f"  [stage 2] {time.time() - _t_stage2:.1f}s\n"
             f"  Per-batch scoring on {n_total_markers} markers "
             f"(streaming on {modality}_{_scoring_layer})"
         )
     score_full = np.zeros((n_cells, n_total_markers), dtype=np.float32)
-    for batch_idx, batch in enumerate(batches):
+
+    # Scoring a batch is independent of every other batch. Measured on a
+    # 5-batch cytome, stage 3 alone: 20.2 s serial, 10.4 s at two workers,
+    # 18.6 s at four, 23.8 s at eight -- the same cliff stage 2 has, so the
+    # default is two rather than the four predicted from the AnnData pool's
+    # 3.16x. Output is bit-identical at every worker count only because the
+    # control-gene RNG was moved off np.random's global state.
+    if stage3_workers is None:
+        # Stage 3 is the OPPOSITE of stage 1: score() hands max_workers to the
+        # Rust rayon pool, so each batch is already parallel inside and extra
+        # outer workers only fragment it. Measured on ADVIS, stage 3 alone:
+        #
+        #   outer x inner   1x8 253.5s | 1x20 245.7s | 2x20 233.5s | 1x40 247.0s
+        #   outer sweep     1 252.9s | 2 240.2s | 4 255.5s | 8 313.9s | 20 338.4s
+        #
+        # An 8% spread across every allocation from 8 to 40 threads: this stage
+        # does not scale on cores by either axis. So take the cheapest good
+        # point -- two outer workers, the whole budget inside each -- and do
+        # NOT route it through _determine_parallelism, which maximises outer
+        # concurrency and would pick eight, the second-worst value measured.
+        _n_score_workers = max(1, min(2, len(batches)))
+        _score_threads = max(1, max_workers or 1)
+    else:
+        _n_score_workers = max(1, min(int(stage3_workers), len(batches)))
+        _score_threads = max(1, (max_workers or 1) // _n_score_workers)
+
+    def _score_one_batch(args):
+        batch_idx, batch = args
         cell_mask = batch_labels == batch
         if verbosity > 0:
             print(
-                f"    scoring batch {batch_idx+1}/{len(batches)}: '{batch}'"
+                f"    scoring batch {batch_idx+1}/{len(batches)}: '{batch}'",
+                flush=True,
             )
-        score_list, _gene_set_names = calculateScoreParallel(
-            ds,
-            gene_set=marker_gene,
-            score_method=scoring_method or 'piaso',
-            score_layer=score_layer,
-            max_workers=max_workers,
-            random_seed=random_seed,
-            modality=modality,
-            cytome_layer=_scoring_layer,
-            batch_size=batch_size_cytome,
-            cell_mask=cell_mask,
-        )
+        # Own connection per worker: sqlite3 refuses one across threads.
+        _ds = _open_cy(str(ds.path)) if _n_score_workers > 1 else ds
+        try:
+            return calculateScoreParallel(
+                _ds,
+                gene_set=marker_gene,
+                score_method=scoring_method or 'piaso',
+                score_layer=score_layer,
+                # This worker's SHARE of the budget. score() hands max_workers
+                # to the Rust rayon pool, so passing the full count here ran
+                # stage3_workers x max_workers threads.
+                max_workers=_score_threads,
+                random_seed=random_seed,
+                modality=modality,
+                cytome_layer=_scoring_layer,
+                batch_size=batch_size_cytome,
+                cell_mask=cell_mask,
+                score_chunk_size=score_chunk_size,
+                # The budget is a TOTAL: n workers score concurrently, each
+                # holding one chunk, so each gets its share.
+                max_score_chunk_bytes=max(
+                    1, max_score_chunk_bytes // max(1, _n_score_workers)),
+                # Same reasoning: the cache budget is a total across the
+                # concurrent scoring workers, each of which holds one.
+                max_score_batch_cache_bytes=max(
+                    1, max_score_batch_cache_bytes // max(1, _n_score_workers)),
+            )
+        finally:
+            if _n_score_workers > 1:
+                _ds.close()
+
+    if _n_score_workers > 1:
+        if verbosity > 0:
+            print(f"    {_n_score_workers} batches at a time", flush=True)
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=_n_score_workers) as _sx:
+            _stage3_results = list(_sx.map(_score_one_batch,
+                                           list(enumerate(batches))))
+    else:
+        _stage3_results = [_score_one_batch(a) for a in enumerate(batches)]
+
+    for batch_idx, batch in enumerate(batches):
+        cell_mask = batch_labels == batch
+        score_list, _gene_set_names = _stage3_results[batch_idx]
         # L2 normalize within this batch's cells: axis=0 over all
         # markers, then axis=1 within each batch-marker block.
         score_list = normalize(score_list, norm='l2', axis=0)
@@ -2158,7 +2557,13 @@ def _runGDR_multibatch_cytome(
     # Step 4: persist or return (same convention as single-batch path).
     if write_to_cytome:
         emb_name = key_added if key_added is not None else "X_gdr"
-        ds.add_embedding(emb_name, score_full)
+        from ..settings import _resolve_layer_dtype
+        ds.add_embedding(
+            emb_name, score_full,
+            dtype=_resolve_layer_dtype(None),
+            provenance={"modality": modality, "function": "piaso.tl.runGDR",
+                        "key_added": emb_name},
+        )
         # Frozen-reference recipe for projectGDR. The multi-batch path normalises axis=1 per
         # marker block, so the block boundaries must travel with the recipe — projectGDR
         # reproduces the same per-block row normalisation from `block_indices`.
@@ -2173,12 +2578,31 @@ def _runGDR_multibatch_cytome(
                 denovo_labels=('gdr_local' if _denovo else None),
                 modality=modality))
             if verbosity > 0:
+                print(f"  [stage 3] {time.time() - _t_stage3:.1f}s", flush=True)
                 print(f"Reference state saved to ds.metadata['{GDR_REFERENCE_KEY}'] "
                       f"(use piaso.tl.projectGDR to map new cells into this space)")
 
         ds.metadata[cytome_marker_gene_key] = {
             str(col): [str(v) for v in marker_gene[col].tolist()]
             for col in marker_gene.columns
+        }
+        # Enough to re-derive this embedding. The AnnData side used to record
+        # neither groupby nor batch_key nor resolution, so a stored X_gdr could
+        # not be reproduced, nor even told apart from a supervised run -- which
+        # made a later comparison against it impossible to interpret.
+        ds.metadata[f"{emb_name}_params"] = {
+            "n_gene": n_gene, "mu": mu,
+            "layer": cytome_layer, "score_layer": _scoring_layer,
+            "scoring_method": scoring_method or "piaso",
+            "random_seed": random_seed,
+            "batch_key": batch_key, "groupby": (None if _denovo else groupby),
+            "resolution": resolution,
+            "n_svd_dims": n_svd_dims, "n_svd_iter": n_svd_iter,
+            "n_highly_variable_genes": n_highly_variable_genes,
+            "stage1_workers": stage1_workers, "stage3_workers": stage3_workers,
+            "max_workers": max_workers,
+            "per_batch_infog": True,
+            "piaso_version": _piaso_version(),
         }
         ds.flush()
         if verbosity > 0:
@@ -2196,412 +2620,24 @@ def _runGDR_multibatch_cytome(
         return score_full, marker_gene
 
 
-def runGDRParallel(
-    data=_UNSET,
-    batch_key:str=None,
-    groupby:str=None,
-    n_gene:int=20,
-    mu:float=10.0,
-    expressed_pct:float=0.1,
-    layer:str='infog',
-    score_layer=_LAYER_DEFAULT,
-    infog_layer:str=None,
-    use_highly_variable:bool=True,
-    n_highly_variable_genes:int=5000,
-    n_svd_dims:int=50,
-    n_svd_iter:int=7,
-    resolution:float=1.0,
-    scoring_method:str=None,
-    key_added:str=None,
-    max_workers:int=8,
-    calculate_score_multiBatch:bool=True,
-    n_concurrent_batches:int=None,
-    verbosity: int=0,
-    random_seed:int=1927,
-    # Cytome streaming parameters
-    modality: str = "RNA",
-    batch_size_cytome: int = 1024,
-    # ---- deprecated aliases (back-compat) ----
-    adata=_UNSET,
-):
+@functools.wraps(runGDR, assigned=("__module__", "__qualname__", "__doc__"))
+def runGDRParallel(*args, **kwargs):
     """
     .. deprecated::
-        ``runGDRParallel`` is deprecated. Use :func:`runGDR` instead —
-        parallel execution is now the default (``max_workers=8``).
+        Use :func:`runGDR`. This name is kept so existing scripts keep working;
+        it forwards every argument unchanged.
 
-    Run GDR (marker Gene-guided dimensionality reduction) in parallel using multi-cores and shared memory.
-
-    Parameters
-    -----------
-    adata : AnnData
-        Annotated data matrix.
-
-    batch_key : str, optional
-        Key in `adata.obs` representing batch information. Defaults to None. If specified, different batches will be processed separately and in parallel, otherwise, the input data will be processed as one batch.
-
-    groupby : str, optional
-        Key in `adata.obs` to specify which cell group information to use. Defaults to None. If none, de novo clustering will be performed.
-
-    n_gene : int, optional
-        Number of genes, parameter used in COSG. Defaults to 30.
-
-    mu : float, optional
-        Gene expression specificity parameter, used in COSG. Defaults to 1.0.
-
-    layer : str, optional
-        Layer in ``adata.layers`` to use for the analysis. Defaults to ``'infog'``,
-        which uses PIASO's INFOG normalization (requires ``piaso.tl.infog(adata)`` first).
-        Pass ``layer=None`` to use ``adata.X`` directly (requires scanpy for HVG selection).
-
-    score_layer : str, optional
-        If specified, the gene scoring will be calculated using this layer of `adata.layers`. Defaults to None.
-
-    infog_layer : str, optional
-        If specified, the INFOG normalization will be calculated using this layer of `adata.layers`, which is expected to contain the UMI count matrix. Defaults to None.
-
-    use_highly_variable : bool, optional
-        Whether to use only highly variable genes when rerunning the dimensionality reduction. Defaults to True. Only effective when `groupby=None`.
-
-    n_highly_variable_genes : int, optional
-        Number of highly variable genes to use when `use_highly_variable` is True. Defaults to 5000. Only effective when `groupby=None`.
-
-    n_svd_dims : int, optional
-        Number of dimensions to use for SVD. Defaults to 50. Only effective when `groupby=None`.
-
-    n_svd_iter : int, optional, default=7
-        Number of iterations for randomized SVD solver. The default is larger than the default in randomized_svd to handle sparse matrices that may have large slowly decaying spectrum. Also larger than the `n_iter` default value (5) in the TruncatedSVD function.
-
-    resolution : float, optional
-        Resolution parameter for de novo clustering. Defaults to 1.0. Only effective when `groupby=None`.
-
-    scoring_method : str, optional
-        Specifies the gene set scoring method used to compute gene scores. If set to None, use PIASO's scoring method as default.
-
-    key_added : str, optional
-        Key under which the GDR dimensionality reduction results will be stored in `adata.obsm`. If None, results will be saved to `adata.obsm[X_gdr]`.
-
-    max_workers : int, optional
-        Maximum number of workers to use for parallel computation. Defaults to 8.
-
-    calculate_score_multiBatch : bool, optional
-        .. deprecated:: Use ``max_workers=1`` for sequential processing.
-        Whether to calculate gene scores across multiple adata batches (if `batch_key` is specified). Defaults to True.
-
-    n_concurrent_batches : int, optional
-        Number of batches to process concurrently when ``calculate_score_multiBatch=True`` and
-        ``scoring_method='piaso'``. Uses ThreadPoolExecutor for inter-batch parallelism (both
-        sklearn KDTree and Rust score_complete release the GIL). If None, auto-determined from
-        ``max_workers`` and the number of batches. Default is None.
-
-    verbosity : int, optional
-        Verbosity level of the function. Higher values provide more detailed logs. Defaults to 0.
-        
-    random_seed : int, optional
-        Random seed for reproducibility. Default is 1927.
-
-    Returns
-    -------
-    None
-        The function modifies `adata` in place by adding GDR dimensionality reduction result to `adata.obsm[key_added]`.
-
-    Examples
-    --------
-    >>> import anndata
-    >>> import piaso
-    >>>
-    >>> adata = anndata.read_h5ad("example.h5ad")
-    >>> piaso.tl.infog(adata)  # compute INFOG normalization first
-    >>> piaso.tl.runGDRParallel(
-    ...     adata,
-    ...     batch_key="batch",
-    ...     groupby="CellTypes",
-    ...     n_gene=30,
-    ...     max_workers=8,
-    ...     verbosity=0
-    ... )
-    >>> print(adata.obsm["X_gdr"])
+    A duplicated implementation is a promise to maintain two things and to
+    remember that you must; forwarding every call to ``runGDR`` is the only
+    version that cannot go stale.
     """
+    import warnings
     warnings.warn(
-        "runGDRParallel is deprecated. Use runGDR() instead — "
-        "parallel execution is now the default (max_workers=8).",
+        "runGDRParallel is deprecated. Use runGDR() instead — parallel "
+        "execution is the default (max_workers=8).",
         DeprecationWarning, stacklevel=2,
     )
-    adata = _resolve_data_arg(data, 'runGDRParallel', adata=adata)
-    # Deprecated cytome-specific layer aliases → unified params.
-    # Resolve layer-mirror default so the deprecated alias matches runGDR.
-    if score_layer is _LAYER_DEFAULT:
-        score_layer = layer
-    cytome_layer = layer
-    score_cytome_layer = score_layer
-    from ._normalization import _is_cytome_dataset
-    if _is_cytome_dataset(adata):
-        if scoring_method == 'scanpy':
-            raise NotImplementedError(
-                "runGDRParallel(cytome, scoring_method='scanpy') is not "
-                "supported. Pass scoring_method='piaso' (default) or "
-                "export to AnnData via ds.to_anndata() first."
-            )
-        return _runGDRParallel_cytome(
-            adata, groupby=groupby, n_gene=n_gene, mu=mu,
-            scoring_method=scoring_method or 'piaso',
-            key_added=key_added, max_workers=max_workers,
-            random_seed=random_seed, verbosity=verbosity,
-            modality=modality, cytome_layer=cytome_layer,
-            score_cytome_layer=score_cytome_layer,
-            batch_size_cytome=batch_size_cytome,
-            score_layer=score_layer,
-            batch_key=batch_key,
-            n_svd_dims=n_svd_dims, n_svd_iter=n_svd_iter,
-            resolution=resolution,
-        )
-
-    ### Validate layer existence
-    if layer is not None and layer not in adata.layers:
-        if layer == 'infog':
-            raise ValueError(
-                "INFOG layer not found in adata.layers. "
-                "Please run piaso.tl.infog(adata) first to compute INFOG normalization, "
-                "or pass layer=None to skip INFOG (requires scanpy for HVG selection)."
-            )
-        raise ValueError(
-            f"Layer '{layer}' not found in adata.layers. "
-            f"Available layers: {list(adata.layers.keys())}."
-        )
-
-    ### Check the scoring method, improve this part of codes later
-    if scoring_method is not None:
-        # Validate scoring_method
-        if scoring_method not in {"scanpy", "piaso"}:
-            raise ValueError(f"Invalid scoring_method: '{scoring_method}'. Must be either 'scanpy' or 'piaso'.")
-    else:
-        ### Use piaso's scoring method as the default
-        scoring_method='piaso'
-    
-    if batch_key is None:
-        nbatches=1
-    else:
-        batch_list=np.unique(adata.obs[batch_key])
-        nbatches=len(batch_list)
-    
-    if nbatches==1:
-        ### Calculate the clustering labels if there is no specified clustering labels to use
-        if groupby is None:
-            ### Run SVD in a lazy mode
-            infog_svd(
-                adata,
-                copy=False,
-                n_components=n_svd_dims,
-                n_top_genes=n_highly_variable_genes,
-                use_highly_variable=use_highly_variable,
-                verbosity=verbosity,
-                batch_key=None,
-                scale_data=False,
-                n_iter=n_svd_iter,
-                layer=layer,
-                infog_layer=infog_layer,
-                infog_trim=True,
-                key_added='X_svd',
-                random_state=random_seed
-            )
-            ### Because the verbosity will be reset in the above function
-            _knn_result = _piaso_neighbors(adata, use_rep='X_svd', n_neighbors=15, random_state=random_seed)
-            _piaso_leiden(adata, resolution=resolution, key_added='gdr_local', knn_result=_knn_result, random_state=random_seed)
-            groupby='gdr_local'
-            
-        if verbosity>0:
-            print('Number of clusters: ',len(np.unique(adata.obs[groupby])))
-            
-        ### Run marker gene identification
-        if layer is not None:
-            cosg.cosg(adata,
-                key_added='cosg',
-                use_raw=False,
-                layer=layer,
-                mu=mu,
-                expressed_pct=expressed_pct,
-                remove_lowly_expressed=True,
-                n_genes_user=n_gene,
-                groupby=groupby
-                     )
-        else:
-            cosg.cosg(adata,
-                key_added='cosg',
-                mu=mu,
-                expressed_pct=expressed_pct,
-                remove_lowly_expressed=True,
-                n_genes_user=n_gene,
-                groupby=groupby
-                     )
-        
-        marker_gene=pd.DataFrame(adata.uns['cosg']['names'])
-
-    
-        ### Calculate scores
-        score_list_collection=[]
-        score_list=[]
-        
-        
-        #### Using single-CPU version
-        # ### use a copy of the adata for the scoring
-        # adata_tmp=adata.copy()
-        # ### Set the layer used for scoring
-        # if score_layer is not None:
-        #     adata_tmp.X=adata_tmp.layers[score_layer]   
-        # for i in marker_gene.columns:
-        #     marker_gene_i=marker_gene[i].values
-        #     _sc_score_genes(adata_tmp,
-        #                   marker_gene_i,
-        #                   score_name='markerGeneFeatureScore_i')
-        #     ### Need to add the .copy()
-        #     score_list.append(adata_tmp.obs['markerGeneFeatureScore_i'].values.copy())
-        # score_list=np.vstack(score_list).T
-        
-        ### Use parallel computing of the gene set scores
-        score_list, gene_set_names=calculateScoreParallel(
-            adata,
-            gene_set=marker_gene,
-            score_method=scoring_method,
-            score_layer=score_layer,
-            max_workers=max_workers,
-            random_seed=random_seed
-        )
-        
-        ### Normalization
-        score_list=normalize(score_list,norm='l2',axis=0)
-        score_list=normalize(score_list,norm='l2',axis=1) ## Adding this is important
-        score_list_collection.append(score_list)
+    return runGDR(*args, **kwargs)
 
 
-        score_list_collection=np.vstack(score_list_collection)
-        # score_list_collection_collection.append(score_list_collection)
-        # marker_gene_scores=np.hstack(score_list_collection_collection)
-        marker_gene_scores=score_list_collection
-        marker_gene_scores=pd.DataFrame(marker_gene_scores)
-        marker_gene_scores.index=adata.obs_names
-        # marker_gene_scores.index=np.hstack([adata_list[0].obs_names.values, adata_list[1].obs_names.values])
-        marker_gene_scores=marker_gene_scores.loc[adata.obs_names]
-                
-    ### Have multiple batches    
-    else:
-        
-        
-        
-        ### Calculate the marker genes for each batch in parallel, the returned marker_genes data frame contains the marker gene lists combined from each individual batch
-        marker_gene, batch_n_groups=runCOSGParallel(
-            adata,
-            batch_key=batch_key,
-            groupby=groupby,
-            n_gene=n_gene,
-            mu=mu,
-            use_highly_variable=use_highly_variable,
-            n_highly_variable_genes=n_highly_variable_genes,
-            layer=layer,
-            infog_layer=infog_layer,
-            n_svd_dims=n_svd_dims,
-            n_svd_iter=n_svd_iter,
-            resolution=resolution,
-            verbosity=verbosity,
-            return_gene_names=True, ### Return the names, making it easier to be compatible with the calculateScoreParallel function
-            max_workers=max_workers,
-            random_seed=random_seed
-
-        )
-        
-    
-        
-        
-        
-        ### Create the indices for each batch's corresponding marker gene sets' indices in the merged marker gene dataframe
-        batch_n_groups_indices = np.cumsum([0] + batch_n_groups)
-        
-        
-        if calculate_score_multiBatch:
-            #### Calculate marker gene sets for different batches separately, but in parallel
-            score_list_collection, cellbarcode_info, gene_set_names_collection=calculateScoreParallel_multiBatch(
-                adata,
-                batch_key=batch_key,
-                marker_gene=marker_gene,
-                marker_gene_n_groups_indices=batch_n_groups_indices,
-                score_layer=score_layer,
-                max_workers=max_workers,
-                n_concurrent_batches=n_concurrent_batches,
-                score_method=scoring_method,
-                random_seed=random_seed
-            )
-            
-        else:
-            ##################Score gene sets in different batches, seperately
-            #############
-            ### Calculate scores
-            score_list_collection=[]
-            ### Store the cell barcodes info
-            cellbarcode_info=list()
-
-            ### Scoring the geneset among different batches
-            # for batch_u in batch_list:
-            for batch_u in tqdm(batch_list, desc="Calculating cell embeddings", unit="batch"):
-                ### Store the cell barcodes for each batch
-                cellbarcode_info.append(adata.obs_names[adata.obs[batch_key]==batch_u].values)
-
-                ### Use parallel computing of the gene set scores
-                with warnings.catch_warnings():
-                    warnings.simplefilter("ignore", FutureWarning)
-                    adata_batch_u = adata[adata.obs[batch_key]==batch_u].copy()
-                score_list, gene_set_names=calculateScoreParallel(
-                    adata_batch_u,
-                    gene_set=marker_gene,
-                    score_method=scoring_method,
-                    score_layer=score_layer,
-                    max_workers=max_workers,
-                    random_seed=random_seed
-                )
-
-                ### Normalization, within each batch
-                score_list=normalize(score_list,norm='l2',axis=0)
-                # score_list=normalize(score_list,norm='l2',axis=1) ## Adding this is important
-                # Block-wise L2-normalization, maybe could be better implemented with higher efficiency
-                # comparing different groups' marker gene scores
-                for start, end in zip(batch_n_groups_indices[:-1], batch_n_groups_indices[1:]):
-                    score_list[:, start:end] = normalize(score_list[:, start:end], norm='l2', axis=1) ## Adding this is important
-
-                score_list_collection.append(score_list)
-
-            ################## End ####################
-        
-    
-
-        score_list_collection=np.vstack(score_list_collection)
-        
-        # score_list_collection_collection.append(score_list_collection)
-        # marker_gene_scores=np.hstack(score_list_collection_collection)
-        marker_gene_scores=score_list_collection
-        marker_gene_scores=pd.DataFrame(marker_gene_scores)
-        marker_gene_scores.index=np.hstack(cellbarcode_info)
-        marker_gene_scores=marker_gene_scores.loc[adata.obs_names]
-    
-    
-    
-    
-    # Store metadata about the GDR run
-    adata.uns['gdr'] = {
-        'params': {
-            'n_gene': n_gene,
-            'mu': mu,
-            'layer': layer,
-            'score_layer': score_layer,
-            'infog_layer': infog_layer,
-            'scoring_method': scoring_method,
-            'random_seed': random_seed
-        }
-    }
-    
-    
-    ### Set the low-dimensional representations for the integrated dataset
-    if key_added is not None:
-        adata.obsm[key_added]=marker_gene_scores.values
-        print('The cell embeddings calculated by GDR were saved as `'+key_added+'` in adata.obsm.')
-    else:
-        adata.obsm['X_gdr']=marker_gene_scores.values
-        print('The cell embeddings calculated by GDR were saved as `X_gdr` in adata.obsm.')
-
-
+runGDRParallel.__wrapped__ = runGDR

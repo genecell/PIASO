@@ -1,131 +1,229 @@
 {
-  "version": 1,
-  "zenodo_record": "https://zenodo.org/records/19699639",
-  "zenodo_doi": "10.5281/zenodo.19699639",
-  "datasets": {
-    "sea_ad_mtg_20k": {
-      "title": "SEA-AD MTG 20K subsample (raw)",
-      "description": "Allen Institute SEA-AD Middle Temporal Gyrus, 20K cells, snRNA-seq raw counts. Layers: UMIs. 24 subclasses.",
-      "filename": "SEA-AD_RNA_MTG_subsample_excludeReference_20k_piaso.h5ad",
-      "url": "https://zenodo.org/api/records/19699639/files/SEA-AD_RNA_MTG_subsample_excludeReference_20k_piaso.h5ad/content",
-      "md5": "edc717a3d8428e75e073e2c9701e1dfe",
-      "size_bytes": 1922056192,
-      "format": "h5ad",
-      "species": "human",
-      "cells": 20000,
-      "features": 36601,
-      "reference": "Gabitto et al. Nat Neurosci 27, 2366-2383 (2024)",
-      "tutorials": ["PIASO_tutorial", "01_showThePlotFunction", "colorPalettes", "SCALAR"]
-    },
-    "adult_cortex_multiome_rna": {
-      "title": "Adult Mouse Cortex Multiome RNA (P57)",
-      "description": "17,412-cell integrated scRNA-seq from mouse cortex, Multiome RNA. 5 batches, annotated cell types. Layers: raw, log1p.",
-      "filename": "AdultCortexMultiomeRNA_integrated_anno.h5ad",
-      "url": "https://zenodo.org/api/records/19699639/files/AdultCortexMultiomeRNA_integrated_anno.h5ad/content",
-      "md5": "12d3e73099179720d847eb35543e673f",
-      "size_bytes": 2663383040,
-      "format": "h5ad",
-      "species": "mouse",
-      "cells": 17412,
-      "features": 26205,
-      "reference": "Bravo González-Blas et al. Nat Methods 20, 1355-1367 (2023)",
-      "tutorials": ["GDR_Tutorial", "markerGeneBasedCellTypePrediction", "PIASOmarkerDB_API"]
-    },
-    "mouse_brain_10k_gemx": {
-      "title": "10K Mouse Brain GEM-X v4 (10x Genomics)",
-      "description": "CellRanger-filtered feature-barcode matrix. 11,357 cells, 33,696 genes. Single-sample RNA preprocessing tutorial.",
-      "filename": "10k_Mouse_Brain_CNIK_3p_gemx_10k_Mouse_Brain_CNIK_3p_gemx_count_sample_filtered_feature_bc_matrix.h5",
-      "url": "https://zenodo.org/api/records/19699639/files/10k_Mouse_Brain_CNIK_3p_gemx_10k_Mouse_Brain_CNIK_3p_gemx_count_sample_filtered_feature_bc_matrix.h5/content",
-      "md5": "078176137b2ae2ec4f4e55bf8464917d",
-      "size_bytes": 68681728,
-      "format": "10x_h5",
-      "species": "mouse",
-      "cells": 11357,
-      "features": 33696,
-      "reference": "10x Genomics public dataset",
-      "tutorials": ["rnaSeqPipelineTutorial"]
-    },
-    "e18_v3_cell": {
-      "title": "E18 Mouse Brain Neurons 10K v3 (10x Genomics)",
-      "description": "CellRanger-filtered feature-barcode matrix. E18 mouse brain neurons, Chromium v3 chemistry. Multi-sample tutorial sample 1 of 3.",
-      "filename": "neuron_10k_v3_filtered_feature_bc_matrix.h5",
-      "url": "https://zenodo.org/api/records/19699639/files/neuron_10k_v3_filtered_feature_bc_matrix.h5/content",
-      "md5": "9651dbb08687f74ef081daddb4f935f7",
-      "size_bytes": 47607808,
-      "format": "10x_h5",
-      "species": "mouse",
-      "cells": 10000,
-      "features": 33696,
-      "reference": "10x Genomics public dataset",
-      "tutorials": ["rnaSeqPipelineTutorial_E18"]
-    },
-    "e18_v3_nuclei": {
-      "title": "E18 Mouse Brain Nuclei 5K v3.1 (10x Genomics)",
-      "description": "CellRanger-filtered feature-barcode matrix. E18 mouse brain nuclei, Next GEM v3.1 chemistry. Multi-sample tutorial sample 2 of 3.",
-      "filename": "SC3_v3_NextGem_DI_Nuclei_5K_SC3_v3_NextGem_DI_Nuclei_5K_count_sample_feature_bc_matrix.h5",
-      "url": "https://zenodo.org/api/records/19699639/files/SC3_v3_NextGem_DI_Nuclei_5K_SC3_v3_NextGem_DI_Nuclei_5K_count_sample_feature_bc_matrix.h5/content",
-      "md5": "81a6ceb41e2def93ac0d0f824a610849",
-      "size_bytes": 20250624,
-      "format": "10x_h5",
-      "species": "mouse",
-      "cells": 5000,
-      "features": 33696,
-      "reference": "10x Genomics public dataset",
-      "tutorials": ["rnaSeqPipelineTutorial_E18"]
-    },
-    "e18_v4_cell": {
-      "title": "E18 Mouse Neurons 10K GEM-X v4 (10x Genomics)",
-      "description": "CellRanger-filtered feature-barcode matrix. E18 mouse neurons, GEM-X v4 chemistry. Multi-sample tutorial sample 3 of 3.",
-      "filename": "10k_Mouse_Neurons_3p_gemx_10k_Mouse_Neurons_3p_gemx_count_sample_filtered_feature_bc_matrix.h5",
-      "url": "https://zenodo.org/api/records/19699639/files/10k_Mouse_Neurons_3p_gemx_10k_Mouse_Neurons_3p_gemx_count_sample_filtered_feature_bc_matrix.h5/content",
-      "md5": "1c42cc54e23f6cca892120aa629ffd20",
-      "size_bytes": 67633152,
-      "format": "10x_h5",
-      "species": "mouse",
-      "cells": 10000,
-      "features": 33696,
-      "reference": "10x Genomics public dataset",
-      "tutorials": ["rnaSeqPipelineTutorial_E18"]
-    },
-    "pbmc_multiome_san1": {
-      "title": "Human PBMC snMultiome SAN1 (De Rop 2024)",
-      "description": "CellRanger-filtered feature-barcode matrix, snMultiome RNA, SAN1 sample. 3,545 cells, 36,601 genes.",
-      "filename": "PBMCMultiomeRop2023_SAN1.h5",
-      "url": "https://zenodo.org/api/records/19699639/files/PBMCMultiomeRop2023_SAN1.h5/content",
-      "md5": "da3d17bb619d01b2cf7abc4d478cd247",
-      "size_bytes": 76742656,
-      "format": "10x_h5",
-      "species": "human",
-      "cells": 3545,
-      "features": 36601,
-      "reference": "De Rop et al. Nat Biotechnol 42, 916-926 (2024)",
-      "tutorials": ["scRNAseqProcessingTutorial_SAN1SAN2"]
-    },
-    "pbmc_multiome_san2": {
-      "title": "Human PBMC snMultiome SAN2 (De Rop 2024)",
-      "description": "CellRanger-filtered feature-barcode matrix, snMultiome RNA, SAN2 sample. 4,360 cells, 36,601 genes.",
-      "filename": "PBMCMultiomeRop2023_SAN2.h5",
-      "url": "https://zenodo.org/api/records/19699639/files/PBMCMultiomeRop2023_SAN2.h5/content",
-      "md5": "8d038aff7651177c74359296be2b7e01",
-      "size_bytes": 87769088,
-      "format": "10x_h5",
-      "species": "human",
-      "cells": 4360,
-      "features": 36601,
-      "reference": "De Rop et al. Nat Biotechnol 42, 916-926 (2024)",
-      "tutorials": ["scRNAseqProcessingTutorial_SAN2", "scRNAseqProcessingTutorial_SAN1SAN2"]
-    },
-    "piaso_markerdb_allen_immune": {
-      "title": "PIASOmarkerDB Allen Human Immune Health Atlas L2",
-      "description": "Pre-computed marker gene database for Allen Human Immune Health Atlas at L2 annotation granularity.",
-      "filename": "PIASOmarkerDB_AllenHumanImmuneHealthAtlas_L2_251219.csv",
-      "url": "https://zenodo.org/api/records/19699639/files/PIASOmarkerDB_AllenHumanImmuneHealthAtlas_L2_251219.csv/content",
-      "md5": "d4177960c47f995562ad572bb8a5f9f7",
-      "size_bytes": 117350,
-      "format": "csv",
-      "species": "human",
-      "reference": "Gong et al. Nature 648, 696-706 (2025)",
-      "tutorials": ["PIASOmarkerDB_API"]
-    }
+ "version": 2,
+ "zenodo_record": "https://zenodo.org/records/22012620",
+ "zenodo_doi": "10.5281/zenodo.19699639",
+ "datasets": {
+  "sea_ad_mtg_20k": {
+   "title": "SEA-AD MTG 20K subsample (raw)",
+   "description": "Allen Institute SEA-AD Middle Temporal Gyrus, 20K cells, snRNA-seq. X is log-normalised; raw UMI counts are in layers['UMIs']. 24 subclasses.",
+   "filename": "SEA-AD_RNA_MTG_subsample_excludeReference_20k_piaso.h5ad",
+   "url": "https://zenodo.org/api/records/22012620/files/SEA-AD_RNA_MTG_subsample_excludeReference_20k_piaso.h5ad/content",
+   "md5": "edc717a3d8428e75e073e2c9701e1dfe",
+   "size_bytes": 1788734584,
+   "format": "h5ad",
+   "species": "human",
+   "cells": 20000,
+   "features": 36601,
+   "reference": "Gabitto et al. Nat Neurosci 27, 2366-2383 (2024)",
+   "tutorials": [
+    "PIASO_tutorial",
+    "01_showThePlotFunction",
+    "colorPalettes",
+    "SCALAR"
+   ],
+   "counts_layer": "UMIs"
+  },
+  "adult_cortex_multiome_rna": {
+   "title": "Adult Mouse Cortex Multiome RNA (P57)",
+   "description": "17,412-cell integrated scRNA-seq from mouse cortex, Multiome RNA. 5 batches, annotated cell types. X is scaled (has negative values); raw UMI counts are in layers['raw'], log-normalised in layers['log1p'].",
+   "filename": "AdultCortexMultiomeRNA_integrated_anno.h5ad",
+   "url": "https://zenodo.org/api/records/22012620/files/AdultCortexMultiomeRNA_integrated_anno.h5ad/content",
+   "md5": "12d3e73099179720d847eb35543e673f",
+   "size_bytes": 2482436729,
+   "format": "h5ad",
+   "species": "mouse",
+   "cells": 17412,
+   "features": 26205,
+   "reference": "Bravo González-Blas et al. Nat Methods 20, 1355-1367 (2023)",
+   "tutorials": [
+    "GDR_Tutorial",
+    "markerGeneBasedCellTypePrediction",
+    "PIASOmarkerDB_API"
+   ],
+   "counts_layer": "raw"
+  },
+  "mouse_brain_10k_gemx": {
+   "title": "10K Mouse Brain GEM-X v4 (10x Genomics)",
+   "description": "CellRanger-filtered feature-barcode matrix. 11,357 cells, 33,696 genes. Single-sample RNA preprocessing tutorial.",
+   "filename": "10k_Mouse_Brain_CNIK_3p_gemx_10k_Mouse_Brain_CNIK_3p_gemx_count_sample_filtered_feature_bc_matrix.h5",
+   "url": "https://zenodo.org/api/records/22012620/files/10k_Mouse_Brain_CNIK_3p_gemx_10k_Mouse_Brain_CNIK_3p_gemx_count_sample_filtered_feature_bc_matrix.h5/content",
+   "md5": "078176137b2ae2ec4f4e55bf8464917d",
+   "size_bytes": 65505297,
+   "format": "10x_h5",
+   "species": "mouse",
+   "cells": 11357,
+   "features": 33696,
+   "reference": "10x Genomics public dataset",
+   "tutorials": [
+    "rnaSeqPipelineTutorial"
+   ],
+   "counts_layer": null
+  },
+  "e18_v3_cell": {
+   "title": "E18 Mouse Brain Neurons 10K v3 (10x Genomics)",
+   "description": "CellRanger-filtered feature-barcode matrix. E18 mouse brain neurons, Chromium v3 chemistry. Multi-sample tutorial sample 1 of 3.",
+   "filename": "neuron_10k_v3_filtered_feature_bc_matrix.h5",
+   "url": "https://zenodo.org/api/records/22012620/files/neuron_10k_v3_filtered_feature_bc_matrix.h5/content",
+   "md5": "9651dbb08687f74ef081daddb4f935f7",
+   "size_bytes": 45353844,
+   "format": "10x_h5",
+   "species": "mouse",
+   "cells": 10000,
+   "features": 33696,
+   "reference": "10x Genomics public dataset",
+   "tutorials": [
+    "rnaSeqPipelineTutorial_E18"
+   ],
+   "counts_layer": null
+  },
+  "e18_v3_nuclei": {
+   "title": "E18 Mouse Brain Nuclei 5K v3.1 (10x Genomics)",
+   "description": "CellRanger-filtered feature-barcode matrix. E18 mouse brain nuclei, Next GEM v3.1 chemistry. Multi-sample tutorial sample 2 of 3.",
+   "filename": "SC3_v3_NextGem_DI_Nuclei_5K_SC3_v3_NextGem_DI_Nuclei_5K_count_sample_feature_bc_matrix.h5",
+   "url": "https://zenodo.org/api/records/22012620/files/SC3_v3_NextGem_DI_Nuclei_5K_SC3_v3_NextGem_DI_Nuclei_5K_count_sample_feature_bc_matrix.h5/content",
+   "md5": "81a6ceb41e2def93ac0d0f824a610849",
+   "size_bytes": 19292255,
+   "format": "10x_h5",
+   "species": "mouse",
+   "cells": 5000,
+   "features": 33696,
+   "reference": "10x Genomics public dataset",
+   "tutorials": [
+    "rnaSeqPipelineTutorial_E18"
+   ],
+   "counts_layer": null
+  },
+  "e18_v4_cell": {
+   "title": "E18 Mouse Neurons 10K GEM-X v4 (10x Genomics)",
+   "description": "CellRanger-filtered feature-barcode matrix. E18 mouse neurons, GEM-X v4 chemistry. Multi-sample tutorial sample 3 of 3.",
+   "filename": "10k_Mouse_Neurons_3p_gemx_10k_Mouse_Neurons_3p_gemx_count_sample_filtered_feature_bc_matrix.h5",
+   "url": "https://zenodo.org/api/records/22012620/files/10k_Mouse_Neurons_3p_gemx_10k_Mouse_Neurons_3p_gemx_count_sample_filtered_feature_bc_matrix.h5/content",
+   "md5": "1c42cc54e23f6cca892120aa629ffd20",
+   "size_bytes": 64543231,
+   "format": "10x_h5",
+   "species": "mouse",
+   "cells": 10000,
+   "features": 33696,
+   "reference": "10x Genomics public dataset",
+   "tutorials": [
+    "rnaSeqPipelineTutorial_E18"
+   ],
+   "counts_layer": null
+  },
+  "pbmc_multiome_san1": {
+   "title": "Human PBMC snMultiome SAN1 (De Rop 2024)",
+   "description": "CellRanger-filtered feature-barcode matrix, snMultiome RNA, SAN1 sample. 3,545 cells, 36,601 genes.",
+   "filename": "PBMCMultiomeRop2023_SAN1.h5",
+   "url": "https://zenodo.org/api/records/22012620/files/PBMCMultiomeRop2023_SAN1.h5/content",
+   "md5": "da3d17bb619d01b2cf7abc4d478cd247",
+   "size_bytes": 73164832,
+   "format": "10x_h5",
+   "species": "human",
+   "cells": 3545,
+   "features": 36601,
+   "reference": "De Rop et al. Nat Biotechnol 42, 916-926 (2024)",
+   "tutorials": [
+    "scRNAseqProcessingTutorial_SAN1SAN2"
+   ],
+   "counts_layer": null
+  },
+  "pbmc_multiome_san2": {
+   "title": "Human PBMC snMultiome SAN2 (De Rop 2024)",
+   "description": "CellRanger-filtered feature-barcode matrix, snMultiome RNA, SAN2 sample. 4,360 cells, 36,601 genes.",
+   "filename": "PBMCMultiomeRop2023_SAN2.h5",
+   "url": "https://zenodo.org/api/records/22012620/files/PBMCMultiomeRop2023_SAN2.h5/content",
+   "md5": "8d038aff7651177c74359296be2b7e01",
+   "size_bytes": 83744621,
+   "format": "10x_h5",
+   "species": "human",
+   "cells": 4360,
+   "features": 36601,
+   "reference": "De Rop et al. Nat Biotechnol 42, 916-926 (2024)",
+   "tutorials": [
+    "scRNAseqProcessingTutorial_SAN2",
+    "scRNAseqProcessingTutorial_SAN1SAN2"
+   ],
+   "counts_layer": null
+  },
+  "piaso_markerdb_allen_immune": {
+   "title": "PIASOmarkerDB Allen Human Immune Health Atlas L2",
+   "description": "Pre-computed marker gene database for Allen Human Immune Health Atlas at L2 annotation granularity.",
+   "filename": "PIASOmarkerDB_AllenHumanImmuneHealthAtlas_L2_251219.csv",
+   "url": "https://zenodo.org/api/records/22012620/files/PIASOmarkerDB_AllenHumanImmuneHealthAtlas_L2_251219.csv/content",
+   "md5": "d4177960c47f995562ad572bb8a5f9f7",
+   "size_bytes": 114552,
+   "format": "csv",
+   "species": "human",
+   "reference": "Gong et al. Nature 648, 696-706 (2025)",
+   "tutorials": [
+    "PIASOmarkerDB_API"
+   ],
+   "counts_layer": null
+  },
+  "adult_cortex_multiome_rna_cytome": {
+   "title": "Adult mouse cortex multiome RNA (cytome)",
+   "description": "RNA only. `RNA_counts` holds raw UMIs, verified integer at conversion time.",
+   "reference": "Bravo González-Blas C, De Winter S, Hulselmans G, et al. SCENIC+: single-cell multiomic inference of enhancers and gene regulatory networks. Nat Methods 20, 1355-1367 (2023). https://doi.org/10.1038/s41592-023-01938-4",
+   "cytome_format_version": "1.0.0",
+   "written_by": "cytome 0.2.4",
+   "filename": "adult_cortex_multiome_rna.cytome",
+   "url": "https://zenodo.org/api/records/22012620/files/adult_cortex_multiome_rna.cytome/content",
+   "md5": "38e8b270dcaab2a3279792dd011f661c",
+   "size_bytes": 191954944,
+   "format": "cytome",
+   "species": "mouse"
+  },
+  "sea_ad_mtg_20k_cytome": {
+   "title": "SEA-AD middle temporal gyrus, 20k nuclei (cytome)",
+   "description": "RNA only. `RNA_counts` holds raw UMIs, verified integer at conversion time.",
+   "reference": "Gabitto MI, Travaglini KJ, Rachleff VM, et al. Integrated multimodal cell atlas of Alzheimer's disease. Nat Neurosci 27, 2366-2383 (2024). https://doi.org/10.1038/s41593-024-01774-5",
+   "cytome_format_version": "1.0.0",
+   "written_by": "cytome 0.2.4",
+   "filename": "sea_ad_mtg_20k.cytome",
+   "url": "https://zenodo.org/api/records/22012620/files/sea_ad_mtg_20k.cytome/content",
+   "md5": "f916ca07aaea4260ac8ee7519a5c23f5",
+   "size_bytes": 269058048,
+   "format": "cytome",
+   "species": "human"
+  },
+  "allen_devvis_rna": {
+   "title": "Allen developing mouse visual cortex snRNA, 200k nuclei (cytome)",
+   "description": "RNA only. `RNA_counts` holds raw UMIs, verified integer at conversion time.",
+   "reference": "Gao Y, van Velthoven CTJ, Lee C, et al. Continuous cell-type diversification in mouse visual cortex development. Nature 647, 127-142 (2025). https://doi.org/10.1038/s41586-025-09644-1",
+   "cytome_format_version": "1.0.0",
+   "written_by": "cytome 0.2.4",
+   "filename": "allen_devvis_rna.cytome",
+   "url": "https://zenodo.org/api/records/22012620/files/allen_devvis_rna.cytome/content",
+   "md5": "113204e53b5db8cfa6599e77d41f97b0",
+   "size_bytes": 1405300736,
+   "format": "cytome",
+   "species": "mouse"
+  },
+  "humandevcx_38_rna": {
+   "title": "Human developing cortex snRNA, 38 samples (cytome)",
+   "description": "RNA only. `RNA_counts` holds raw UMIs, verified integer at conversion time.",
+   "reference": "Wang L, Wang C, Moriano JA, et al. Molecular and cellular dynamics of the developing human neocortex. Nature 647, 169-178 (2025). https://doi.org/10.1038/s41586-024-08351-7",
+   "cytome_format_version": "1.0.0",
+   "written_by": "cytome 0.2.4",
+   "filename": "humandevcx_38_rna.cytome",
+   "url": "https://zenodo.org/api/records/22012620/files/humandevcx_38_rna.cytome/content",
+   "md5": "060eb655316dd2e2f9a9dd8160bf55c8",
+   "size_bytes": 1137491968,
+   "format": "cytome",
+   "species": "human"
+  },
+  "humanlifespan_pfc_rna": {
+   "title": "Human lifespan prefrontal cortex snRNA, 1.5M nuclei (cytome)",
+   "description": "RNA only. `RNA_counts` holds raw UMIs, verified integer at conversion time.",
+   "reference": "Catching A, Weller CA, Hu F, et al. Single-nucleus multiome analysis in the human prefrontal cortex identifies gene expression and cis-regulatory elements associated with aging. Cell Reports 45, 117110 (2026). https://doi.org/10.1016/j.celrep.2026.117110",
+   "cytome_format_version": "1.0.0",
+   "written_by": "cytome 0.2.4",
+   "filename": "humanlifespan_pfc_rna.cytome",
+   "url": "https://zenodo.org/api/records/22012620/files/humanlifespan_pfc_rna.cytome/content",
+   "md5": "3aa6a146411a400bdf48cd730fee3b49",
+   "size_bytes": 25706229760,
+   "format": "cytome",
+   "species": "human"
   }
+ }
 }

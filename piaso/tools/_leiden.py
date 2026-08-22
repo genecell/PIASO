@@ -4,10 +4,15 @@ Supports both AnnData and cytome.Dataset as input.
 """
 
 import random as _random
+import threading
 import numpy as np
 import pandas as pd
 
 from ._neighbors import _is_cytome_dataset
+
+
+# Guards igraph's process-global RNG; see the comment at its use site.
+_IGRAPH_RNG_LOCK = threading.Lock()
 
 
 class _SeededRNG:
@@ -29,6 +34,7 @@ class _SeededRNG:
 def leiden(
     data,
     resolution=1.0,
+    modality='RNA',
     n_iterations=10,
     random_state=42,
     key_added='leiden',
@@ -77,13 +83,37 @@ def leiden(
         ``ds.cells[key_added]`` and read back from there. Self-contained: pass
         the Dataset and access ``ds.cells[key_added]`` afterwards.
     """
+    # A cytome path is as valid an input as it is for infog / runSVD / runGDR.
+    # Without this a pipeline written entirely with a path worked for three
+    # calls and then raised "'str' object has no attribute 'obsm'" on the
+    # fourth, which reads like the caller passed the wrong type.
+    if isinstance(data, str):
+        from ._normalization import _open_cytome
+        data = _open_cytome(data)
+
     import igraph as ig
     from ._neighbors import _neighbors_graph_keys
 
     # Resolve the adjacency/connectivities graph name: explicit adjacency_key
     # wins; otherwise derive it from the neighbors_key prefix.
     if adjacency_key is None:
-        adjacency_key = _neighbors_graph_keys(neighbors_key)[0]
+        if _is_cytome_dataset(data):
+            # Accept both the modality-prefixed name new runs write and the
+            # un-prefixed one older files have. Only a cytome has `.metadata`;
+            # an AnnData keeps its graph in obsp under the plain key.
+            from ._neighbors import _neighbors_graph_keys_for_read
+            for _c, _d, _n in _neighbors_graph_keys_for_read(neighbors_key, modality):
+                if data.metadata.get(_n) is not None:
+                    adjacency_key = _c
+                    break
+            if adjacency_key is None:
+                # Fall back to the UN-prefixed name, because that is what
+                # neighbors() writes. Falling back to the prefixed one asked
+                # for RNA_connectivities in a file that has 'connectivities',
+                # and Leiden then clustered an empty graph into one group.
+                adjacency_key = _neighbors_graph_keys(neighbors_key)[0]
+        else:
+            adjacency_key = _neighbors_graph_keys(neighbors_key)[0]
 
     # Load adjacency matrix
     if knn_result is not None and 'connectivities' in knn_result:
@@ -119,16 +149,26 @@ def leiden(
                  directed=False)
     g.es['weight'] = weights.tolist()
 
-    # Set igraph's RNG for deterministic Leiden results
-    ig.set_random_number_generator(_SeededRNG(random_state))
+    # igraph's RNG is PROCESS-GLOBAL: set_random_number_generator installs it
+    # for the whole interpreter, not for this call. Two threads clustering
+    # concurrently therefore reset each other's generator mid-run, and the
+    # partitions stop being reproducible — measured on a 38-batch cytome as
+    # ARI 0.976 against the serial result, while a 5-batch one happened to come
+    # out identical and hid it.
+    #
+    # The lock makes the set-then-use pair atomic. Leiden is ~6% of a GDR
+    # stage-1 batch, so serialising it costs little and keeps the SVD and KNN
+    # around it parallel.
+    with _IGRAPH_RNG_LOCK:
+        ig.set_random_number_generator(_SeededRNG(random_state))
 
-    # Run Leiden (igraph backend, aligned with scanpy's future default)
-    partition = g.community_leiden(
-        objective_function='modularity',
-        weights='weight',
-        resolution=resolution,
-        n_iterations=n_iterations,
-    )
+        # Run Leiden (igraph backend, aligned with scanpy's future default)
+        partition = g.community_leiden(
+            objective_function='modularity',
+            weights='weight',
+            resolution=resolution,
+            n_iterations=n_iterations,
+        )
 
     labels = np.array(partition.membership, dtype=str)
 

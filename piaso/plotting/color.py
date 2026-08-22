@@ -278,25 +278,40 @@ d_color20 = ['#ffd567ff', '#fc9eecff', '#d17cfeff', '#84f8f3ff', '#33cb64ff', '#
 ### Continous colors
 # https://matplotlib.org/3.1.0/tutorials/colors/colormap-manipulation.html#sphx-glr-tutorials-colors-colormap-manipulation-py
 # # https://gree2.github.io/python/2015/05/06/python-seaborn-tutorial-choosing-color-palettes
+import matplotlib
 from matplotlib import cm
 from matplotlib import colors, colorbar
-cmap_own = cm.get_cmap('magma_r', 256)
+
+
+def _get_cmap(name, lutsize=None):
+    """Look up a colormap compatibly across matplotlib versions.
+
+    matplotlib.cm.get_cmap is deprecated since 3.7 and removed in newer
+    releases; the matplotlib.colormaps registry (with .resampled) is the
+    current API (mpl >= 3.6). These lookups run at import time, so an
+    unguarded cm.get_cmap call makes ``import piaso`` fail outright on a
+    matplotlib without it.
+    """
+    try:
+        cmap = matplotlib.colormaps[name]
+        return cmap.resampled(lutsize) if lutsize is not None else cmap
+    except AttributeError:  # matplotlib < 3.6
+        return cm.get_cmap(name, lutsize)
+
+
+cmap_own = _get_cmap('magma_r', 256)
 newcolors = cmap_own(np.linspace(0,0.75 , 256))
-Greys = cm.get_cmap('Greys_r', 256)
+Greys = _get_cmap('Greys_r', 256)
 newcolors[:10, :] = Greys(np.linspace(0.8125, 0.8725, 10))
 c_color1 = colors.ListedColormap(newcolors)
 
 
-from matplotlib import cm
-from matplotlib import colors, colorbar
-cmap_own = cm.get_cmap('RdBu_r', 256)
+cmap_own = _get_cmap('RdBu_r', 256)
 newcolors = cmap_own(np.linspace(0.15,0.85 , 256))
 c_color2=colors.ListedColormap(newcolors)
 
 
-from matplotlib import cm
-from matplotlib import colors, colorbar
-cmap_own = cm.get_cmap('YlGn', 256)
+cmap_own = _get_cmap('YlGn', 256)
 newcolors = cmap_own(np.linspace(0.05,0.8 , 256))
 c_color3=colors.ListedColormap(newcolors)
 

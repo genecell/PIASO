@@ -34,6 +34,7 @@ def stacked_barplot(
     groupby: str = 'leiden',
     splitby: str = 'batch',
     normalize: bool = True,
+    sort_groups: bool = False,
     palette=None,
     figsize: Optional[tuple] = None,
     title: Optional[str] = None,
@@ -56,6 +57,16 @@ def stacked_barplot(
         Column for conditions/samples (bar positions on X axis).
     normalize : bool
         Normalize to fractions per splitby category.
+    sort_groups : bool
+        Order the stacked segments largest-proportion-first instead of
+        following the group's category order. Default ``False``: the segment
+        order then matches the legend, and the same colour sits at the same
+        height in every bar, which is what makes two bars comparable by eye.
+        Set ``True`` when a single bar's composition is the question and the
+        ranking is the answer. The ranking uses the mean proportion across
+        ``splitby`` categories, so one order applies to the whole plot; a
+        per-bar ranking would put a different cell type at the bottom of every
+        bar and make the plot unreadable.
     palette : list or dict, optional
         Colors for groups. Falls back to ``adata.uns`` then ``d_color4``.
     figsize : tuple, optional
@@ -81,6 +92,12 @@ def stacked_barplot(
 
     if normalize:
         ct = ct.div(ct.sum(axis=1), axis=0)
+
+    if sort_groups:
+        # Rank on the normalized composition even when the bars are counts,
+        # otherwise a large sample decides the order for every other one.
+        share = ct.div(ct.sum(axis=1), axis=0) if not normalize else ct
+        ct = ct[share.mean(axis=0).sort_values(ascending=False).index]
 
     groups = list(ct.columns)
 

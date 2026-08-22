@@ -388,7 +388,16 @@ def smoothCellTypePrediction(
     else:
         # We need to compute neighbors
         if use_rep not in adata.obsm:
-            raise ValueError(f"Embedding key '{use_rep}' not found in adata.obsm")
+            # `use_rep` defaults to 'X_gdr', which only exists if runGDR was run.
+            # Marker-based prediction itself needs no GDR, so a plain SVD
+            # pipeline lands here -- name what is actually available.
+            available = list(adata.obsm.keys())
+            raise ValueError(
+                f"Embedding key '{use_rep}' not found in adata.obsm. "
+                f"Available: {available if available else 'none'}. "
+                f"Pass use_rep= one of these (e.g. use_rep='X_svd'), or "
+                f"smooth_prediction=False to skip smoothing."
+            )
         
         # Get embedding
         X_embed = adata.obsm[use_rep]
@@ -658,9 +667,22 @@ def predictCellTypeByMarker(
         _n_cells = _cytome_ds.n_cells
         _obs = pd.DataFrame(index=[str(i) for i in range(_n_cells)])
         adata = anndata.AnnData(obs=_obs)
-        # Load embedding for smoothing
-        if smooth_prediction and use_rep in _cytome_ds.embeddings:
-            adata.obsm[use_rep] = np.array(_cytome_ds.embeddings[use_rep])
+        # Load embedding for smoothing. Resolve the name the way `neighbors`
+        # does: runSVD writes a modality-namespaced key, so the 'X_svd' the
+        # caller passes is stored as 'RNA_svd'. A bare `use_rep in
+        # ds.embeddings` misses that, and the miss surfaced two frames later as
+        # "not found in adata.obsm" — about an AnnData the caller never made.
+        if smooth_prediction:
+            from ._neighbors import _load_embedding_from_cytome
+            try:
+                adata.obsm[use_rep] = _load_embedding_from_cytome(_cytome_ds, use_rep)
+            except KeyError as exc:
+                raise ValueError(
+                    f"smooth_prediction=True needs an embedding, but '{use_rep}' "
+                    f"is not on this cytome. Available: "
+                    f"{_cytome_ds.list_embeddings()}. Pass use_rep= one of these, "
+                    f"or smooth_prediction=False."
+                ) from exc
         # calculateScoreParallel will use _cytome_ds directly
         inplace = True  # always in-place for cytome shim
 

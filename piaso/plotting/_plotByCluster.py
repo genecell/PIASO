@@ -14,6 +14,14 @@ def _read_cytome_features(source, feature_list, groupby=None):
     return _read_cells_columns(source, needed)
 
 
+def _count_groups(data, feature, groupby, use_raw, layer, **kw) -> int:
+    """How many groups the violin will draw. 1 when there is no grouping."""
+    if groupby is None:
+        return 1
+    _, groups = _get_feature_values(data, feature, groupby, use_raw, layer, **kw)
+    return max(1, len(groups))
+
+
 def _get_feature_values(
     data, feature, groupby=None, use_raw=None, layer=None,
     modality=None, cytome_layer="counts",
@@ -60,7 +68,7 @@ def _get_feature_values(
             values = np.asarray(values, dtype=float)
         if groupby and df is not None and groupby in df.columns:
             group_labels = df[groupby].values
-            groups = sorted(set(str(g) for g in group_labels if pd.notna(g)))
+            groups = resolve_group_order(df[groupby])
             mask_for = lambda g: np.array(
                 [str(x) == g for x in group_labels], dtype=bool,
             )
@@ -86,7 +94,7 @@ def _get_feature_values(
 
     if groupby and groupby in adata.obs.columns:
         group_labels = adata.obs[groupby].values
-        groups = sorted(set(str(g) for g in group_labels if pd.notna(g)))
+        groups = resolve_group_order(adata.obs[groupby])
         groups_dict = {g: values[np.array([str(x) == g for x in group_labels])]
                        for g in groups}
         return values, groups_dict
@@ -132,7 +140,7 @@ def _resolve_group_palette(data, groupby, groups, palette):
 
 def _plot_violin_on_ax(ax, values, groups_dict, feature, size, show_grid,
                        is_last, jitter=False, palette=None,
-                       show_median=True, median_color='lightgrey'):
+                       show_median=True, median_color='lightgrey', violin_width=0.7):
     """Draw a single violin plot on the given axes."""
     if groups_dict is not None:
         groups = list(groups_dict.keys())
@@ -154,7 +162,13 @@ def _plot_violin_on_ax(ax, values, groups_dict, feature, size, show_grid,
             colors = palette[:len(groups)]
 
         parts = ax.violinplot(group_data, positions=range(len(groups)),
+                              widths=violin_width,
                               showmedians=show_median, showextrema=False)
+        # Leave air either side. With one group matplotlib auto-scales x to
+        # about [-0.5, 0.5], so the violin fills the panel edge to edge and
+        # reads as a block rather than a distribution.
+        pad = 0.35 if len(groups) <= 2 else 0.08
+        ax.set_xlim(-0.5 - pad, len(groups) - 0.5 + pad)
         # Color each violin body by group
         for pc, c in zip(parts['bodies'], colors):
             pc.set_facecolor(c)
@@ -181,7 +195,9 @@ def _plot_violin_on_ax(ax, values, groups_dict, feature, size, show_grid,
         clean = values[np.isfinite(values)]
         if len(clean) > 0:
             parts = ax.violinplot([clean], positions=[0],
+                                  widths=violin_width,
                                   showmedians=show_median, showextrema=False)
+            ax.set_xlim(-0.85, 0.85)
             for pc in parts['bodies']:
                 pc.set_alpha(1.0)
             if show_median and 'cmedians' in parts:
@@ -211,8 +227,10 @@ def plot_features_violin(data,
                          layer: Optional[str] = None,
                          palette=None,
                          jitter: bool = False,
-                         width_single: float = 14.0,
+                         width_single: float = None,
                          height_single: float = 2.0,
+                         ncol: Optional[int] = None,
+                         violin_width: float = 0.7,
                          size: float = 0.1,
                          show_grid: bool = True,
                          show_median: bool = True,
@@ -223,12 +241,19 @@ def plot_features_violin(data,
                          cytome_layer: str = "counts",
                          compute_on_fly: bool = True,
                          use_cached_stats: bool = True,
+                         show: Optional[bool] = None,
+                         return_fig: bool = False,
                          ):
     """
     Plots a violin plot for each feature specified in `feature_list`.
 
     Uses matplotlib directly (no scanpy dependency). Supports AnnData and
     cytome Dataset / .cytome file path.
+
+    ``show`` is accepted as an alias for ``show_figure``: every other plotting
+    function in ``piaso.pl`` takes ``show``, and a call that works for
+    ``pl.embedding`` and ``pl.dotplot`` should not raise here for the sake of
+    one function's parameter name. When both are given, ``show`` wins.
 
     Parameters
     ----------
@@ -250,7 +275,18 @@ def plot_features_violin(data,
     jitter : bool, optional
         Show jitter scatter points on violins. Default is False.
     width_single : float, optional
+        Figure width in inches. ``None`` (default) derives it from the number
+        of groups — ``1.6 + 0.42 * n_groups``, clamped to [3, 16] — so a
+        two-sample plot is not the same width as a forty-cluster one. Pass a
+        number to override.
         Width of each subplot. Default is 14.0.
+    violin_width : float, optional
+        Width of each violin body in x-axis units, where 1.0 is the spacing
+        between groups. Default 0.7.
+    ncol : int, optional
+        Panels per row. ``None`` (default) puts ungrouped features two to a
+        row and grouped ones one to a row, since a grouped panel is already
+        as wide as its group count requires.
     height_single : float, optional
         Height of each subplot. Default is 2.0.
     size : float, optional
@@ -265,12 +301,43 @@ def plot_features_violin(data,
         Show figure (plt.show()). Default is True.
     save : str, optional
         Path to save the figure. Default is None.
+    return_fig : bool, optional
+        Return ``(fig, axes)`` instead of closing the figure.
     """
+    if show is not None:
+        show_figure = show
+
     n_features = len(feature_list)
-    fig, axes = plt.subplots(nrows=max(n_features, 1), ncols=1,
-                             figsize=(width_single, height_single * max(n_features, 1)),
+
+    # Width from the number of groups, not a constant. A fixed 14 inches is
+    # right for ~30 Leiden clusters and absurd for two samples: the same plot
+    # then arrives as a wide strip with two violins lost in it. Scale with the
+    # group count, clamped so one group is still readable and eighty do not
+    # produce a figure no screen can show.
+    n_groups = _count_groups(data, feature_list[0], groupby, use_raw, layer,
+                             modality=modality, cytome_layer=cytome_layer,
+                             compute_on_fly=compute_on_fly,
+                             use_cached_stats=use_cached_stats)
+    if width_single is None:
+        # The floor used to be 3.0, which is most of a text column for a plot
+        # holding one violin. An ungrouped QC panel needs far less than that.
+        floor = 2.2 if n_groups <= 2 else 3.0
+        width_single = float(np.clip(1.4 + 0.40 * n_groups, floor, 16.0))
+
+    # Several narrow panels side by side read better than a tall single column
+    # of them, so ungrouped features default to two per row. A grouped panel is
+    # already wide, so it keeps the column.
+    if ncol is None:
+        ncol = 1 if (groupby is not None and n_groups > 2) else min(n_features, 2)
+    ncol = max(1, min(int(ncol), max(n_features, 1)))
+    nrow = int(np.ceil(max(n_features, 1) / ncol))
+
+    fig, axes = plt.subplots(nrows=nrow, ncols=ncol,
+                             figsize=(width_single * ncol, height_single * nrow),
                              squeeze=False)
     axes = axes.ravel()
+    for extra_ax in axes[n_features:]:
+        extra_ax.axis("off")
 
     # Resolve palette once for all features
     resolved_palette = None
@@ -291,17 +358,26 @@ def plot_features_violin(data,
             modality=modality, cytome_layer=cytome_layer,
             compute_on_fly=compute_on_fly, use_cached_stats=use_cached_stats,
         )
-        is_last = (i == n_features - 1)
+        # x labels belong on the bottom row of the grid, which is not the
+        # last feature once ncol > 1.
+        is_last = (i >= n_features - ncol)
         _plot_violin_on_ax(axes[i], values, groups_dict, feature, size,
                            show_grid, is_last, jitter=jitter,
                            palette=resolved_palette,
                            show_median=show_median,
-                           median_color=median_color)
+                           median_color=median_color,
+                           violin_width=violin_width)
 
     plt.tight_layout()
 
     from ..settings import _savefig
     _savefig(fig, save, writekey='violin')
+    if return_fig:
+        # Hand the figure back before closing it, so the panel can be composed
+        # into a larger one. embedding() and stackedBarplot() already do this.
+        if show_figure:
+            plt.show()
+        return fig, axes[:n_features]
     if show_figure:
         plt.show()
     else:
@@ -309,6 +385,7 @@ def plot_features_violin(data,
 
 
 from functools import wraps
+from ._group_order import resolve_group_order
 # Create the alias
 @wraps(plot_features_violin)
 def plotFeaturesViolin(*args, **kwargs):

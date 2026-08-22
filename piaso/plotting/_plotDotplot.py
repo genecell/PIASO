@@ -16,6 +16,62 @@ from functools import wraps
 _MIN_DOT = 1.5
 
 
+#: The colour key and the size key are a fixed physical size, in inches, and
+#: sit together at the top of the side panel. Sizing them as a *fraction* of
+#: the panel — which is what the code did — ties them to the plot's height: a
+#: 27-row dot plot gave a 5-inch colour ribbon with the size key stranded a
+#: third of a figure below it, while a 5-row plot gave a stub. A key carries
+#: the same information whatever the plot is tall, so it should be one size.
+_CBAR_H_IN = 1.35
+_CBAR_W_IN = 0.14
+_CBAR_TITLE_H_IN = 0.38     # room above the ribbon for 'Mean\nexpression'
+_KEY_GAP_IN = 0.5           # colour key to size key
+
+
+def _fit_dotplot_keys(fig, ax, lax, cax, size_legend):
+    """Place the colour and size keys at a fixed physical size, top-aligned.
+
+    Called *after* the final layout pass. Measuring earlier does not work:
+    ``tight_layout`` and the ``square=True`` aspect adjustment both move the
+    axes afterwards, and an inset expressed in parent fractions grows with its
+    parent — so a colorbar that was 1.35 in when it was created came out at 3 in
+    once the panel settled.
+
+    The keys are top-aligned with the *plotting area*, not with the side panel:
+    with a square aspect the panel is taller than the dots it belongs to, and
+    aligning to the panel floated the keys away from the plot.
+    """
+    fig.canvas.draw()
+    fig_w, fig_h = fig.get_size_inches()
+    lax_pos = lax.get_position()
+    lax_h_in = max(lax_pos.height * fig_h, 1e-6)
+    lax_w_in = max(lax_pos.width * fig_w, 1e-6)
+
+    # Top of the dots, expressed as a fraction of the side panel.
+    ax_top = ax.get_position().y1
+    top_frac = (ax_top - lax_pos.y0) / lax_pos.height if lax_pos.height else 1.0
+    top_frac = min(1.0, max(0.0, top_frac))
+
+    def frac_h(inches):
+        return min(1.0, inches / lax_h_in)
+
+    cb_h = frac_h(_CBAR_H_IN)
+    cb_w = min(0.6, _CBAR_W_IN / lax_w_in)
+    cb_top = top_frac - frac_h(_CBAR_TITLE_H_IN)
+    cb_bottom = max(0.0, cb_top - cb_h)
+
+    # Re-position through the parent's coordinates, so the inset keeps tracking
+    # `lax` if anything moves it again.
+    cax.set_axes_locator(None)
+    cax.set_position([lax_pos.x0,
+                      lax_pos.y0 + cb_bottom * lax_pos.height,
+                      cb_w * lax_pos.width,
+                      cb_h * lax_pos.height])
+
+    size_legend.set_bbox_to_anchor(
+        (0.0, max(0.0, cb_bottom - frac_h(_KEY_GAP_IN))), transform=lax.transAxes)
+
+
 def _nice_legend_fracs(dot_max, n_target=5):
     """Even "nice-number" fraction series for the dot-size legend.
 
@@ -43,6 +99,7 @@ def _nice_legend_fracs(dot_max, n_target=5):
 
 from ..utils._cytome_compat import is_cytome_input as _is_cytome_input
 from ..utils._cytome_compat import read_cells_columns as _read_cells_columns
+from ._group_order import resolve_group_order
 
 
 def _resolve_features(features):
@@ -127,6 +184,29 @@ def _get_expression_data(
                                         mean_only_expressed=mean_only_expressed)
 
 
+def _ordered_groups(data, groupby, present):
+    """Order the groupby levels the way the data declares them.
+
+    ``sorted(..., key=str)`` puts Leiden clusters in lexical order — 0, 1, 10,
+    11, …, 2 — which is not the order ``leiden`` went to the trouble of
+    storing, and not the order ``plotEmbedding`` uses for the same column. Both
+    backends record an order (AnnData's categorical dtype, cytome's
+    ``set_categories`` store); reuse the resolver ``plotEmbedding`` already
+    uses so the two plots agree. Levels present but not in the declared order
+    are appended, string-sorted, rather than dropped.
+    """
+    from ._plotEmbedding import _resolve_categorical_style
+
+    present = [p for p in present if pd.notna(p)]
+    _, declared = _resolve_categorical_style(data, groupby)
+    if not declared:
+        return sorted(present, key=str)
+    present_str = {str(p): p for p in present}
+    ordered = [present_str[str(c)] for c in declared if str(c) in present_str]
+    seen = {str(c) for c in ordered}
+    return ordered + sorted((p for p in present if str(p) not in seen), key=str)
+
+
 def _group_mean(gv, mean_only_expressed):
     """Mean over a group's values — all cells, or only expressing (>0) cells."""
     if gv.size == 0:
@@ -141,7 +221,7 @@ def _get_expression_data_anndata(adata, features, groupby, layer=None, use_raw=N
                                  mean_only_expressed=False):
     import scipy.sparse as sp
 
-    groups = sorted(adata.obs[groupby].dropna().unique(), key=str)
+    groups = _ordered_groups(adata, groupby, adata.obs[groupby].dropna().unique())
     group_labels = adata.obs[groupby].values
 
     fraction_data = {}
@@ -197,7 +277,7 @@ def _get_expression_data_cytome(
     # Always read the groupby column from cells; features may or may not
     # be in cells depending on the modality.
     groupby_df = _read_cells_columns(source, [groupby])
-    groups = sorted(groupby_df[groupby].dropna().unique(), key=str)
+    groups = _ordered_groups(source, groupby, groupby_df[groupby].dropna().unique())
     groups_str = [str(g) for g in groups]
     group_labels = groupby_df[groupby].values
 
@@ -286,7 +366,7 @@ def _compute_dendrogram(data, groupby, features=None, layer=None, use_raw=None,
         # Use cell embeddings to compute group centroids
         embeddings = data.obsm[use_rep]
         group_labels = data.obs[groupby].values
-        groups = sorted(set(str(g) for g in group_labels if pd.notna(g)))
+        groups = resolve_group_order(group_labels)
         centroids = []
         for g in groups:
             mask = np.array([str(x) == g for x in group_labels])
@@ -328,7 +408,7 @@ def dotplot(
     mean_only_expressed: bool = False,
     standard_scale: Optional[str] = None,
     log: bool = False,
-    cmap: str = 'Reds',
+    cmap: str = 'Spectral_r',
     dot_max: Optional[float] = None,
     dot_min: float = 0,
     size_scale: float = 200,
@@ -387,7 +467,18 @@ def dotplot(
     log : bool
         Log1p transform expression values.
     cmap : str
-        Colormap for mean expression.
+        Colormap for mean expression. Default ``'Spectral_r'`` (changed from
+        ``'Reds'``), which separates the middle of the range more strongly and
+        matches the co-specificity heatmaps.
+
+        .. note::
+           ``'Spectral_r'`` is a rainbow map and is **not** colourblind-safe —
+           its red and green ends are hard to tell apart for the most common
+           form of colour vision deficiency. For figures headed for a
+           manuscript, pass a sequential map: ``cmap='Reds'`` (the previous
+           default), ``'magma_r'`` or ``'viridis'``. That also fits the data
+           better when ``standard_scale`` is set, since the values are then
+           0–1 with no meaningful midpoint for a diverging map to mark.
     dot_max : float, optional
         Max dot size (fraction). Default: data max.
     dot_min : float
@@ -695,22 +786,20 @@ def dotplot(
     # size legend below — both scale with the axes (no figsize drift / overlap).
     lax = divider.append_axes("right", size="24%", pad=0.35)
     lax.axis('off')
-    # Colorbar pinned to the TOP of the panel; the size legend grows up from the
-    # bottom. A wide vertical gap between them keeps the two titles from colliding.
-    cax = lax.inset_axes([0.0, 0.78, 0.12, 0.20])   # x, y, w, h in panel fraction
+
+    cax = lax.inset_axes([0.0, 0.6, 0.12, 0.3])   # provisional; sized below
     cbar = fig.colorbar(sc, cax=cax)
     cax.set_title('Mean\nexpression', fontsize=_fs_cbar_title, pad=3)
     cbar.ax.tick_params(labelsize=_fs_cbar_tick, length=2, width=0.5)
     cbar.outline.set_linewidth(0.5)
-    # Bound the size legend to the BOTTOM ~60% of the panel (its own inset) so its
-    # "Fraction expressing" title can never ride up into the colorbar above it.
-    # labelspacing/handletextpad opened up so the (capped) dots clear their labels.
-    leg_inset = lax.inset_axes([0.0, 0.0, 1.0, 0.60])
-    leg_inset.axis('off')
-    leg_inset.legend(handles=legend_elements, title='Fraction\nexpressing',
-                     loc='upper left', bbox_to_anchor=(0.0, 1.0),
-                     frameon=False, fontsize=_fs_legend, title_fontsize=_fs_legend,
-                     labelspacing=1.4, handletextpad=1.2, borderpad=0.3)
+    # The size legend goes straight on `lax` (which is axis-off) rather than
+    # into a second inset: a legend sizes itself to its content, and boxing it
+    # inside a fraction of the panel was part of what stretched it.
+    _size_legend = lax.legend(
+        handles=legend_elements, title='Fraction\nexpressing',
+        loc='upper left', bbox_to_anchor=(0.0, 0.5),   # provisional
+        frameon=False, fontsize=_fs_legend, title_fontsize=_fs_legend,
+        labelspacing=1.1, handletextpad=1.0, borderpad=0.2)
 
     if title:
         ax.set_title(title, fontsize=_fs_title, pad=10)
@@ -735,6 +824,8 @@ def dotplot(
             fig.tight_layout(rect=[0, 0.12 if has_brackets else 0, 1, 1])
         except Exception:
             pass
+
+    _fit_dotplot_keys(fig, ax, lax, cax, _size_legend)
 
     from ..settings import _savefig
     _savefig(fig, save, writekey='dotplot')

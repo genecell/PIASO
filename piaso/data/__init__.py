@@ -16,15 +16,19 @@ from ._datasets import (
     refresh_registry,
 )
 
-# --- GRN resources: genome sequence (.2bit), motif DBs, TF lists ---
-# PWM stays in PIASO (backs piaso.pp.scan_motifs); the .2bit + motif-DB loaders
-# moved to the CytoRete package (pip install cytorete) — lazy shims.
+# --- Sequence and motif resources: genome sequence (.2bit), motif DBs, TF lists ---
+# These back piaso.pp.scan_motifs. They live here rather than in a downstream
+# package because scanning is useless without a way to obtain sequences and
+# PWMs: shipping the scanner alone left `piaso.pp.scan_motifs` with no supported
+# route to its own inputs.
 from ._pwm import PWM
-from .._grn_shim import (
+from ._fasta import (
     fetch_2bit,
     resolve_2bit_path,
     extract_sequences,
     revcomp,
+)
+from ._motifs import (
     load_meme,
     load_jaspar_meme,
     load_cisbp_meme,
@@ -51,4 +55,13 @@ fetchJASPAR = fetch_jaspar
 fetchCISBP = fetch_cisbp
 
 from ._screen import fetch_screen, resolve_screen_path, load_screen_ccres, ccres_near_tss
+from ._lr import (fetch_lr_database, load_lr_database, resolve_lr_path,
+                  LR_URLS, ANNOTATION_CLASSES)
+from ._chembl import (fetch_chembl, load_chembl_targets, resolve_chembl_path,
+                      filter_chembl_activities, chembl_targets_to_dict,
+                      CHEMBL_URL, PCHEMBL_THRESHOLDS)
+fetchChEMBL = fetch_chembl
+loadChEMBLTargets = load_chembl_targets
+fetchLRDatabase = fetch_lr_database
+loadLRDatabase = load_lr_database
 fetchSCREEN = fetch_screen

@@ -14,6 +14,7 @@ from functools import wraps
 
 from ..utils._cytome_compat import is_cytome_input as _is_cytome_input
 from ..utils._cytome_compat import read_cells_columns as _read_cells_columns
+from ._group_order import resolve_group_order
 
 
 def _resolve_features(features):
@@ -75,7 +76,7 @@ def _get_mean_expression(data, features, groupby, layer=None, use_raw=None,
     # AnnData
     import scipy.sparse as sp
     adata = data
-    groups = sorted(adata.obs[groupby].dropna().unique(), key=str)
+    groups = resolve_group_order(adata.obs[groupby])
     group_labels = adata.obs[groupby].values
 
     result = {}
@@ -173,7 +174,7 @@ def _get_cell_expression(data, features, groupby, layer=None, use_raw=None,
     # AnnData path
     adata = data
     group_labels_all = adata.obs[groupby].values
-    groups = categories_order or sorted(set(str(g) for g in group_labels_all if pd.notna(g)))
+    groups = resolve_group_order(group_labels_all, categories_order=categories_order)
     rng = np.random.RandomState(random_state)
 
     sampled = []

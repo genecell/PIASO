@@ -120,3 +120,33 @@ def subset_cytome(tmp_dir):
         ds.close()
     yield out
     out.close()
+
+
+@pytest.fixture(autouse=True)
+def _isolate_matplotlib_rcparams():
+    """Undo any global matplotlib state a test leaves behind.
+
+    `piaso.settings.set_figure_params` writes into `matplotlib.rcParams`, which
+    is process-global. A test that calls it — the journal-style tests do,
+    deliberately, since that is what they are testing — changes the default
+    figure size for every test that runs afterwards.
+
+    That produced a failure which only appeared in full-suite order and passed
+    in isolation: `test_scatter_hexbin_colorbar_does_not_squeeze` asserts the
+    colorbar is height-matched to the main axes, and with a different default
+    figsize the equal-aspect adjustment shrank the axes to 0.40 of the figure
+    while the divider colorbar kept its 0.79. The assertion was right; the
+    figure it measured had been set up by an unrelated test.
+
+    Snapshotting and restoring is cheap and fixes the whole class, rather than
+    this one instance of it.
+    """
+    import matplotlib as mpl
+    saved = mpl.rcParams.copy()
+    try:
+        yield
+    finally:
+        # `rcParams.update` on a full copy restores every key, including ones
+        # the test added; `rcdefaults()` would instead discard the suite's own
+        # configuration.
+        mpl.rcParams.update(saved)

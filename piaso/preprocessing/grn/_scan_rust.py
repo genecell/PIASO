@@ -1,4 +1,4 @@
-"""Rust-accelerated PWM scan — same contract as :func:`piaso.grn.scan_motifs`.
+"""Rust-accelerated PWM scan — same contract as :func:`piaso.pp.scan_motifs`.
 
 The numeric definitions (log-odds PSSM, N-augmentation, p-value/relative
 threshold, reverse complement) live in the tested numpy module ``_scan``; this
@@ -34,7 +34,7 @@ def scan_motifs_rust(
     both_strands: bool = True,
     pseudocount: float = 0.01,
 ) -> dict:
-    """Rust-backed equivalent of :func:`piaso.grn.scan_motifs`."""
+    """Rust-backed equivalent of :func:`piaso.pp.scan_motifs`."""
     from ... import _piaso  # raises ImportError if the ext isn't built
 
     if background is None:

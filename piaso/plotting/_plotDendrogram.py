@@ -14,6 +14,7 @@ from functools import wraps
 from ..utils._cytome_compat import is_cytome_input as _is_cytome_input
 from ..utils._cytome_compat import open_cytome as _open_cytome
 from ..utils._cytome_compat import read_cells_columns as _read_cells_columns
+from ._group_order import resolve_group_order
 
 
 def _get_group_means(data, groupby, features=None, layer=None, use_raw=None, n_top_genes=50,
@@ -74,7 +75,7 @@ def _get_group_means(data, groupby, features=None, layer=None, use_raw=None, n_t
             top_idx = np.argsort(var)[-n_top_genes:]
             features = list(adata.var_names[top_idx])
 
-    groups = sorted(adata.obs[groupby].dropna().unique(), key=str)
+    groups = resolve_group_order(adata.obs[groupby])
     group_labels = adata.obs[groupby].values
 
     result = {}
@@ -147,7 +148,7 @@ def _group_centroids_from_rep(data, groupby, use_rep):
         labels = np.asarray(data.obs[groupby].values)
     if emb.ndim != 2 or emb.shape[0] != labels.shape[0]:
         return None
-    groups = sorted(set(str(g) for g in labels if pd.notna(g)), key=str)
+    groups = resolve_group_order(labels)
     rows = []
     for g in groups:
         mask = np.array([str(x) == g for x in labels])

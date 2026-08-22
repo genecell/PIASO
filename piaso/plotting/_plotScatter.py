@@ -229,6 +229,9 @@ def scatter(
     palette : list or dict, optional
         Colors for categorical data.  Falls back to PIASO default.
     cmap : str, optional
+        Colormap. Defaults to ``'magma_r'`` when ``color`` is continuous
+        (sequential, perceptually uniform, colourblind-safe) and to PIASO's
+        density map when ``density=True``.
         Colormap for continuous data.
     point_size : float or None
         Point size.  If None, auto-calculated from cell count.
@@ -441,7 +444,15 @@ def scatter(
             ax.legend(fontsize=legend_fontsize, frameon=False)
     elif color is not None:
         if cmap is None:
-            cmap = _color_mod.c_color1
+            # A continuous colour dimension -- QC fractions, scores, expression
+            # -- is sequential: low to high, no meaningful midpoint. 'magma_r'
+            # is perceptually uniform and colourblind-safe, so equal steps in
+            # the value look like equal steps in the colour, which the
+            # density-map default (c_color1) is not built for.
+            #
+            # Pass cmap='Spectral_r' or 'RdBu_r' for the diverging look, or
+            # cmap='viridis' for the matplotlib default.
+            cmap = 'magma_r'
         order = np.argsort(color_vals)
         sc = ax.scatter(x_vals[order], y_vals[order],
                         c=np.asarray(color_vals)[order], cmap=cmap,

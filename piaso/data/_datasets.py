@@ -9,12 +9,16 @@ import hashlib
 import json
 import os
 import sys
+import warnings
 from pathlib import Path
 from typing import Dict, Optional, Union
 
-from ._genome import PIASO_DATA_DIR
+from ._genome import PIASO_DATA_DIR, resolve_data_dir
 
-DATASETS_DIR = PIASO_DATA_DIR / "datasets"
+
+def _datasets_dir(data_dir=None):
+    """Dataset cache directory under the resolved PIASO data root."""
+    return resolve_data_dir(data_dir) / "datasets"
 
 # Bundled registry URL (fetched from PIASO-data GitHub repo at runtime)
 _REGISTRY_URL = (
@@ -32,7 +36,7 @@ def _load_registry(force_refresh: bool = False) -> dict:
     if _registry_cache is not None and not force_refresh:
         return _registry_cache
 
-    cache_path = PIASO_DATA_DIR / "datasets.json"
+    cache_path = resolve_data_dir() / "datasets.json"
 
     # Try local cache (unless force refresh)
     if not force_refresh and cache_path.exists():
@@ -157,8 +161,8 @@ def dataset_info(name: str) -> dict:
     return datasets[name]
 
 
-def fetch_dataset(name: str, force: bool = False) -> Path:
-    """Download a tutorial dataset to ~/.piaso/data/datasets/.
+def fetch_dataset(name: str, force: bool = False, data_dir=None) -> Path:
+    """Download a tutorial dataset into the PIASO data root.
 
     Downloads the file if not already cached. Verifies MD5 checksum.
 
@@ -168,6 +172,11 @@ def fetch_dataset(name: str, force: bool = False) -> Path:
         Dataset name (e.g., 'sea_ad_mtg_20k', 'mouse_brain_10k_gemx').
     force : bool
         If True, re-download even if file exists and checksum matches.
+    data_dir : str or Path, optional
+        Store this dataset under ``<data_dir>/datasets/`` instead of the
+        default root. Resolution order, most specific wins: this argument,
+        then ``piaso.settings.data_dir``, then the ``PIASO_DATA_DIR``
+        environment variable, then ``~/.piaso/data``.
 
     Returns
     -------
@@ -181,7 +190,8 @@ def fetch_dataset(name: str, force: bool = False) -> Path:
     """
     info = dataset_info(name)
     filename = info["filename"]
-    dest = DATASETS_DIR / filename
+    datasets_dir = _datasets_dir(data_dir)
+    dest = datasets_dir / filename
 
     # Check cache
     if not force and dest.exists():
@@ -196,7 +206,7 @@ def fetch_dataset(name: str, force: bool = False) -> Path:
             return dest
 
     # Download
-    DATASETS_DIR.mkdir(parents=True, exist_ok=True)
+    datasets_dir.mkdir(parents=True, exist_ok=True)
     size_mb = info.get("size_bytes", 0) / 1e6
     print(f"Downloading '{info['title']}' ({size_mb:.1f} MB)...")
     _download_with_progress(info["url"], dest, info.get("size_bytes", 0))
@@ -218,9 +228,35 @@ def fetch_dataset(name: str, force: bool = False) -> Path:
     return dest
 
 
+def _warn_if_X_is_not_counts(name: str, info: dict, obj) -> None:
+    """Say so when ``.X`` is not raw counts and the raw counts are elsewhere.
+
+    Two of the registry datasets ship a processed ``.X`` -- SEA-AD is
+    log-normalised, and the mouse cortex one is *scaled*, so it has negative
+    values. ``piaso.tl.infog`` expects raw UMI counts, and on a scaled matrix it
+    does not fail: it returns a normalisation of the wrong thing, and the error
+    only surfaces much later as clusters that do not reproduce.
+
+    The registry records where the counts actually live, so the load can point
+    at it rather than leaving the reader to notice.
+    """
+    layer = info.get("counts_layer")
+    if not layer or not hasattr(obj, "layers"):
+        return
+    if layer not in getattr(obj, "layers", {}):
+        return
+    warnings.warn(
+        f"'{name}': .X is not raw UMI counts. Raw counts are in "
+        f"layers['{layer}'] -- pass layer='{layer}' to piaso.tl.infog(), or use "
+        f"adata.X = adata.layers['{layer}'].copy() first.",
+        UserWarning,
+        stacklevel=3,
+    )
+
+
 def load_dataset(name: str, return_type: str = "anndata",
                  modality: str = "RNA", cytome_path=None, backed: bool = True,
-                 **kwargs):
+                 data_dir=None, **kwargs):
     """Download and load a tutorial dataset as AnnData or a cytome Dataset.
 
     Parameters
@@ -239,6 +275,9 @@ def load_dataset(name: str, return_type: str = "anndata",
         cached download (``<name>.cytome``).
     backed : bool, default True
         For h5ad → cytome, use the streaming (bounded-RAM) ``from_h5ad`` path.
+    data_dir : str or Path, optional
+        Store the download under ``<data_dir>/datasets/`` (see
+        :func:`fetch_dataset` for the full resolution order).
     **kwargs
         Passed to ``anndata.read_h5ad()`` / :func:`piaso.pp.read_10x_h5` (AnnData
         path, or the 10x/csv → cytome conversion).
@@ -257,7 +296,7 @@ def load_dataset(name: str, return_type: str = "anndata",
             f"Invalid return_type={return_type!r}. Choose 'anndata' or 'cytome'."
         )
     info = dataset_info(name)
-    path = fetch_dataset(name)
+    path = fetch_dataset(name, data_dir=data_dir)
     fmt = info.get("format", "h5ad")
 
     def _read_anndata():
@@ -280,8 +319,23 @@ def load_dataset(name: str, return_type: str = "anndata",
             f"Use fetch_dataset() to get the file path and load manually."
         )
 
+    if fmt == "cytome":
+        # Native cytome download: no conversion step in either direction.
+        import cytome
+        if return_type == "cytome":
+            return cytome.open(str(path))
+        ds = cytome.open(str(path))
+        try:
+            obj = ds.to_anndata(modality=modality)
+        finally:
+            ds.close()
+        _warn_if_X_is_not_counts(name, info, obj)
+        return obj
+
     if return_type == "anndata":
-        return _read_anndata()
+        obj = _read_anndata()
+        _warn_if_X_is_not_counts(name, info, obj)
+        return obj
 
     # --- return_type == 'cytome' ---
     import cytome

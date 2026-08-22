@@ -21,9 +21,9 @@ depend on a keyword, which is the shape of bug this project has spent a release
 removing.
 
 Input detection is shared, so both accept what the other does and neither
-reports a misleading error. Before this was shared, pointing ``read_10x`` at a
-Cell Ranger ``outs/`` folder said ``matrix.mtx not found`` while
-``filtered_feature_bc_matrix.h5`` sat beside it.
+reports a misleading error (e.g. ``read_10x`` on a Cell Ranger ``outs/``
+folder finds ``filtered_feature_bc_matrix.h5`` rather than complaining that
+``matrix.mtx`` is missing).
 """
 from __future__ import annotations
 

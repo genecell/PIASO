@@ -11,7 +11,8 @@ def plotConfusionMatrix(
     groupby_query,
     groupby_reference, 
     normalize='query',
-    figsize=(11.5, 10),
+    figsize=None,
+    square=True,
     cmap='Purples',
     annot=False,
     fmt='.2f',
@@ -50,6 +51,13 @@ def plotConfusionMatrix(
         show_group_color_bars (bool): If True, shows colored bars next to ticks for categories 
                                that have colors defined in adata.uns (e.g., 'CellTypes_colors'). 
                                Default is False.
+        figsize (tuple, optional): Figure size. None (default) derives it from
+            the matrix shape so the cells come out square, which is what makes
+            a confusion matrix readable: an off-diagonal block is judged by
+            area, and a fixed 11.5x10 stretched a 30x6 matrix into cells five
+            times wider than tall.
+        square (bool): Force square cells (default True). Set False to let the
+            heatmap fill whatever figsize is given.
         **kwargs: Additional arguments passed to sns.heatmap()
     
     Returns:
@@ -278,6 +286,14 @@ def plotConfusionMatrix(
                 reference_colors = [reference_colors[i] for i in col_order]
     
     # Plotting
+    if figsize is None:
+        # ~0.34 in per cell, plus room for the labels, clamped so a 3x3 is not
+        # a postage stamp and a 100x100 is not unopenable.
+        n_r, n_c = conf_matrix_reordered.shape
+        cell = 0.34
+        figsize = (float(np.clip(n_c * cell + 4.0, 5.0, 22.0)),
+                   float(np.clip(n_r * cell + 2.5, 4.0, 22.0)))
+
     fig, ax = plt.subplots(figsize=figsize)
     
     # Adjust plot area if color bars are shown to make room for ticks outside color bars
@@ -291,13 +307,19 @@ def plotConfusionMatrix(
         'cmap': cmap,
         'fmt': fmt,
         'norm': Normalize(vmin=0, vmax=vmax),
-        'cbar_kws': {'ticks': cbar_ticks} if cbar_ticks else {},
+        # Square cells make a tall matrix genuinely tall, and a colorbar that
+        # tracks the full height then dominates the figure. Shrink it toward a
+        # readable strip rather than a column.
+        'cbar_kws': dict({'ticks': cbar_ticks} if cbar_ticks else {},
+                         shrink=float(np.clip(6.0 / max(figsize[1], 1e-6), 0.25, 1.0))),
         'linewidths': 0.5,  # Add borders between cells
         'linecolor': 'lightgrey',  # Light grey color for borders
         'ax': ax,
         **kwargs
     }
     
+    if square:
+        heatmap_kwargs.setdefault('square', True)
     sns.heatmap(conf_matrix_reordered, **heatmap_kwargs)
     
     # Add color bars if requested and colors are available

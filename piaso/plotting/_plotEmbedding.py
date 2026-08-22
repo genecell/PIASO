@@ -31,7 +31,11 @@ from ..utils._cytome_compat import open_cytome as _open_cytome
 # 'right'   -> legend box / shared legend in the right margin
 # 'on_data' -> category labels drawn at cluster centroids (note the underscore)
 # 'none'    -> no legend
-_VALID_LEGEND_LOC = ("right", "on_data", "none")
+#: ``'both'`` draws the labels on the clusters *and* the legend beside the
+#: panel. While you are still working out what a cluster is, you want the label
+#: where the points are; to read off a colour you want the list. Neither alone
+#: does both jobs, and drawing them twice was the workaround.
+_VALID_LEGEND_LOC = ("right", "on_data", "both", "none")
 
 
 def _render_embedding(ax, coords, values, is_cat, *, color="value", palette=None,
@@ -99,7 +103,7 @@ def _render_embedding(ax, coords, values, is_cat, *, color="value", palette=None
                        c=[_color_for(cat, i)],
                        s=point_size, alpha=alpha, label=cat, rasterized=rasterized)
 
-        if legend_loc == "right":
+        if legend_loc in ("right", "both"):
             from matplotlib.lines import Line2D
             # Fixed, readable legend-dot size INDEPENDENT of point_size (Round 26):
             # proxy handles drawn at a constant markersize so the legend marker no
@@ -117,7 +121,7 @@ def _render_embedding(ax, coords, values, is_cat, *, color="value", palette=None
                 fontsize=legend_fontsize, frameon=False, ncol=_ncol,
                 handletextpad=0.5, columnspacing=1.2, labelspacing=0.4,
             )
-        elif legend_loc == "on_data":
+        if legend_loc in ("on_data", "both"):
             for cat in plot_categories:
                 mask = str_values == cat
                 cx, cy = coords[mask, 0].mean(), coords[mask, 1].mean()
@@ -294,6 +298,95 @@ def _build_subplots(n,
     # Assumes col_size and row_size are defined in the outer scope.
     fig, axs = plt.subplots(nrow, ncol, dpi=dpi, figsize=(ncol * col_size, nrow * row_size))
     return fig, axs, nrow, ncol
+
+
+#: Inches of clear space between one panel's legend and the next panel.
+_LEGEND_GUTTER_IN = 0.25
+
+
+def _reserve_legend_space(fig, gutter=_LEGEND_GUTTER_IN):
+    """Widen a multi-column figure so each panel's legend fits beside it.
+
+    Per-axes legends are anchored at axes coordinates ``(1.05, 1)`` — just
+    outside the axes. Matplotlib's subplot grid does not know they are there,
+    so in a multi-column figure panel N's legend is drawn across panel N+1's
+    cell, and because N+1 is drawn later its opaque background paints over the
+    labels. On a 27-category figure two legends came out interleaved and
+    clipped.
+
+    Shrinking the panels cannot fix it: a legend of 27 long labels is wider
+    than the panel it belongs to, so there is no axes width that leaves room.
+    The space has to be added rather than borrowed. This measures the widest
+    legend in each column, grows the figure by exactly that much, and re-lays
+    the panels at their original size — the panels do not shrink, the figure
+    gets wider.
+
+    Single-column figures are left untouched: their right margin is already
+    free, and the legend cannot collide with anything.
+    """
+    axes_with_legend = [ax for ax in fig.axes if ax.get_legend() is not None]
+    if not axes_with_legend:
+        return
+
+    def _spec(ax):
+        getter = getattr(ax, "get_subplotspec", None)
+        return getter() if getter is not None else None
+
+    specs = {id(ax): _spec(ax) for ax in fig.axes}
+    grids = {s.get_gridspec() for s in specs.values() if s is not None}
+    if len(grids) != 1:
+        return                          # hand-placed axes; not ours to move
+    gs = grids.pop()
+    if gs.ncols < 2:
+        return                          # a stack has no right-hand neighbour
+
+    fig.canvas.draw()          # legend extents are only known after a render
+    fig_w, fig_h = fig.get_size_inches()
+    inv = fig.transFigure.inverted()
+
+    # Positions in inches, captured before the resize: `get_position` returns
+    # figure *fractions*, whose meaning changes the moment the width does.
+    geom = {}
+    for ax in fig.axes:
+        p = ax.get_position()
+        geom[id(ax)] = (p.x0 * fig_w, p.y0, p.width * fig_w, p.height)
+
+    legend_w = {}
+    for ax in axes_with_legend:
+        spec = specs[id(ax)]
+        if spec is None:
+            return
+        col = spec.colspan.start
+        w = ax.get_legend().get_window_extent().transformed(inv).width * fig_w
+        legend_w[col] = max(legend_w.get(col, 0.0), w)
+    if not legend_w:
+        return
+
+    panel_w = max(g[2] for g in geom.values())
+    left = min(g[0] for g in geom.values())
+    right = fig_w - max(g[0] + g[2] for g in geom.values())
+    inner_gap = max(0.0, (fig_w - left - right - gs.ncols * panel_w)
+                    / max(1, gs.ncols - 1))
+
+    # One x offset per column: panel, then its legend, then the gutter.
+    col_x, x = {}, left
+    for c in range(gs.ncols):
+        col_x[c] = x
+        x += panel_w + legend_w.get(c, 0.0)
+        if c < gs.ncols - 1:
+            x += max(inner_gap, gutter)
+    new_w = x + right
+    if new_w <= fig_w + 1e-6:
+        return
+
+    fig.set_size_inches(new_w, fig_h)
+    for ax in fig.axes:
+        spec = specs[id(ax)]
+        if spec is None:
+            continue
+        _, y0, _, h = geom[id(ax)]
+        ax.set_position([col_x[spec.colspan.start] / new_w, y0,
+                         panel_w / new_w, h])
         
 import matplotlib.pyplot as plt
 import matplotlib.lines as mlines
@@ -502,7 +595,7 @@ def plot_embeddings_split(data,
         Maximum limit for the y-axis. If None, the limit is computed automatically based on the data.
     point_size : float, optional
         Scatter point size. An explicit value always overrides the auto-size.
-        If None, auto-scaled (``max(0.1, min(4, 30000 / n_cells))``,
+        If None, auto-scaled (``max(0.1, min(3, 22000 / n_cells))``,
         clamped to [0.1, 8]). Accepts ``size=`` as an alias for
         scanpy-style call sites.
     palette : list[str] or dict, optional
@@ -640,7 +733,7 @@ def plot_embeddings_split(data,
     # --- 3. Auto point_size (matches plotEmbedding's formula) ---
     if point_size is None:
         n_cells = coords.shape[0]
-        point_size = max(0.1, min(4, 30000 / n_cells))
+        point_size = max(0.1, min(3, 22000 / n_cells))
 
     # --- 4. Subplot grid ---
     fig, axs, nrow, ncol = _build_subplots(
@@ -705,13 +798,13 @@ def plot_embeddings_split(data,
         )
     # per-panel labels only for 'on_data'; 'right' -> one shared global legend
     # (drawn below); 'none' -> no legend at all.
-    panel_legend = 'on_data' if legend_loc == 'on_data' else 'none'
+    panel_legend = 'on_data' if legend_loc in ('on_data', 'both') else 'none'
 
     import anndata as _ad
     # Auto point_size once (consistent dot size across panels); an explicit
     # point_size= always overrides.
     _panel_point_size = (point_size if point_size is not None
-                         else max(0.1, min(4, 30000 / coords.shape[0])))
+                         else max(0.1, min(3, 22000 / coords.shape[0])))
 
     for i in range(len(axs)):
         if i >= len(variables):
@@ -767,7 +860,7 @@ def plot_embeddings_split(data,
             axs[i].set_aspect('auto')
 
     # --- 8. Global legend coalesces labels from all panels ---
-    if not is_numeric and legend_loc == 'right':
+    if not is_numeric and legend_loc in ('right', 'both'):
         # Each panel has scatter handles with `label=cat` attached but no
         # per-panel legend rendered. _create_global_legend de-duplicates
         # labels across panels and draws one figure-level legend.
@@ -998,112 +1091,17 @@ def _modality_cell_depth(ds, modality, use_cached_stats=True, batch_size=2048):
     )
 
 
-def _cached_stat_is_fresh(params, ds):
-    """A cached normalization-params dict is stale once its cell-indexed
-    ``cell_depth`` no longer matches ``ds.n_cells`` (e.g. after a filter_cells
-    on a cytome predating the subset-invalidation fix). Returns False so the
-    caller recomputes instead of broadcasting a wrong-length vector."""
-    if not isinstance(params, dict) or "cell_depth" not in params:
-        return True  # nothing cell-indexed to check
-    try:
-        return int(np.asarray(params["cell_depth"]).shape[0]) == int(ds.n_cells)
-    except Exception:
-        return True
 
 
-def _params_feature_len_matches_modality(params, ds, modality, feature_key):
-    """True if a cached normalization payload's per-feature vector
-    (``params[feature_key]``) length matches ``modality``'s feature count.
 
-    Guards against returning a payload computed for a DIFFERENT modality — e.g.
-    the modality-blind legacy 'tfidf_params' (ATAC idf) for a 'tiles' request, or
-    a legacy 'infog_params' (RNA inv_gene_depth) for an ATAC request. Permissive
-    (returns True) when the feature count can't be determined, so behaviour is
-    unchanged where the meta is unavailable."""
-    if not isinstance(params, dict) or feature_key not in params:
-        return True
-    try:
-        mm = ds.matrix_meta(f"{modality}_counts")
-        n_feat = mm.get("n_cols") if isinstance(mm, dict) else None
-        if n_feat is None:
-            return True
-        return int(np.asarray(params[feature_key]).shape[0]) == int(n_feat)
-    except Exception:
-        return True
+# Moved to piaso/tools/_normalize_resolve.py. Imported back under the old
+# names because COSG imports `_ensure_infog_params` from this module by path,
+# and tidying PIASO's namespace is not a reason to break a downstream package.
+from ..tools._normalize_resolve import (  # noqa: F401
+    _cached_stat_is_fresh, _ensure_infog_params, _ensure_tfidf_params,
+    _params_feature_len_matches_modality, _tfidf_idf_matches_modality,
+)
 
-
-def _tfidf_idf_matches_modality(params, ds, modality):
-    """TF-IDF specialization of :func:`_params_feature_len_matches_modality`
-    (per-feature vector = ``idf``)."""
-    return _params_feature_len_matches_modality(params, ds, modality, "idf")
-
-
-def _ensure_infog_params(ds, modality, use_cached_stats=True, batch_size=2048):
-    """Return cached ``{modality}_infog_params`` (or compute now and cache).
-    Falls through to legacy ``infog_params`` once with a DeprecationWarning
-    when only the unprefixed key is present. A cached payload whose
-    ``cell_depth`` length no longer matches ``ds.n_cells`` is treated as a miss
-    (self-heals a cytome filtered before the cached-stats invalidation fix)."""
-    if use_cached_stats:
-        new_key = f"{modality}_infog_params"
-        v = ds.metadata.get(new_key)
-        if (v is not None and _cached_stat_is_fresh(v, ds)
-                and _params_feature_len_matches_modality(v, ds, modality, "inv_gene_depth")):
-            return v
-        legacy = ds.metadata.get("infog_params")
-        # Feature-count guard: the un-prefixed legacy 'infog_params' is modality-
-        # blind (historically RNA); do NOT return it for a request on a modality
-        # with a different feature count (e.g. ATAC peaks) — route to recompute.
-        if (legacy is not None and _cached_stat_is_fresh(legacy, ds)
-                and _params_feature_len_matches_modality(legacy, ds, modality, "inv_gene_depth")):
-            import warnings as _warnings
-            _warnings.warn(
-                f"Using legacy 'infog_params' as '{new_key}'. Recompute "
-                f"with piaso.tl.infog(ds, modality='{modality}') to refresh.",
-                DeprecationWarning, stacklevel=3,
-            )
-            return legacy
-    # Cache miss / forced refresh — compute via piaso.tl.infog (streaming, lazy)
-    from ..tools._normalization import infog as _infog
-    _infog(ds, save_layer=False, streaming=True, batch_size=batch_size, verbosity=0)
-    return ds.metadata.get(f"{modality}_infog_params") or ds.metadata.get("infog_params")
-
-
-def _ensure_tfidf_params(ds, modality, use_cached_stats=True, batch_size=2048):
-    """Return cached ``{modality}_tfidf_params`` (or compute now and cache).
-
-    Delegates to ``_runTFIDF._load_or_compute_tfidf_stats`` so the runSVD
-    ``auto_tfidf=True`` path, COSG ``layer='tfidf'``, and plotting
-    ``cytome_layer='tfidf'`` all share the same cache-or-compute helper.
-    """
-    # Legacy un-prefixed key compatibility (preserved for older cytomes). A
-    # cached payload is stale/wrong when its cell_depth length no longer matches
-    # n_cells (filtered cytome) OR — critically for the modality-blind legacy
-    # 'tfidf_params' — its idf length does not match THIS modality's feature
-    # count. The un-prefixed key does not record which modality it was computed
-    # for, so a payload built for ATAC peaks (idf ~n_peaks) must NOT be returned
-    # for a 'tiles' request (idf ~n_tiles); the feature-count guard routes it to
-    # recompute instead of broadcasting a wrong-length idf.
-    if use_cached_stats:
-        new_key = f"{modality}_tfidf_params"
-        if (new_key in ds.metadata and _cached_stat_is_fresh(ds.metadata[new_key], ds)
-                and _tfidf_idf_matches_modality(ds.metadata[new_key], ds, modality)):
-            return ds.metadata[new_key]
-        legacy = ds.metadata.get("tfidf_params")
-        if (legacy is not None and _cached_stat_is_fresh(legacy, ds)
-                and _tfidf_idf_matches_modality(legacy, ds, modality)):
-            import warnings as _warnings
-            _warnings.warn(
-                f"Using legacy 'tfidf_params' as '{new_key}'. "
-                f"Recompute with piaso.tl.compute_tfidf_stats(ds, modality='{modality}') "
-                f"to refresh.", DeprecationWarning, stacklevel=3,
-            )
-            return legacy
-    from ..tools._runTFIDF import _load_or_compute_tfidf_stats
-    return _load_or_compute_tfidf_stats(
-        ds, modality=modality, batch_size=batch_size,
-        force_recompute=not use_cached_stats,
-    )
 
 
 def _resolve_cytome_feature_values(
@@ -1477,8 +1475,8 @@ def plotEmbedding(
 ):
     """Plot a 2-D embedding colored by a cell annotation or continuous value.
 
-    Round 7: now returns ``None`` by default — pass ``return_fig=True``
-    to get ``(fig, ax)`` back (the legacy behaviour).
+    Returns ``None`` by default — pass ``return_fig=True`` to get
+    ``(fig, ax)`` back.
 
     Supports both ``cytome.Dataset`` and ``AnnData`` objects.
 
@@ -1506,7 +1504,7 @@ def plotEmbedding(
         (set via ``piaso.settings.set_figure_params(figsize=...)``).
     point_size : float or None
         Scatter point size.  If None (default), automatically calculated
-        from the number of cells: ``30000 / n_cells`` clamped to [0.1, 4]
+        from the number of cells: ``22000 / n_cells`` clamped to [0.1, 3]
         (explicit value overrides).
     alpha : float
         Point transparency.  Default 1.0 (opaque).
@@ -1750,6 +1748,9 @@ def plotEmbedding(
             )
             _w = wspace if wspace is not None else 0.2
             fig.subplots_adjust(hspace=_h, wspace=_w)
+            # Must come after subplots_adjust: it reads the final axes
+            # positions and shrinks them in place.
+            _reserve_legend_space(fig)
             if _suptitle is not None:
                 fig.suptitle(_suptitle)
             from ..settings import _savefig
@@ -1780,7 +1781,7 @@ def plotEmbedding(
     # Auto point_size: scale inversely with cell count
     if point_size is None:
         n_cells = coords.shape[0]
-        point_size = max(0.1, min(4, 30000 / n_cells))
+        point_size = max(0.1, min(3, 22000 / n_cells))
 
     if ax is None:
         # figsize=None → matplotlib uses rcParams['figure.figsize']

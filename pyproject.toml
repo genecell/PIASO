@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "piaso-tools"
-version = "1.2.0"
+version = "1.2.1"
 description = "Precise Integrative Analysis of Single-cell Omics."
 requires-python = ">=3.9"
 license = {text = "BSD-3-Clause"}
@@ -55,7 +55,7 @@ dependencies = [
     # which does not exist before 1.1.0. The import is lazy, so a stale cosg
     # does not break `import piaso` -- it fails partway through a GDR run with
     # ModuleNotFoundError, which is the worst time to find out.
-    "cosg>=1.1.0",
+    "cosg>=1.1.2",
     # Required, not optional. PIASO reads cytome datasets throughout tl/pp/pl,
     # and cytome is a 124 KB pure-Python wheel whose own dependencies (numpy,
     # scipy, pandas, lz4) are all already listed above -- so requiring it adds
@@ -73,6 +73,16 @@ Source = "https://github.com/genecell/PIASO"
 Homepage = "https://piaso.org"
 
 [project.optional-dependencies]
+# Optional, NOT required. numba's `default` threading layer already resolves to
+# omp -- which is thread-safe and is what runGDR's per-batch pool needs -- and
+# numba's own wheel ships the omp pool, so the parallel path is on out of the
+# box. tbb only matters if something in your environment pins
+# NUMBA_THREADING_LAYER='tbb', or you specifically prefer the tbb pool. Note the
+# wheel installs shared objects into <prefix>/lib rather than a Python package,
+# which resolves under conda but may not under a plain venv.
+tbb = [
+    "tbb>=2021.0; (platform_machine == 'x86_64' or platform_machine == 'AMD64') and sys_platform != 'darwin'",
+]
 dev = [
     "pre-commit", # static checking
 ]

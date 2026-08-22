@@ -4,6 +4,7 @@ Supports both AnnData and cytome.Dataset as input.
 """
 
 import numpy as np
+from ..settings import _resolve_layer_dtype
 from scipy import sparse as sp
 
 
@@ -135,7 +136,7 @@ def _normalize_log1p_anndata(adata, target_sum, key_added):
 
 
 def _normalize_log1p_cytome(data, target_sum, key_added, save_layer,
-                            modality, layer, batch_size):
+                            modality, layer, batch_size, dtype=None):
     """Cytome path: streaming normalize and optionally persist."""
     from cytome.core.measurement import MeasurementLayer
 
@@ -153,7 +154,8 @@ def _normalize_log1p_cytome(data, target_sum, key_added, save_layer,
     if save_layer:
         writer_name = f"{modality}_{key_added}"
         writer = data.create_layer_writer(
-            writer_name, n_rows=data.n_cells, n_cols=n_cols, dtype='float32',
+            writer_name, n_rows=data.n_cells, n_cols=n_cols,
+            dtype=_resolve_layer_dtype(dtype),
         )
 
     n_cells = int(data.n_cells)

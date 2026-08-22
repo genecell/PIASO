@@ -126,10 +126,12 @@ def test_infog_modality_kwarg_threads_through_iter_chunks(tmp_path):
         "gene_idx": np.arange(n_vars),
         "gene_id": [f"ga_g{i}" for i in range(n_vars)],
     }))
-    # GA modality data (deliberately different from RNA so we can tell)
+    # GA modality data (deliberately different from RNA so we can tell).
+    # Integer-valued: infog rejects non-count input outright, see
+    # tests/test_infog_integer_counts_guard.py.
     GA_X = sp.csr_matrix(
-        np.random.default_rng(7).standard_normal((n_obs, n_vars))
-        .astype(np.float32) + 5.0
+        np.random.default_rng(7).poisson(5.0, size=(n_obs, n_vars))
+        .astype(np.float32)
     )
     ds.add_matrix("GA_counts", GA_X)
     ds.flush()

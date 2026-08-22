@@ -11,6 +11,7 @@ RAM: O(n_cells + n_features) regardless of matrix size.
 """
 
 from typing import Union, Optional
+from ..settings import _resolve_layer_dtype
 import numpy as np
 from scipy import sparse
 from anndata import AnnData
@@ -372,6 +373,7 @@ def _runTFIDF_streaming(
     output_layer: str = "tfidf",
     measurement: Optional[str] = None,
     modality: str = "ATAC",
+    dtype: Optional[str] = None,
 ):
     """
     2-pass streaming TF-IDF via Cytome. RAM: O(n_cells + n_features).
@@ -420,7 +422,7 @@ def _runTFIDF_streaming(
         layer_name=out_name,
         n_rows=n_true_cells,
         n_cols=n_features,
-        dtype=np.float64,
+        dtype=_resolve_layer_dtype(dtype),
         compression="zstd",
         col_entity=col_entity,
         overwrite=True,

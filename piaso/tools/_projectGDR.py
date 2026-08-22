@@ -5,7 +5,7 @@ reference object** — ``adata.uns['gdr_reference']`` or ``ds.metadata['gdr_refe
 ``runGDR(..., save_reference=True)``. There is no separate fit call and no external file format: if
 you want to share a reference, share the object.
 
-Design decisions (see ``docs/discussion/2026-07-28_gdr_projection_of_unseen_cells.md``):
+Design decisions:
 
 * **Reference-frozen only.** Reference coordinates never move. Re-fitting is ``concat`` + ``runGDR``.
 * ``runGDR`` stores the cheap part of the state (marker sets, block indices, layers, seed). The

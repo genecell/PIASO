@@ -14,6 +14,32 @@ from typing import Dict, List, Optional
 
 PIASO_DATA_DIR = Path.home() / ".piaso" / "data"
 
+
+def resolve_data_dir(data_dir=None) -> Path:
+    """Resolve the PIASO data root. Most specific wins:
+
+    1. explicit ``data_dir`` argument (per call)
+    2. ``piaso.settings.data_dir`` (per session)
+    3. the ``PIASO_DATA_DIR`` environment variable (per machine)
+    4. ``~/.piaso/data`` (the historical default)
+
+    Datasets, genomes, and the registry cache all share this root, so the
+    stores cannot end up configured differently by accident.
+    """
+    if data_dir is not None:
+        return Path(data_dir).expanduser()
+    try:
+        from .. import settings as _settings
+        session_dir = getattr(_settings, "data_dir", None)
+    except ImportError:  # pragma: no cover - settings always importable
+        session_dir = None
+    if session_dir is not None:
+        return Path(session_dir).expanduser()
+    env_dir = os.environ.get("PIASO_DATA_DIR")
+    if env_dir:
+        return Path(env_dir).expanduser()
+    return PIASO_DATA_DIR
+
 # Per-file raw URL on the PIASO-data repo's master branch.
 # We download each file directly rather than a release tarball — the repo's
 # layout already places files in {genome}/ subfolders, and the per-file
@@ -330,11 +356,12 @@ def _remap_ensembl_gtf(in_path, out_path) -> Dict[str, int]:
 
 
 def list_downloaded_genomes() -> List[str]:
-    """Return list of genome names present in ~/.piaso/data/."""
-    if not PIASO_DATA_DIR.exists():
+    """Return list of genome names present under the PIASO data root."""
+    root = resolve_data_dir()
+    if not root.exists():
         return []
     return [
-        d.name for d in PIASO_DATA_DIR.iterdir()
+        d.name for d in root.iterdir()
         if d.is_dir() and d.name in GENOME_FILES
     ]
 
@@ -378,7 +405,7 @@ def resolve_genome_files(
         )
 
     _OPTIONAL_KEYS = {"tss_bed", "gtf"}
-    genome_dir = PIASO_DATA_DIR / genome
+    genome_dir = resolve_data_dir() / genome
     paths = {}
     missing_required = []
 
@@ -470,7 +497,7 @@ def fetch_genome(
     if dest_dir is not None:
         genome_dir = Path(dest_dir) / genome
     else:
-        genome_dir = PIASO_DATA_DIR / genome
+        genome_dir = resolve_data_dir() / genome
 
     # Non-GTF files (BEDs + chrom.sizes)
     file_specs = {

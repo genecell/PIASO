@@ -1,4 +1,5 @@
 from ._normalization import infog, _is_cytome_dataset, _open_cytome, _normalize_chunk_infog, _safe_n_cells
+from ..settings import _resolve_layer_dtype
 from ._compat import resolve_data_arg as _resolve_data_arg, _UNSET
 
 ### run SVD
@@ -182,10 +183,15 @@ def _runSVD_original(
 
     if use_highly_variable:
         hv_col = _resolve_selected_col_anndata(adata, modality, selected_feature_col_name)
+        # Coerce rather than index with the raw column: a highly_variable that
+        # round-tripped through h5ad as `category` raises "Unknown indexer"
+        # here, and reads as ALL TRUE wherever .astype(bool) is used instead.
+        from ..utils._bool_mask import as_bool_mask
+        _hv = as_bool_mask(adata.var[hv_col].values, name=f"var.{hv_col}")
         if layer:
-            expr = adata[:, adata.var[hv_col]].layers[layer]
+            expr = adata[:, _hv].layers[layer]
         else:
-            expr = adata[:, adata.var[hv_col]].X
+            expr = adata[:, _hv].X
     else:
         if layer:
             expr = adata.layers[layer]
@@ -326,8 +332,32 @@ def _streaming_rsvd(chunk_iter_factory, n_cells, n_features, n_components, n_ite
     return embeddings, S[:n_components], Vt[:n_components]
 
 
-def _get_svd_chunk_iterator(source, hvg_indices, batch_size, layer, measurement, modality="RNA"):
-    """Get chunk iterator factory for SVD — reads HVG columns only."""
+def _mask_to_indices(cell_mask, n_rows):
+    """Normalise a cell mask to sorted row indices within ``n_rows``."""
+    arr = np.asarray(cell_mask)
+    if arr.dtype == bool:
+        if arr.shape[0] < n_rows:
+            padded = np.zeros(n_rows, dtype=bool)
+            padded[:arr.shape[0]] = arr
+            arr = padded
+        elif arr.shape[0] > n_rows:
+            arr = arr[:n_rows]
+        return np.flatnonzero(arr).astype(np.int64)
+    return np.sort(arr[arr < n_rows].astype(np.int64))
+
+
+def _get_svd_chunk_iterator(source, hvg_indices, batch_size, layer, measurement,
+                            modality="RNA", compute_on_fly=True, cell_mask=None,
+                            infog_params=None):
+    """Get chunk iterator factory for SVD — reads HVG columns only.
+
+    ``cell_mask`` is pushed down into ``iter_chunks`` on the cytome path so
+    on-disk chunks holding no selected cell are never fetched. Masking above
+    this function instead meant a per-batch GDR decompressed the whole matrix
+    once per batch per SVD pass. Returns a 4th element, ``mask_applied``,
+    telling the caller the rows are already filtered (it still has to renumber
+    them into the compressed output space).
+    """
     if isinstance(source, str) or _is_cytome_dataset(source):
         ds = _open_cytome(source) if isinstance(source, str) else source
         _layer = measurement or layer or "infog"
@@ -352,24 +382,58 @@ def _get_svd_chunk_iterator(source, hvg_indices, batch_size, layer, measurement,
             ).fetchone()
             n_cols_total = meta[0]
             n_features = len(hvg_indices) if hvg_indices is not None else n_cols_total
+            _keep = None if cell_mask is None else _mask_to_indices(cell_mask, n_alloc)
             def factory():
-                for chunk, idx in ds.iter_chunks(modality=modality, layer=measurement, batch_size=batch_size):
+                for chunk, idx in ds.iter_chunks(modality=modality, layer=measurement,
+                                                 cell_mask=_keep, batch_size=batch_size):
                     if hvg_indices is not None:
                         yield chunk[:, hvg_indices], idx
                     else:
                         yield chunk, idx
-            return n_alloc, n_features, factory
+            n_out = n_alloc if _keep is None else len(_keep)
+            return n_out, n_features, factory, _keep is not None
         else:
-            _layer_for_check = _layer if _layer != "infog" else "counts"
+            # A normalization PIASO knows how to recompute does not need a
+            # materialised layer: infog() records its parameters and writes no
+            # matrix by default, which made infog() + runSVD(layer='infog')
+            # fail with "Matrix not found: RNA_infog" several minutes in.
+            _read_layer, _chunk_norm = _layer, None
+            if infog_params is not None:
+                # Explicit per-batch parameters: normalise raw counts with the
+                # statistics of THIS batch rather than whatever whole-dataset
+                # INFOG the file happens to hold.
+                from ._normalization import _normalize_chunk_infog
+                _ip = infog_params
+                _read_layer = "counts"
+
+                def _chunk_norm(chunk, indices, _ip=_ip):
+                    return _normalize_chunk_infog(
+                        chunk, _ip["cell_depth"][indices], _ip["inv_gene_depth"],
+                        _ip["scale"], _ip["counts_sum"], _ip.get("threshold"),
+                    )
+            elif _layer in ("infog",):
+                _read_layer, _chunk_norm = _infog_chunk_normalizer(
+                    ds, modality, _layer, compute_on_fly)
+
+            _layer_for_check = _read_layer if _read_layer != "infog" else "counts"
             n_alloc, _n_true = _safe_n_cells(ds, modality, _layer_for_check)
             n_features = len(hvg_indices) if hvg_indices is not None else ds.n_genes
+            _keep = None if cell_mask is None else _mask_to_indices(cell_mask, n_alloc)
             def factory():
-                for chunk, idx in ds.iter_chunks(modality=modality, layer=_layer, batch_size=batch_size):
+                # idx stays global, so the normalizer's per-cell lookups
+                # (cell_depth[idx]) remain correct under a pushed-down mask.
+                for chunk, idx in ds.iter_chunks(modality=modality,
+                                                 layer=_read_layer,
+                                                 cell_mask=_keep,
+                                                 batch_size=batch_size):
+                    if _chunk_norm is not None:
+                        chunk = _chunk_norm(chunk, idx)
                     if hvg_indices is not None:
                         yield chunk[:, hvg_indices], idx
                     else:
                         yield chunk, idx
-            return n_alloc, n_features, factory
+            n_out = n_alloc if _keep is None else len(_keep)
+            return n_out, n_features, factory, _keep is not None
     else:
         # AnnData
         X = source.layers[layer] if layer else source.X
@@ -383,7 +447,9 @@ def _get_svd_chunk_iterator(source, hvg_indices, batch_size, layer, measurement,
                 if not sparse.issparse(chunk):
                     chunk = sparse.csr_matrix(chunk)
                 yield chunk, np.arange(i, end)
-        return n_cells, n_features, factory
+        # AnnData is already in memory: no I/O to save by masking here, so the
+        # caller filters as before.
+        return n_cells, n_features, factory, False
 
 
 def _runSVD_streaming(
@@ -402,6 +468,9 @@ def _runSVD_streaming(
     verbosity: int = 0,
     cache_chunks: bool = False,
     tfidf_params: Optional[dict] = None,
+    infog_params: Optional[dict] = None,
+    hvg_indices_override=None,
+    compute_on_fly: bool = True,
     selected_feature_col_name: str = _DEFAULT_SELECTED_COL,
     auto_tfidf: bool = False,
     cell_mask=None,
@@ -433,9 +502,11 @@ def _runSVD_streaming(
         _entity_name, _col = _resolve_selected_col_cytome(
             _ds_for_tfidf, modality, selected_feature_col_name,
         )
-        _mask = _read_var_entity_column(
-            _ds_for_tfidf, _entity_name, _col,
-        ).astype(bool)
+        from ..utils._bool_mask import as_bool_mask
+        _mask = as_bool_mask(
+            _read_var_entity_column(_ds_for_tfidf, _entity_name, _col),
+            name=f"{_entity_name}.{_col}",
+        )
         tfidf_params = dict(tfidf_params)  # shallow copy so the cached dict isn't mutated
         tfidf_params["col_mask"] = _mask
     elif auto_tfidf and not is_cytome:
@@ -458,50 +529,76 @@ def _runSVD_streaming(
             hv_col = _resolve_selected_col_anndata(
                 source, modality, selected_feature_col_name,
             )
-            hvg_indices = np.where(source.var[hv_col].values.astype(bool))[0]
+            # Same coercion as the cytome sites: an h5ad whose highly_variable
+            # was written as object or category round-trips as `category`, and
+            # .astype(bool) on that is ALL TRUE -- every gene selected, silently.
+            from ..utils._bool_mask import as_bool_mask
+            hvg_indices = np.where(
+                as_bool_mask(source.var[hv_col].values, name=f"var.{hv_col}")
+            )[0]
         elif is_cytome:
             ds = _open_cytome(source) if isinstance(source, str) else source
             entity_name, col = _resolve_selected_col_cytome(
                 ds, modality, selected_feature_col_name,
             )
+            from ..utils._bool_mask import as_bool_mask
             hv_col = _read_var_entity_column(ds, entity_name, col)
-            hvg_indices = np.where(hv_col.astype(bool))[0]
+            hvg_indices = np.where(
+                as_bool_mask(hv_col, name=f"{entity_name}.{col}",
+                             source=str(getattr(ds, "path", "")) or None)
+            )[0]
 
-    n_cells, n_features, chunk_factory = _get_svd_chunk_iterator(
-        source, hvg_indices, batch_size, layer, measurement, modality=modality
+    if hvg_indices_override is not None:
+        hvg_indices = np.asarray(hvg_indices_override)
+    n_cells, n_features, chunk_factory, _mask_pushed_down = _get_svd_chunk_iterator(
+        source, hvg_indices, batch_size, layer, measurement,
+        modality=modality, compute_on_fly=compute_on_fly, cell_mask=cell_mask,
+        infog_params=infog_params,
     )
 
     # cell_mask: filter chunk rows before SVD ingests them. The SVD sees
     # only masked rows; output shape is (n_masked, n_components). Used by
     # multi-batch GDR's per-batch auto-cluster path (no cytome write).
     if cell_mask is not None:
-        cell_mask_arr = np.asarray(cell_mask).astype(bool)
-        # Cytome may over-allocate cells; pad mask to n_cells if needed
-        if cell_mask_arr.shape[0] < n_cells:
-            mask_full = np.zeros(n_cells, dtype=bool)
-            mask_full[:cell_mask_arr.shape[0]] = cell_mask_arr
-            cell_mask_arr = mask_full
-        elif cell_mask_arr.shape[0] > n_cells:
-            cell_mask_arr = cell_mask_arr[:n_cells]
-        n_masked_cells = int(cell_mask_arr.sum())
         _orig_factory_for_mask = chunk_factory
 
-        def chunk_factory():
-            out_offset = 0
-            for chunk, indices in _orig_factory_for_mask():
-                idx = np.asarray(indices)
-                keep = cell_mask_arr[idx]
-                if not keep.any():
-                    continue
-                if not keep.all():
-                    chunk = chunk[keep]
-                n_in_chunk = chunk.shape[0]
-                # Re-index rows into compressed (masked) space
-                compressed_idx = np.arange(out_offset, out_offset + n_in_chunk)
-                out_offset += n_in_chunk
-                yield chunk, compressed_idx
+        if _mask_pushed_down:
+            # Rows were filtered at the storage layer; n_cells is already the
+            # masked count. Only the renumbering into compressed space is left.
+            def chunk_factory():
+                out_offset = 0
+                for chunk, _indices in _orig_factory_for_mask():
+                    n_in_chunk = chunk.shape[0]
+                    compressed_idx = np.arange(out_offset, out_offset + n_in_chunk)
+                    out_offset += n_in_chunk
+                    yield chunk, compressed_idx
+        else:
+            cell_mask_arr = np.asarray(cell_mask).astype(bool)
+            # Cytome may over-allocate cells; pad mask to n_cells if needed
+            if cell_mask_arr.shape[0] < n_cells:
+                mask_full = np.zeros(n_cells, dtype=bool)
+                mask_full[:cell_mask_arr.shape[0]] = cell_mask_arr
+                cell_mask_arr = mask_full
+            elif cell_mask_arr.shape[0] > n_cells:
+                cell_mask_arr = cell_mask_arr[:n_cells]
+            n_masked_cells = int(cell_mask_arr.sum())
 
-        n_cells = n_masked_cells
+            def chunk_factory():
+                out_offset = 0
+                for chunk, indices in _orig_factory_for_mask():
+                    idx = np.asarray(indices)
+                    keep = cell_mask_arr[idx]
+                    if not keep.any():
+                        continue
+                    if not keep.all():
+                        chunk = chunk[keep]
+                    n_in_chunk = chunk.shape[0]
+                    # Re-index rows into compressed (masked) space
+                    compressed_idx = np.arange(out_offset, out_offset + n_in_chunk)
+                    out_offset += n_in_chunk
+                    yield chunk, compressed_idx
+
+            n_cells = n_masked_cells
 
     # Wrap chunk_factory with inline TF-IDF if tfidf_params provided
     if tfidf_params is not None:
@@ -555,7 +652,13 @@ def _runSVD_streaming(
         if is_adata:
             source.obsm[key_added] = embeddings
         elif is_cytome:
-            ds.add_embedding(f"{modality}_{key_added.replace('X_', '')}", embeddings)
+            from ._embedding_names import storage_name
+            ds.add_embedding(
+                storage_name(key_added, modality), embeddings,
+                dtype=_resolve_layer_dtype(None),
+                provenance={"modality": modality, "function": "piaso.tl.runSVD",
+                            "layer": layer, "key_added": key_added},
+            )
             ds.flush()
 
     if verbosity > 0:
@@ -592,10 +695,13 @@ def runSVD(
     modality: str = "RNA",
     cache_chunks: bool = False,
     tfidf_params: Optional[dict] = None,
+    infog_params: Optional[dict] = None,
+    hvg_indices_override=None,
     selected_feature_col_name: str = _DEFAULT_SELECTED_COL,
     auto_tfidf: bool = False,
     cell_mask=None,
     return_svd: bool = False,
+    compute_on_fly: bool = True,
     # ---- deprecated aliases (back-compat) ----
     source=_UNSET,
     adata=_UNSET,
@@ -693,10 +799,13 @@ def runSVD(
             measurement=measurement, modality=modality,
             verbosity=verbosity, cache_chunks=cache_chunks,
             tfidf_params=tfidf_params,
+            infog_params=infog_params,
+            hvg_indices_override=hvg_indices_override,
             selected_feature_col_name=selected_feature_col_name,
             auto_tfidf=auto_tfidf,
             cell_mask=cell_mask,
             return_svd=return_svd,
+            compute_on_fly=compute_on_fly,
         )
     else:
         if auto_tfidf:
@@ -741,8 +850,8 @@ def _runSVDLazy_original(
     infog_trim: bool = True,
     key_added: str = 'X_svd',
     layer: Optional[str] = None,
-    infog_layer: Optional[str] = None
-
+    infog_layer: Optional[str] = None,
+    allow_non_integer: bool = False,
 ):
     """
     Performs Truncated Singular Value Decomposition (SVD) in a "lazy" mode, based on the `piaso.tl.runSVD` function.
@@ -812,7 +921,8 @@ def _runSVDLazy_original(
             n_top_genes=n_top_genes,
             key_added='infog',
             trim=infog_trim,
-            verbosity=verbosity
+            verbosity=verbosity,
+            allow_non_integer=allow_non_integer,
         )
 
     else:
@@ -833,7 +943,7 @@ def _runSVDLazy_original(
         n_iter=n_iter,
         key_added=key_added,
         layer=layer,
-        verbosity=verbosity
+        verbosity=verbosity,
     )
 
     ### Return the result
@@ -843,9 +953,76 @@ def _runSVDLazy_original(
 # ============================================================================
 # Streaming runSVDLazy — INFOG → HVG compact → SVD
 # ============================================================================
+def _infog_chunk_normalizer(ds, modality, layer, compute_on_fly, verbosity=0):
+    """Return a per-chunk normalizer for ``layer``, or None to read it directly.
+
+    Precedence, matching COSG's ``_resolve_layer_to_read``:
+
+    1. a materialised ``{modality}_{layer}`` matrix, read as-is (storage beats
+       recomputation, and it is what a reproducibility check wants);
+    2. the stored parameters, applied per chunk from raw counts;
+    3. otherwise raise, naming both routes.
+
+    Returns ``(read_layer, normalizer_or_None)``.
+    """
+    from ._normalization import _normalize_chunk_infog
+    from ._normalize_resolve import ensure_infog_params
+
+    matrices = {r[0] for r in
+                ds._conn.execute("SELECT matrix_name FROM matrix_meta")}
+    materialised = f"{modality}_{layer}" in matrices
+    params = ds.metadata.get(f"{modality}_{layer}_params")
+
+    if materialised:
+        # Both present: the layer was written from some run of infog(), the
+        # params are from the latest one. If they disagree the layer is stale,
+        # and silently preferring it would normalise with parameters the user
+        # did not ask for.
+        if params is not None:
+            n_cells_params = len(params.get("cell_depth", ()))
+            if n_cells_params and n_cells_params != ds.n_cells:
+                warnings.warn(
+                    f"{modality}_{layer} is materialised but the stored "
+                    f"{layer} params describe {n_cells_params} cells and this "
+                    f"cytome has {ds.n_cells}. Reading the materialised layer; "
+                    f"pass compute_on_fly=True after re-running infog() if "
+                    f"that is not what you want.", stacklevel=3)
+            # NB: do not compare n_cols to n_top_genes. INFOG normalises every
+            # gene, so the layer has n_genes columns while n_top_genes counts
+            # highly variable genes; they are unrelated numbers.
+        return layer, None
+
+    if not compute_on_fly:
+        raise KeyError(
+            f"no {modality}_{layer} matrix in this cytome, and "
+            f"compute_on_fly=False. Either run "
+            f"piaso.tl.infog(ds, save_layer=True) to materialise it, or pass "
+            f"compute_on_fly=True to normalise from the stored parameters.")
+
+    if params is None:
+        raise KeyError(
+            f"no {modality}_{layer} matrix and no {modality}_{layer}_params "
+            f"in this cytome. Run piaso.tl.infog(ds) first (it records the "
+            f"parameters), or piaso.tl.infog(ds, save_layer=True) to write the "
+            f"layer as well.")
+
+    if verbosity > 0:
+        print(f"  {layer}: no materialised layer; normalising on the fly from "
+              f"{modality}_counts and the stored parameters")
+    cd = np.asarray(params["cell_depth"], dtype=np.float64)
+    ig = np.asarray(params["inv_gene_depth"], dtype=np.float64)
+    scale = float(params["scale"])
+    counts_sum = float(params["counts_sum"])
+    thr = params.get("threshold")
+    return "counts", (lambda chunk, indices:
+                      _normalize_chunk_infog(chunk, cd[indices], ig, scale,
+                                             counts_sum, thr))
+
+
 def _write_hvg_compact_measurement(source, hvg_indices, infog_params=None,
                                     source_layer='counts',
-                                    target_measurement='infog_hvg', batch_size=1024):
+                                    target_measurement='infog_hvg',
+                                    batch_size=1024, dtype=None):
     """Write a compact HVG-only measurement to cytome (one pass, chunked write).
 
     If infog_params is provided, reads from RAW measurement and normalizes
@@ -858,7 +1035,8 @@ def _write_hvg_compact_measurement(source, hvg_indices, infog_params=None,
     matrix_name = f"RNA_{target_measurement}"
     _n_alloc, n_true = _safe_n_cells(ds, "RNA", source_layer)
     writer = ds.create_layer_writer(
-        matrix_name, n_rows=n_true, n_cols=n_hvg, dtype=np.float64,
+        matrix_name, n_rows=n_true, n_cols=n_hvg,
+        dtype=_resolve_layer_dtype(dtype),
     )
 
     for chunk, indices in ds.iter_chunks(modality="RNA", layer=source_layer, batch_size=batch_size):
@@ -895,6 +1073,7 @@ def _runSVDLazy_streaming(
     layer: Optional[str] = None,
     infog_layer: Optional[str] = None,
     batch_size: int = 1024,
+    allow_non_integer: bool = False,
 ):
     """
     Streaming runSVDLazy: INFOG → HVG compact → SVD.
@@ -925,6 +1104,7 @@ def _runSVDLazy_streaming(
         n_top_genes=n_top_genes, trim=infog_trim,
         batch_size=batch_size, key_added='infog',
         layer=infog_layer, verbosity=verbosity, streaming=True,
+        allow_non_integer=allow_non_integer,
     )
 
     t_infog = time.time() - t0
@@ -1004,6 +1184,7 @@ def infog_svd(
     # NEW parameters:
     streaming: bool = False,
     batch_size: int = 1024,
+    allow_non_integer: bool = False,
 ):
     """
     INFOG normalization → HVG selection → SVD in one call.
@@ -1016,6 +1197,13 @@ def infog_svd(
     - infog_svd(adata, streaming=True) — streaming from in-memory AnnData
     - infog_svd("path.cytome") — streaming from on-disk cytome dataset
     - infog_svd(cytome_dataset) — streaming from already-opened cytome object
+    allow_non_integer : bool, default False
+        By default INFOG refuses input whose values are not integers, because
+        its dispersion model is defined on raw UMI counts and silently returns
+        meaningless numbers on normalized, log-transformed or scaled data. Set
+        True to run anyway -- appropriate for Smart-seq2 TPM/FPKM, imputed or
+        already-corrected matrices. Ignored when ``layer``/``infog_layer`` is
+        given, since naming a layer already answers the question.
     """
     is_cytome = isinstance(source, str) or _is_cytome_dataset(source)
 
@@ -1028,7 +1216,7 @@ def infog_svd(
             scale_data=scale_data, n_iter=n_iter,
             infog_trim=infog_trim, key_added=key_added,
             layer=layer, infog_layer=infog_layer,
-            batch_size=batch_size,
+            batch_size=batch_size, allow_non_integer=allow_non_integer,
         )
     else:
         return _runSVDLazy_original(
@@ -1039,6 +1227,7 @@ def infog_svd(
             scale_data=scale_data, n_iter=n_iter,
             infog_trim=infog_trim, key_added=key_added,
             layer=layer, infog_layer=infog_layer,
+            allow_non_integer=allow_non_integer,
         )
 
 

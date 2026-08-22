@@ -24,6 +24,7 @@ def umap(
     key_added='X_umap',
     knn_result=None,
     neighbors_key='neighbors',
+    modality='RNA',
 ):
     """Compute UMAP embedding from precomputed kNN graph.
 
@@ -53,8 +54,11 @@ def umap(
         it is **not** required — the kNN is reconstructed from the persisted
         ``distances`` graph (self-contained). For AnnData it falls back to uns.
     neighbors_key : str
-        Which persisted neighbors graph to reuse on the cytome path (matches the
-        ``key_added`` passed to ``piaso.tl.neighbors``). Default 'neighbors'.
+        Which stored neighbors graph to reuse — matches the ``key_added``
+        passed to :func:`piaso.tl.neighbors`. Default ``'neighbors'`` (the
+        un-prefixed graph). Honoured on **both** the AnnData and cytome paths;
+        naming a graph that was never computed raises rather than quietly
+        falling back to the default one.
 
     Returns
     -------
@@ -63,6 +67,14 @@ def umap(
         **cytome.Dataset**, returns ``None`` — the embedding is written to the
         cytome under ``key_added`` and read back from there.
     """
+    # A cytome path is as valid an input as it is for infog / runSVD / runGDR.
+    # Without this a pipeline written entirely with a path worked for three
+    # calls and then raised "'str' object has no attribute 'obsm'" on the
+    # fourth, which reads like the caller passed the wrong type.
+    if isinstance(data, str):
+        from ._normalization import _open_cytome
+        data = _open_cytome(data)
+
     import umap as umap_module
 
     # Get kNN data
@@ -93,19 +105,33 @@ def umap(
                 f"The cytome UMAP is driven by the reused graph; use_rep only sets the "
                 f"array fed to UMAP. Pass the matching neighbors_key, or rerun "
                 f"piaso.tl.neighbors on '{use_rep}'.", stacklevel=2)
-        knn_indices, knn_dists = reconstruct_knn_from_cytome(data, neighbors_key)
+        knn_indices, knn_dists = reconstruct_knn_from_cytome(data, neighbors_key, modality)
         precomputed_knn = (knn_indices, knn_dists, None)
     elif not _is_cytome_dataset(data):
-        # Try default key first, then prefixed keys
-        knn_idx_key = '_neighbors_knn_indices'
-        knn_dist_key = '_neighbors_knn_dists'
+        # `neighbors_key` used to be ignored here: the keys were hard-coded to
+        # '_neighbors_*', so neighbors(key_added='x') followed by
+        # umap(neighbors_key='x') silently reused whichever graph happened to
+        # be un-prefixed. With two graphs on one object -- an SVD one and a GDR
+        # one -- that produced a second UMAP bit-identical to the first, which
+        # looks like "the method did nothing" rather than like a wiring bug.
+        uns_key = neighbors_key if neighbors_key else 'neighbors'
+        knn_idx_key = f'_{uns_key}_knn_indices'
+        knn_dist_key = f'_{uns_key}_knn_dists'
+        if knn_idx_key not in data.uns and uns_key != 'neighbors':
+            raise KeyError(
+                f"umap: no kNN stored for neighbors_key='{neighbors_key}' "
+                f"(looked for adata.uns['{knn_idx_key}']). Available: "
+                f"{[k for k in data.uns if k.endswith('_knn_indices')]}. "
+                f"Run piaso.tl.neighbors(..., key_added='{neighbors_key}') first.")
         if knn_idx_key in data.uns and knn_dist_key in data.uns:
             knn_indices = data.uns[knn_idx_key]
             knn_dists = data.uns[knn_dist_key]
             precomputed_knn = (knn_indices, knn_dists, None)
-        # Get representation from stored params
-        if 'neighbors' in data.uns and 'params' in data.uns['neighbors']:
-            use_rep = data.uns['neighbors']['params'].get('use_rep', use_rep)
+        # Fall back to the representation the graph was built on, but never
+        # override one the caller passed explicitly -- doing so silently
+        # embedded X_svd when the call said use_rep='X_gdr'.
+        if use_rep is None and uns_key in data.uns and 'params' in data.uns[uns_key]:
+            use_rep = data.uns[uns_key]['params'].get('use_rep', use_rep)
 
     # Final fallback so a never-resolved use_rep doesn't index obsm[None].
     if use_rep is None:
@@ -113,7 +139,7 @@ def umap(
 
     # Load embedding
     if _is_cytome_dataset(data):
-        X = _load_embedding_from_cytome(data, use_rep)
+        X = _load_embedding_from_cytome(data, use_rep, modality)
     else:
         X = data.obsm[use_rep]
 
@@ -131,7 +157,21 @@ def umap(
 
     # Store results
     if _is_cytome_dataset(data):
-        data.add_embedding(key_added, embedding)
+        # Store as {modality}_{name}, like runSVD. Previously this wrote the
+        # caller's key verbatim, so one cytome could hold RNA_svd next to
+        # X_umap and a second modality's UMAP had nowhere to go.
+        # NOTE: writes the caller's key verbatim. Standardising on
+        # {modality}_{name} like runSVD is the consistent choice, but the
+        # current names are a tested contract (test_round24, projectGDR's
+        # reference lookup), so it is a migration rather than a patch.
+        # Reads already accept every spelling via _embedding_names.
+        from ..settings import _resolve_layer_dtype
+        data.add_embedding(
+            key_added, embedding,
+            dtype=_resolve_layer_dtype(None),
+            provenance={"modality": modality, "function": "piaso.tl.umap",
+                        "use_rep": use_rep, "key_added": key_added},
+        )
         data.flush()
         # Strict / self-contained: embedding lives on the cytome.
         return None

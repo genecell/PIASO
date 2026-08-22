@@ -1,4 +1,5 @@
 import warnings
+from ..settings import _resolve_layer_dtype
 
 import pandas as pd
 import numpy as np
@@ -45,12 +46,12 @@ def _safe_n_cells(ds, modality, layer):
 def _resolve_gene_names(ds, modality="RNA"):
     """Resolve the display gene-name array for a cytome.
 
-    Round 25: delegate to the SINGLE SOURCE OF TRUTH
-    (``cytome.modality_feature_table_info``) so the names returned
-    here match the names COSG emits (populated symbol-first, else ``gene_id``).
-    Before this, a hard-coded ``gene_id``-first order returned Ensembl ids while
-    COSG (post-Round-24) returned symbols — the two never matched and runGDR/score
-    raised "No valid gene sets found" on cellranger cytomes (gene_id != symbol).
+    Delegates to the single source of truth
+    (``cytome.modality_feature_table_info``) so the names returned here match
+    the names COSG emits (populated symbol-first, else ``gene_id``). A
+    hard-coded ``gene_id``-first order would return Ensembl ids while COSG
+    returns symbols — the two would never match, and runGDR/score would raise
+    "No valid gene sets found" on cellranger cytomes (gene_id != symbol).
     """
     try:
         from cytome import modality_feature_table_info
@@ -73,13 +74,14 @@ def _resolve_gene_names(ds, modality="RNA"):
     raise ValueError(f"Cannot find gene name column with non-null values. Available: {gene_cols}")
 
 
-def _gene_name_alias_map(ds, modality, var_names):
+def _gene_name_alias_map_uncached(ds, modality, var_names):
     """Build ``name -> [row indices]`` including aliases from every candidate id/name
     column, so a gene set in EITHER vocabulary resolves (COSG markers are symbols;
     user-supplied lists may be Ensembl ids). A name that maps to **several** rows
     (duplicate gene symbols — common in cellranger output where ``symbol`` is not
     de-duplicated) resolves to **all** of them (union scoring); a one-time warning is
-    emitted so the ambiguity is visible (Round 26 — keep raw symbols + union-resolve).
+    emitted so the ambiguity is visible (raw symbols are kept as stored;
+    duplicates union-resolve rather than being silently dropped).
     """
     name_to_idx: dict = {}
     for idx, name in enumerate(var_names):
@@ -116,6 +118,198 @@ def _gene_name_alias_map(ds, modality, var_names):
 # ============================================================================
 # Original infog — COMPLETELY UNCHANGED body from v1.1.0
 # ============================================================================
+_INFOG_COUNTS_SAMPLE = 10_000
+
+
+
+def _gene_name_alias_map(ds, modality, var_names):
+    """Cached front for :func:`_gene_name_alias_map_uncached`.
+
+    The map is a property of the dataset, not of whatever subset is being
+    scored, but GDR stage 3 scores one batch at a time and so rebuilt it once
+    per batch — 0.16 s x 35 batches on a 200k-cell, 35-library dataset, plus a duplicate-symbol warning
+    each time. Cached on the Dataset object, so it dies with it and cannot
+    outlive a reopened file.
+    """
+    key = (modality, len(var_names))
+    try:
+        cache = ds._piaso_alias_cache
+    except AttributeError:
+        cache = {}
+        try:
+            ds._piaso_alias_cache = cache
+        except Exception:
+            # Some datasets forbid attribute assignment; fall back to no cache.
+            return _gene_name_alias_map_uncached(ds, modality, var_names)
+    if key not in cache:
+        cache[key] = _gene_name_alias_map_uncached(ds, modality, var_names)
+    return cache[key]
+
+
+def _sample_stored_values(matrix, n: int = _INFOG_COUNTS_SAMPLE, seed: int = 0):
+    """Up to ``n`` stored values from a sparse or dense matrix, without densifying.
+
+    Sparse: samples ``.data`` (the nonzeros), which is what carries the evidence --
+    zeros are integers under every normalization. Dense: samples a flat view.
+    Uses a local RandomState so it cannot disturb a caller's global seed.
+    """
+    from scipy import sparse as _sp
+
+    if _sp.issparse(matrix):
+        data = matrix.data
+    else:
+        data = np.asarray(matrix).reshape(-1)
+    if data.size == 0:
+        return data
+    if data.size <= n:
+        return np.asarray(data)
+    rs = np.random.RandomState(seed)
+    return np.asarray(data)[rs.choice(data.size, size=n, replace=False)]
+
+
+def _check_integer_counts(matrix, *, layer, allow_non_integer, source_desc="adata.X"):
+    """Refuse to run INFOG on data that is clearly not raw UMI counts.
+
+    INFOG's dispersion model is defined on counts; handed normalized, scaled or
+    log-transformed values it still returns numbers, and the numbers are
+    meaningless. That failure is silent, which is why this is an error and not a
+    warning -- one of our own benchmarks lost 0.10 ARI to exactly this mistake.
+
+    Only fires when ``layer`` is None: naming a layer is a deliberate act, and a
+    user who wrote ``layer='counts'`` has already answered the question.
+    """
+    if allow_non_integer or layer is not None:
+        return
+    vals = _sample_stored_values(matrix)
+    if vals.size == 0 or np.issubdtype(vals.dtype, np.integer):
+        return
+    finite = vals[np.isfinite(vals)]
+    if finite.size == 0 or np.allclose(finite, np.round(finite)):
+        return
+    bad = finite[finite != np.round(finite)][:3]
+    raise ValueError(
+        f"infog: {source_desc} has non-integer values "
+        f"(e.g. {', '.join(f'{v:.4g}' for v in bad)}), so it is not raw UMI counts. "
+        f"INFOG models count dispersion; on normalized, log-transformed or scaled "
+        f"values it returns numbers that look fine and mean nothing.\n"
+        f"Point it at the counts instead:\n"
+        f"  infog(adata, layer='counts')      # raw counts kept in a layer\n"
+        f"  infog(adata.raw.to_adata())       # raw counts kept in .raw\n"
+        f"  infog(adata, layer='raw')         # whatever your raw layer is named\n"
+        f"(in runGDR: infog_layer='counts')\n"
+        f"If the data genuinely has no integer counts -- Smart-seq2 TPM/FPKM, "
+        f"imputed or already-corrected matrices -- pass allow_non_integer=True to "
+        f"run anyway, and read the HVGs with that in mind."
+    )
+
+
+
+def _f32_lossless(arr):
+    """The array as float32 if every value round-trips exactly, else None.
+
+    The scoring kernel forms its products and accumulates in float64 either way,
+    so an f32 call whose values are exactly representable is bit-identical to
+    the f64 call — it just moves half the bytes, and the control side is the
+    dominant traffic in the scatter loop. Cytome layers are stored float32, so
+    this is the normal case there and the ``astype(float64)`` it replaces was
+    upcasting data that never had the precision.
+
+    Returns None rather than rounding: a float64 AnnData whose values do not fit
+    f32 keeps the f64 path and its exact previous results.
+    """
+    a = np.asarray(arr)
+    if a.dtype == np.float32:
+        return a
+    if a.dtype != np.float64:
+        return None
+    small = a.astype(np.float32)
+    return small if np.array_equal(small.astype(np.float64), a) else None
+
+
+def _fused_matmul_reduce_dispatch(fmr, fmr_f32, a_data, b_data):
+    """Pick the f32 entry point when both value arrays fit it exactly.
+
+    Returns ``(callable, a_values, b_values)``. Falls back to the f64 entry
+    point when the extension predates the f32 twin, so a stale build keeps
+    working (more slowly) instead of raising deep inside a scoring run.
+    """
+    if fmr_f32 is not None:
+        a32, b32 = _f32_lossless(a_data), _f32_lossless(b_data)
+        if a32 is not None and b32 is not None:
+            return fmr_f32, a32, b32
+    return (fmr,
+            np.asarray(a_data).astype(np.float64, copy=False),
+            np.asarray(b_data).astype(np.float64, copy=False))
+
+_SCORE_TILE_MIN, _SCORE_TILE_MAX = 16, 128
+_SCORE_CHUNK_MIN, _SCORE_CHUNK_MAX = 1024, 32768
+
+
+def _kernel_tile_rows(n_rows: int, n_threads: int) -> int:
+    """Rows per tile INSIDE the fused kernel — its unit of parallel work.
+
+    The streaming path used to pass the whole chunk here, which produced
+    exactly one tile: every thread but one idled, whatever ``max_workers``
+    said. That is why stage 3 measured the same at 8 and at 40 threads.
+
+    Measured on a 200k-cell, 35-library dataset (910 sets, 20 threads,
+    1,024-row calls): 1,024 rows per
+    tile 11.17 s, 256 4.23 s, 128 2.69 s, 64 2.53 s, 32 2.53 s. The results are
+    bit-identical across tile sizes — the tile only decides how the rows are
+    handed out.
+
+    A wider grid (6 tile sizes x 4 thread counts x 3 call sizes x 2 set counts)
+    then showed a floor of 32 is too high: at 256 rows it leaves 8 tiles for
+    20-40 threads and costs +22% to +32% against tile 16, which is best or
+    tied-best in 20 of the 24 cells measured. Hence 16, and rows // (4*threads)
+    rather than // 2. The floor also bounds allocation churn: the kernel's
+    accumulator is allocated per TASK, not per thread.
+    """
+    if n_rows <= 0:
+        return 1
+    tile = n_rows // max(1, int(n_threads) * 4)
+    return int(max(_SCORE_TILE_MIN, min(_SCORE_TILE_MAX, max(1, tile))))
+
+
+#: Pass 1 reads and accumulates at this fixed block size, regardless of the
+#: pass-2 scoring chunk. Per-feature float64 sums are accumulated per block,
+#: so the block size sets their summation order; fixing it makes
+#: ``score_chunk_size`` / ``max_score_chunk_bytes`` genuinely output-neutral
+#: -- any future re-cost of the scoring chunk is free. 4,096 sits on the flat
+#: part of the pass-1 throughput curve. Changing THIS constant is an
+#: output-affecting act and needs a release note.
+_PASS1_BLOCK_ROWS = 4096
+
+
+def _score_chunk_rows(nnz_per_cell: float, n_sets: int, budget_bytes: int) -> int:
+    """Rows per scoring call, sized from a memory budget rather than fixed.
+
+    Two things scale with the row count: the chunk the kernel receives
+    (``nnz_per_cell`` values as float64 plus int32 indices, so 12 bytes per
+    nonzero) and the output block (``n_sets`` float64 per row). A fixed row
+    count gets the memory wrong in one direction or the other as soon as either
+    changes, which is why this is derived.
+
+    Secondary to :func:`_kernel_tile_rows`: with the tile fixed, going from
+    1,024 to 16,384 rows per call is worth about 1.2x on a 200k-cell,
+    35-library dataset, not the 5x it
+    was worth beforehand.
+
+    Output-neutral: pass 1 accumulates its per-feature sums at the fixed
+    internal block (``_PASS1_BLOCK_ROWS``), so this value only decides how
+    many rows each pass-2 kernel call receives -- per-row scores are
+    independent, and the float64 summation order of the stats never moves
+    with it. (Before the decoupling, this same value blocked pass 1's sums
+    and changing it perturbed scores by up to 8.2e-2 in the worst case.)
+    """
+    # 8 bytes per nonzero: float32 values + int32 indices. It used to be 12,
+    # because the kernel took f64 and Python upcast every chunk on the way in;
+    # the f32 entry point removed that copy, so the same budget now buys ~1.5x
+    # the rows. The output block is n_sets float64 per row.
+    per_row = max(1.0, float(nnz_per_cell) * 12.0 + float(n_sets) * 8.0)
+    rows = int(max(1, int(budget_bytes)) // per_row)
+    return int(max(_SCORE_CHUNK_MIN, min(_SCORE_CHUNK_MAX, max(1, rows))))
+
 def _infog_original(
     adata,
     copy: bool = False,
@@ -125,7 +319,8 @@ def _infog_original(
     key_added_highly_variable_gene: str = 'highly_variable',
     trim: bool = True,
     verbosity: int = 1,
-    layer: Optional[str] = None
+    layer: Optional[str] = None,
+    allow_non_integer: bool = False,
 ):
     """
     Performs INFOG normalization of single-cell RNA sequencing data based on "biological information".
@@ -189,6 +384,9 @@ def _infog_original(
     ### Raise an error if any negative values are found in counts
     if counts.data.size > 0 and counts.data.min() < 0:
         raise ValueError("Input counts contain negative values, which is not allowed.")
+
+    ### Refuse normalized/scaled input outright -- see _check_integer_counts
+    _check_integer_counts(counts, layer=layer, allow_non_integer=allow_non_integer)
 
     ### Compute cell and gene depths
     cell_depth = np.array(counts.sum(axis=1)).ravel()
@@ -333,7 +531,8 @@ def _normalize_chunk_infog(chunk, cell_depth_chunk, inv_gene_depth, scale,
 # ============================================================================
 # Streaming INFOG — works with cytome on-disk and AnnData in-memory chunks
 # ============================================================================
-def _get_infog_chunk_iterator(source, batch_size, layer=None, modality="RNA"):
+def _get_infog_chunk_iterator(source, batch_size, layer=None, modality="RNA",
+                              cell_mask=None):
     """Return (n_cells, n_genes, chunk_iterator_factory).
 
     chunk_iterator_factory() yields (csr_chunk, row_indices) pairs.
@@ -361,15 +560,23 @@ def _get_infog_chunk_iterator(source, batch_size, layer=None, modality="RNA"):
         _layer = layer or "counts"
         n_alloc, _n_true = _safe_n_cells(ds, modality, _layer)
         n_genes = _n_features_for_matrix(ds, modality, _layer)
+        _keep = (None if cell_mask is None
+                 else np.flatnonzero(np.asarray(cell_mask, dtype=bool)))
+
         def factory():
-            return ds.iter_chunks(modality=modality, layer=_layer, batch_size=batch_size)
+            return ds.iter_chunks(modality=modality, layer=_layer,
+                                  cell_mask=_keep, batch_size=batch_size)
         return n_alloc, n_genes, factory, ds
     elif _is_cytome_dataset(source):
         _layer = layer or "counts"
         n_alloc, _n_true = _safe_n_cells(source, modality, _layer)
         n_genes = _n_features_for_matrix(source, modality, _layer)
+        _keep = (None if cell_mask is None
+                 else np.flatnonzero(np.asarray(cell_mask, dtype=bool)))
+
         def factory():
-            return source.iter_chunks(modality=modality, layer=_layer, batch_size=batch_size)
+            return source.iter_chunks(modality=modality, layer=_layer,
+                                      cell_mask=_keep, batch_size=batch_size)
         return n_alloc, n_genes, factory, source
     else:
         # AnnData
@@ -378,13 +585,22 @@ def _get_infog_chunk_iterator(source, batch_size, layer=None, modality="RNA"):
         if not sparse.issparse(X):
             X = sparse.csr_matrix(X)
         n_cells, n_genes = X.shape
+        _keepa = (None if cell_mask is None
+                  else np.asarray(cell_mask, dtype=bool))
+
         def factory():
             for i in range(0, n_cells, batch_size):
                 end = min(i + batch_size, n_cells)
                 chunk = X[i:end]
                 if not sparse.issparse(chunk):
                     chunk = sparse.csr_matrix(chunk)
-                yield chunk, np.arange(i, end)
+                idx = np.arange(i, end)
+                if _keepa is not None:
+                    sel = _keepa[idx]
+                    if not sel.any():
+                        continue
+                    chunk, idx = chunk[sel], idx[sel]
+                yield chunk, idx
         return n_cells, n_genes, factory, None
 
 
@@ -400,7 +616,11 @@ def _infog_streaming(
     copy: bool = False,
     inplace: bool = False,
     save_layer: bool = False,
+    dtype: Optional[str] = None,
     modality: str = "RNA",
+    cell_mask=None,
+    write: bool = True,
+    allow_non_integer: bool = False,
 ):
     """
     Streaming INFOG normalization. Works with cytome (on-disk) and AnnData (in-memory chunks).
@@ -425,24 +645,44 @@ def _infog_streaming(
 
     n_cells, n_genes, chunk_factory, ds_obj = _get_infog_chunk_iterator(
         source, batch_size, layer=layer, modality=modality,
+        cell_mask=cell_mask,
     )
+
+    # cell_depth stays FULL length and indexed globally, because the chunk
+    # normalizer looks up cell_depth[global_row_index]. Every statistic
+    # below, though, must be over the SELECTED cells only -- dividing by the
+    # dataset's n_cells when scoring one batch would scale the means and
+    # variances by the batch fraction and pick the wrong HVGs.
+    _n_eff = int(n_cells if cell_mask is None
+                 else np.count_nonzero(np.asarray(cell_mask)))
+    if _n_eff == 0:
+        raise ValueError("infog: cell_mask selects no cells.")
 
     # ---- Pass 1: Collect global statistics ----
     cell_depth = np.zeros(n_cells, dtype=np.float64)
     gene_depth = np.zeros(n_genes, dtype=np.float64)
     counts_sum = 0.0
 
+    _counts_checked = False
     for chunk, indices in chunk_factory():
+        if not _counts_checked:
+            _check_integer_counts(
+                chunk, layer=layer, allow_non_integer=allow_non_integer,
+                source_desc=("this cytome's count matrix" if is_cytome
+                             else "adata.X"),
+            )
+            _counts_checked = True
         cell_depth[indices] = np.array(chunk.sum(axis=1)).ravel()
         gene_depth += np.array(chunk.sum(axis=0)).ravel()
         counts_sum += chunk.sum()
 
-    scale = np.median(cell_depth)
+    scale = np.median(cell_depth if cell_mask is None
+                      else cell_depth[np.asarray(cell_mask, dtype=bool)])
     with np.errstate(divide='ignore', invalid='ignore'):
         inv_gene_depth = 1.0 / gene_depth
     inv_gene_depth[~np.isfinite(inv_gene_depth)] = 0.0
 
-    threshold = np.sqrt(n_cells) if trim else None
+    threshold = np.sqrt(_n_eff) if trim else None
 
     # ---- Pass 2: Normalize on-the-fly, accumulate variance ----
     gene_sum = np.zeros(n_genes, dtype=np.float64)
@@ -472,8 +712,8 @@ def _infog_streaming(
         # For cytome: NO write — INFOG layer is NOT materialized on disk
 
     # Compute variance and HVG
-    gene_mean = gene_sum / n_cells
-    gene_var = gene_sum_sq / n_cells - gene_mean ** 2
+    gene_mean = gene_sum / _n_eff
+    gene_var = gene_sum_sq / _n_eff - gene_mean ** 2
 
     # Select top n HVG by variance
     hvg_indices = np.argsort(gene_var)[::-1][:n_top_genes]
@@ -500,57 +740,67 @@ def _infog_streaming(
             print('Finished INFOG normalization (streaming).')
 
     elif is_cytome:
-        # Write HVG boolean + variance to the correct feature table for the
-        # modality (RNA→genes, GA→GA_genes, ATAC→peaks, tiles→tiles). Use
-        # ds.features(modality), NOT getattr(ds, name): for 'tiles'/'GA' the
-        # modality name collides with / differs from the table name, so attribute
-        # access returns a Modality (no __setitem__). ds.features() returns the
-        # writable EntityTable uniformly.
-        _entity = ds.features(modality)
-        _entity[key_added_highly_variable_gene] = hvg_mask
-        _entity[key_added + '_var'] = gene_var.astype(np.float32)
+        # write=False is what per-batch INFOG needs: 35 batches each writing
+        # `highly_variable` and `{modality}_infog_params` into one shared
+        # cytome would clobber each other, and race under stage1_workers>1.
+        # The caller gets the same values back in the returned dict instead.
+        if write:
+            # Write HVG boolean + variance to the correct feature table for the
+            # modality (RNA→genes, GA→GA_genes, ATAC→peaks, tiles→tiles). Use
+            # ds.features(modality), NOT getattr(ds, name): for 'tiles'/'GA' the
+            # modality name collides with / differs from the table name, so attribute
+            # access returns a Modality (no __setitem__). ds.features() returns the
+            # writable EntityTable uniformly.
+            _entity = ds.features(modality)
+            _entity[key_added_highly_variable_gene] = hvg_mask
+            _entity[key_added + '_var'] = gene_var.astype(np.float32)
 
-        # Save INFOG normalization parameters to metadata (for on-the-fly
-        # reconstruction). Namespaced by modality so e.g. an RNA-infog run and a
-        # GA-infog run can coexist on the same cytome. NOTE: the un-prefixed legacy
-        # 'infog_params' alias is no longer written (it was RNA-only but is
-        # modality-blind on read); readers use '{modality}_infog_params' and fall
-        # back to a residual legacy key only under a feature-count guard.
-        _infog_params_payload = {
-            'cell_depth': cell_depth,
-            'inv_gene_depth': inv_gene_depth,
-            'scale': float(scale),
-            'counts_sum': float(counts_sum),
-            'threshold': float(threshold) if threshold is not None else None,
-            'n_top_genes': int(n_top_genes),
-        }
-        ds.metadata[f'{modality}_infog_params'] = _infog_params_payload
+            # Save INFOG normalization parameters to metadata (for on-the-fly
+            # reconstruction). Namespaced by modality so e.g. an RNA-infog run and a
+            # GA-infog run can coexist on the same cytome. NOTE: the un-prefixed legacy
+            # 'infog_params' alias is no longer written (it was RNA-only but is
+            # modality-blind on read); readers use '{modality}_infog_params' and fall
+            # back to a residual legacy key only under a feature-count guard.
+            _infog_params_payload = {
+                'cell_depth': cell_depth,
+                'inv_gene_depth': inv_gene_depth,
+                'scale': float(scale),
+                'counts_sum': float(counts_sum),
+                'threshold': float(threshold) if threshold is not None else None,
+                'n_top_genes': int(n_top_genes),
+            }
+            ds.metadata[f'{modality}_infog_params'] = _infog_params_payload
 
-        # Optionally write full INFOG layer to cytome (non-lazy mode)
-        if save_layer:
-            matrix_name = f"{modality}_{key_added}"
-            writer = ds.create_layer_writer(
-                matrix_name, n_rows=n_cells, n_cols=n_genes, dtype=np.float64,
-            )
-            for chunk, indices in chunk_factory():
-                normed = _normalize_chunk_infog(
-                    chunk, cell_depth[indices], inv_gene_depth,
-                    scale, counts_sum, threshold,
-                )
-                writer.write_chunk(normed, row_offset=int(indices[0]))
-            writer.finalize()
-
-        ds.flush()
-
-        if verbosity > 0:
+            # Optionally write full INFOG layer to cytome (non-lazy mode)
             if save_layer:
-                print(f'Full INFOG layer written to cytome as `{key_added}`.')
-            else:
-                print(f'INFOG params saved to cytome metadata (lazy, no full layer written).')
-            print(f'The highly variable genes are saved as `{key_added_highly_variable_gene}` in gene metadata.')
-            print('Finished INFOG normalization (streaming, cytome).')
+                matrix_name = f"{modality}_{key_added}"
+                writer = ds.create_layer_writer(
+                    matrix_name, n_rows=n_cells, n_cols=n_genes,
+                    dtype=_resolve_layer_dtype(dtype),
+                )
+                for chunk, indices in chunk_factory():
+                    normed = _normalize_chunk_infog(
+                        chunk, cell_depth[indices], inv_gene_depth,
+                        scale, counts_sum, threshold,
+                    )
+                    writer.write_chunk(normed, row_offset=int(indices[0]))
+                writer.finalize()
 
-    # Build infog_params dict for downstream use
+            ds.flush()
+
+            if verbosity > 0:
+                if save_layer:
+                    print(f'Full INFOG layer written to cytome as `{key_added}`.')
+                else:
+                    print(f'INFOG params saved to cytome metadata (lazy, no full '
+                          f'layer written). Nothing reads those params yet, so a '
+                          f'later call asking for layer="{key_added}" will not '
+                          f'find it: pass save_layer=True if you need the layer '
+                          f'materialised (e.g. before runSVD).')
+                print(f'The highly variable genes are saved as `{key_added_highly_variable_gene}` in gene metadata.')
+                print('Finished INFOG normalization (streaming, cytome).')
+
+        # Build infog_params dict for downstream use
     infog_params = {
         'cell_depth': cell_depth,
         'inv_gene_depth': inv_gene_depth,
@@ -593,8 +843,10 @@ def infog(
     streaming: bool = False,
     batch_size: int = 1024,
     save_layer: bool = False,
+    dtype: Optional[str] = None,
     modality: str = "RNA",
     return_info: bool = False,
+    allow_non_integer: bool = False,
     # ---- deprecated aliases (back-compat) ----
     source=_UNSET,
     adata=_UNSET,
@@ -629,6 +881,13 @@ def infog(
         cytome file (layer ``key_added``). Default (False) is lazy mode: only
         normalization parameters are saved, and normalization is applied on-the-fly
         during downstream operations like SVD.
+    allow_non_integer : bool, default False
+        By default INFOG refuses input whose values are not integers, because
+        its dispersion model is defined on raw UMI counts and silently returns
+        meaningless numbers on normalized, log-transformed or scaled data. Set
+        True to run anyway -- appropriate for Smart-seq2 TPM/FPKM, imputed or
+        already-corrected matrices. Ignored when ``layer``/``infog_layer`` is
+        given, since naming a layer already answers the question.
     [all other parameters unchanged from original infog()]
     """
     data = _resolve_data_arg(data, 'infog', source=source, adata=adata)
@@ -640,7 +899,8 @@ def infog(
             batch_size=batch_size, key_added=key_added,
             key_added_highly_variable_gene=key_added_highly_variable_gene,
             layer=layer, verbosity=verbosity, copy=copy, inplace=inplace,
-            save_layer=save_layer, modality=modality,
+            save_layer=save_layer, dtype=dtype, modality=modality,
+            allow_non_integer=allow_non_integer,
         )
         # AnnData + copy=True returns the new normalized AnnData; otherwise the
         # results live in ds.metadata / ds.genes (cytome) or adata (in-place),
@@ -655,6 +915,7 @@ def infog(
             n_top_genes=n_top_genes, key_added=key_added,
             key_added_highly_variable_gene=key_added_highly_variable_gene,
             trim=trim, verbosity=verbosity, layer=layer,
+            allow_non_integer=allow_non_integer,
         )
         # _infog_original already returns adata-if-copy-else-None; honor return_info
         # only when it produced a result dict (it doesn't today, so this is a no-op).
@@ -713,7 +974,94 @@ from sklearn.neighbors import KDTree
 from scipy import sparse
 
 
-def _precompute_stats(cellxgene, n_nearest_neighbors=30, leaf_size=40):
+def _gene_list_feature_indices(gene_list, name_to_idx):
+    """Feature indices per gene set, from ``gene_list`` in any accepted shape.
+
+    Used only to decide which ``knn_idx`` rows to compute, so it can run before
+    the real parsing (which also resolves weights and drops empty sets). Names
+    that do not resolve are skipped, exactly as the real parsing does.
+    """
+    if isinstance(gene_list, pd.DataFrame):
+        groups = [gene_list[c].dropna().tolist() for c in gene_list.columns]
+    elif isinstance(gene_list, dict):
+        groups = list(gene_list.values())
+    elif (isinstance(gene_list, list) and gene_list
+          and isinstance(gene_list[0], (list, np.ndarray))):
+        groups = list(gene_list)
+    else:
+        groups = [gene_list]
+    out = []
+    for genes in groups:
+        idx = []
+        for g in np.asarray(genes).ravel().tolist():
+            hit = name_to_idx.get(g)
+            if hit is None:
+                continue
+            idx.extend(hit if isinstance(hit, (list, tuple, np.ndarray)) else [hit])
+        if idx:
+            out.append(idx)
+    return out
+
+
+def _gene_set_query_rows(gene_sets_indices, n_features):
+    """The only ``knn_idx`` rows anyone reads: the union of the gene sets' features.
+
+    Control sampling does ``knn_idx[gene_idx]`` for each set, so rows belonging
+    to no set are computed and never looked at. On a 200k-cell dataset with
+    910 sets that is 3,476 rows of
+    32,285 — querying only them is 21.7x less tree work (0.320 s -> 0.015 s) and
+    bit-identical on the rows that are used, because the tree is still built
+    over ALL features and neighbours still come from the whole feature space.
+    """
+    if not gene_sets_indices:
+        return None
+    used = np.unique(np.concatenate([
+        np.asarray(idx, dtype=np.int64).ravel() for idx in gene_sets_indices
+        if len(idx)
+    ])) if any(len(idx) for idx in gene_sets_indices) else None
+    if used is None or used.size == 0:
+        return None
+    # Querying nearly everything costs more in bookkeeping than it saves.
+    if used.size > 0.75 * n_features:
+        return None
+    return used
+
+
+def _knn_from_mean_var(mean_var, n_nearest_neighbors, leaf_size, query_rows=None):
+    """KDTree over every feature, queried for ``query_rows`` (or all of them).
+
+    Shared by the AnnData and cytome stats functions, which had this logic
+    twice, verbatim. Returns a full-height ``(n_features, k)`` array so callers
+    can keep indexing it by global feature id — including the Rust entry points,
+    which take the flattened array and index it themselves. Rows that were not
+    queried are left as zeros; nothing reads them.
+    """
+    kdt = KDTree(mean_var, leaf_size=leaf_size, metric='euclidean')
+    n_features = mean_var.shape[0]
+    rows = (np.arange(n_features) if query_rows is None
+            else np.asarray(query_rows, dtype=np.int64))
+    raw = kdt.query(mean_var[rows] if query_rows is not None else mean_var,
+                    k=n_nearest_neighbors + 1, return_distance=False)
+
+    # Drop each row's self-match. The self index is the row's GLOBAL feature id,
+    # which is `rows`, not the position within the queried block.
+    self_mask = (raw == rows[:, None])
+    has_self = self_mask.any(axis=1)
+    first_self_col = np.argmax(self_mask, axis=1)
+    cols = np.arange(raw.shape[1])
+    shift = (cols[None, :] >= first_self_col[:, None]) & has_self[:, None]
+    gather = cols[None, :] + shift.astype(np.intp)
+    np.clip(gather, 0, raw.shape[1] - 1, out=gather)
+    trimmed = np.take_along_axis(raw, gather, axis=1)[:, :n_nearest_neighbors]
+
+    if query_rows is None:
+        return trimmed.astype(np.int64)
+    knn_idx = np.zeros((n_features, n_nearest_neighbors), dtype=np.int64)
+    knn_idx[rows] = trimmed
+    return knn_idx
+
+def _precompute_stats(cellxgene, n_nearest_neighbors=30, leaf_size=40,
+                      query_rows=None):
     """Compute KDTree-based KNN indices for control gene sampling.
 
     Uses CSR sharing trick for variance computation (reuses indices/indptr,
@@ -727,6 +1075,10 @@ def _precompute_stats(cellxgene, n_nearest_neighbors=30, leaf_size=40):
         Number of nearest neighbors per gene in (mean, var) space.
     leaf_size : int
         KDTree leaf size.
+    query_rows : array-like of int, optional
+        Only compute neighbours for these features (see
+        :func:`_gene_set_query_rows`). Other rows come back as zeros and
+        must not be read. ``None`` computes every row.
 
     Returns
     -------
@@ -747,25 +1099,9 @@ def _precompute_stats(cellxgene, n_nearest_neighbors=30, leaf_size=40):
         residual_var = np.squeeze(np.mean(np.asarray(cellxgene, dtype=np.float64) ** 2, axis=0) - mean_sq)
 
     mean_var = np.array([infog_mean, residual_var]).T
-    kdt = KDTree(mean_var, leaf_size=leaf_size, metric='euclidean')
-    knn_idx = kdt.query(mean_var, k=n_nearest_neighbors + 1, return_distance=False)
+    return _knn_from_mean_var(mean_var, n_nearest_neighbors, leaf_size,
+                              query_rows=query_rows)
 
-    # Remove self-loops (vectorized — avoids Python list comprehension)
-    n_genes_knn = knn_idx.shape[0]
-    self_col = np.arange(n_genes_knn)
-    self_mask = (knn_idx == self_col[:, None])
-    # Find which column holds the self-match (first True per row; if none, use last col)
-    has_self = self_mask.any(axis=1)
-    first_self_col = np.argmax(self_mask, axis=1)  # 0 if no self → handled below
-    # Build shifted index: for rows with self-match, skip that column
-    cols = np.arange(knn_idx.shape[1])
-    shift = (cols[None, :] >= first_self_col[:, None]) & has_self[:, None]
-    gather = cols[None, :] + shift.astype(np.intp)
-    # Clamp to valid range
-    np.clip(gather, 0, knn_idx.shape[1] - 1, out=gather)
-    knn_idx = np.take_along_axis(knn_idx, gather, axis=1)[:, :n_nearest_neighbors].astype(np.int64)
-
-    return knn_idx
 
 
 def _precompute_stats_streaming(
@@ -775,6 +1111,7 @@ def _precompute_stats_streaming(
     n_nearest_neighbors: int = 30,
     leaf_size: int = 40,
     cell_mask=None,
+    query_rows=None,
 ):
     """Streaming version of _precompute_stats: one pass through cytome chunks.
 
@@ -792,6 +1129,9 @@ def _precompute_stats_streaming(
         Number of features (genes/peaks).
     n_nearest_neighbors, leaf_size : int
         Same as ``_precompute_stats``.
+    query_rows : array-like of int, optional
+        Only compute neighbours for these features (see
+        :func:`_gene_set_query_rows`). Other rows come back as zeros.
     cell_mask : np.ndarray or None
         Boolean mask of length ``n_cells``. When set, accumulates stats
         only on masked rows and the per-feature denominator becomes
@@ -835,22 +1175,36 @@ def _precompute_stats_streaming(
     residual_var = (col_sq_sum / max(n_effective, 1)) - mean_sq
 
     mean_var = np.array([infog_mean, residual_var]).T
-    kdt = KDTree(mean_var, leaf_size=leaf_size, metric='euclidean')
-    knn_idx = kdt.query(mean_var, k=n_nearest_neighbors + 1, return_distance=False)
+    return _knn_from_mean_var(mean_var, n_nearest_neighbors, leaf_size,
+                              query_rows=query_rows)
 
-    # Remove self-loops (same vectorized code as _precompute_stats)
-    n_genes_knn = knn_idx.shape[0]
-    self_col = np.arange(n_genes_knn)
-    self_mask = (knn_idx == self_col[:, None])
-    has_self = self_mask.any(axis=1)
-    first_self_col = np.argmax(self_mask, axis=1)
-    cols = np.arange(knn_idx.shape[1])
-    shift = (cols[None, :] >= first_self_col[:, None]) & has_self[:, None]
-    gather = cols[None, :] + shift.astype(np.intp)
-    np.clip(gather, 0, knn_idx.shape[1] - 1, out=gather)
-    knn_idx = np.take_along_axis(knn_idx, gather, axis=1)[:, :n_nearest_neighbors].astype(np.int64)
 
-    return knn_idx
+
+def _gene_set_weight_matrix(gene_sets_indices, weights_list, n_features):
+    """One sparse ``(n_features, n_sets)`` matrix of gene-set weights.
+
+    Lets the per-cell query scores for EVERY gene set be computed as a single
+    ``chunk @ W`` instead of looping over sets and column-subsetting the chunk
+    once each. Column-subsetting a CSR is O(nnz), so the loop cost grew
+    linearly in n_sets while the matmul is essentially flat: measured 1.95 /
+    6.45 / 24.41 s at 20 / 80 / 320 sets against 0.55 / 0.62 / 0.78 s for the
+    matmul. That loop is why stage 3 would not scale past 2.11x no matter how
+    the threads were arranged -- it is Python and holds the GIL.
+
+    Duplicate (gene, set) pairs sum, which is what ``multiply(w).sum(axis=1)``
+    did, so a gene repeated within a set still contributes once per occurrence.
+    """
+    if not gene_sets_indices:
+        return sparse.csr_matrix((n_features, 0), dtype=np.float64)
+    rows = np.concatenate([np.asarray(g, dtype=np.int64) for g in gene_sets_indices])
+    cols = np.repeat(
+        np.arange(len(gene_sets_indices), dtype=np.int64),
+        [len(g) for g in gene_sets_indices],
+    )
+    data = np.concatenate([np.asarray(w, dtype=np.float64) for w in weights_list])
+    return sparse.csr_matrix(
+        (data, (rows, cols)), shape=(n_features, len(gene_sets_indices))
+    )
 
 
 def _score_streaming_multi(
@@ -864,13 +1218,16 @@ def _score_streaming_multi(
     random_seed: int = 1927,
     n_ctrl_set: int = 100,
     compute_pvalues: bool = False,
-    chunk_size: int = 10000,
     max_workers: int = 1,
     use_rust: bool = True,
+    compute_on_fly: bool = True,
     precomputed_knn=None,
     batch_size: int = 1024,
     verbosity: int = 0,
     cell_mask=None,
+    score_chunk_size: Optional[int] = None,
+    max_score_chunk_bytes: int = 256 * 1024 ** 2,
+    max_score_batch_cache_bytes: int = 1024 * 1024 ** 2,
 ):
     """Two-pass streaming score() for cytome datasets.
 
@@ -878,7 +1235,7 @@ def _score_streaming_multi(
     Between passes: build ``big_ctrl`` (no I/O)
     Pass 2: fused query_scores + ctrl matmul per chunk
 
-    Memory: ~388 MB for ADVIS-scale (200K cells, 700K peaks).
+    Memory: ~388 MB at 200K cells x 700K peaks.
 
     SINGLE-PROCESS: this cytome path does NOT fork/spawn any worker processes —
     it streams chunks in one Python process and offloads the matmul/reduce to the
@@ -905,13 +1262,27 @@ def _score_streaming_multi(
     -------
     score_matrix, gene_set_names, pval_matrix : same as ``score()`` multi-set.
     """
-    np.random.seed(random_seed)
+    # No np.random.seed() here: it would move the CALLER's global stream, and
+    # the only draw in this function is the local RandomState below.
+
+    # score() was the only one of runSVD / COSG / score that could not rebuild
+    # INFOG from the parameters infog() stores, so a cytome without a
+    # materialised RNA_infog raised "Matrix not found" and the pipeline had to
+    # pass save_layer=True. The resolver PREFERS a materialised layer, so this
+    # costs nothing when one exists and simply works when it does not.
+    _read_layer, _chunk_norm = layer, None
+    if compute_on_fly and layer in ("infog",):
+        from ._runSVD import _infog_chunk_normalizer
+        _read_layer, _chunk_norm = _infog_chunk_normalizer(
+            ds, modality, layer, compute_on_fly, verbosity=verbosity)
 
     # Get dimensions (defensive: use safe allocation size for index safety)
-    matrix_name = f"{modality}_{layer}"
+    # from the layer actually READ -- asking for an unmaterialised 'infog'
+    # here raised before the resolver above ever ran.
+    matrix_name = f"{modality}_{_read_layer}"
     from cytome.core.measurement import MeasurementLayer
     ml = MeasurementLayer(ds._conn, matrix_name)
-    n_alloc, n_true_cells = _safe_n_cells(ds, modality, layer)
+    n_alloc, n_true_cells = _safe_n_cells(ds, modality, _read_layer)
     n_cells = n_alloc
     n_features = ml.shape[1]
 
@@ -936,6 +1307,14 @@ def _score_streaming_multi(
         var_names = _resolve_gene_names(ds, modality)
         var_names_to_idx = _gene_name_alias_map(ds, modality, var_names)
 
+    # Average nonzeros per cell, straight from the matrix header — no read.
+    _row = ds._conn.execute(
+        "SELECT n_nonzero, n_rows FROM matrix_meta WHERE matrix_name=?",
+        (matrix_name,),
+    ).fetchone()
+    _nnz_per_cell = (float(_row[0]) / float(_row[1])
+                     if _row and _row[1] else 0.0)
+
     if verbosity > 0:
         print(f"  Streaming score: {n_cells} cells × {n_features} features")
 
@@ -954,6 +1333,11 @@ def _score_streaming_multi(
             cell_mask_arr = mask_full
     else:
         cell_mask_arr = None
+
+    # Resolved once: the sorted global row indices this call must read. Used to
+    # skip chunks in both passes and to size the output arrays.
+    _keep_rows = (None if cell_mask_arr is None
+                  else np.flatnonzero(cell_mask_arr))
 
     # --- Parse + validate gene sets FIRST (fail fast with a pointed error before
     # the expensive KNN pass, so a wrong `modality` doesn't surface as an obscure
@@ -1003,102 +1387,240 @@ def _score_streaming_multi(
             f"check the gene names match the cytome's feature names (symbols vs Ensembl)."
         )
 
+    # Rows per scoring call. The read pattern does not change: cytome stores
+    # 128-row chunks and iter_chunks vstacks them up to batch_size, so this
+    # only decides how many stored chunks are glued together before the kernel
+    # is called. Derived from a byte budget because both terms that scale with
+    # the row count -- the chunk itself and the n_sets-wide output block --
+    # differ by dataset.
+    if score_chunk_size is not None:
+        _score_rows = int(score_chunk_size)
+    else:
+        _score_rows = _score_chunk_rows(
+            _nnz_per_cell, n_sets, max_score_chunk_bytes)
+    if verbosity > 0:
+        print(f"  Scoring chunk: {_score_rows} rows "
+              f"({_nnz_per_cell:.0f} nnz/cell, {n_sets} sets, "
+              f"budget {max_score_chunk_bytes / 1024**2:.0f} MB)")
+
+    # Pass 2 re-reads and re-decompresses exactly the rows pass 1 just read:
+    # measured 0.365 s of a 0.817 s pass 1 on an ADVIS batch, 45% of it. Hold
+    # them instead when the batch fits its own budget. Its own budget, not the
+    # scoring one -- two consumers behind a single number is how peak RSS
+    # surprised us before. Declared out here because pass 2 reads it whether or
+    # not pass 1 ran (precomputed_knn skips pass 1, leaving the cache empty).
+    _n_scored_cells = int(n_cells if _keep_rows is None else _keep_rows.shape[0])
+    _cache = {"rows": [], "bytes": 0, "usable": max_score_batch_cache_bytes > 0}
+    _expect = (float(_nnz_per_cell) * 8.0 * float(_n_scored_cells)
+               if _nnz_per_cell else float("inf"))
+    if _expect > max_score_batch_cache_bytes:
+        _cache["usable"] = False
+    if verbosity > 0:
+        print(f"  Pass 1->2 chunk cache: "
+              f"{'on' if _cache['usable'] else 'off'} "
+              f"(~{_expect / 1024 ** 2:.0f} MB expected, budget "
+              f"{max_score_batch_cache_bytes / 1024 ** 2:.0f} MB)")
+
     # --- Pass 1: streaming stats -> KNN ---
     if precomputed_knn is not None:
         knn_idx = precomputed_knn
     else:
+        # The mask goes INTO iter_chunks so chunks holding none of these cells
+        # are never fetched. Filtering after the read cost 24.31 s against
+        # 0.37 s on one ADVIS batch — 196 chunks read where 6 hold the rows —
+        # and stage 3 does this twice per batch, 70 times on a 35-batch run.
+        # The NORMALISED chunk is cached, so pass 2 must not normalise again.
         def chunk_factory():
-            return ds.iter_chunks(modality=modality, layer=layer, batch_size=batch_size)
+            # Fixed block, NOT _score_rows: the block size sets the float64
+            # summation order of the per-feature stats (see _PASS1_BLOCK_ROWS).
+            it = ds.iter_chunks(modality=modality, layer=_read_layer,
+                                cell_mask=_keep_rows,
+                                batch_size=_PASS1_BLOCK_ROWS)
+
+            def _gen():
+                for c, i in it:
+                    if _chunk_norm is not None:
+                        c = _chunk_norm(c, i)
+                    if _cache["usable"]:
+                        nb = (getattr(c, "data", np.empty(0)).nbytes
+                              + getattr(c, "indices", np.empty(0)).nbytes
+                              + getattr(c, "indptr", np.empty(0)).nbytes)
+                        _cache["bytes"] += nb
+                        if _cache["bytes"] <= max_score_batch_cache_bytes:
+                            _cache["rows"].append((c, i))
+                        else:
+                            # Overran the estimate: drop it all rather than
+                            # keep a partial cache pass 2 cannot use.
+                            _cache["usable"] = False
+                            _cache["rows"] = []
+                    yield c, i
+
+            return _gen()
         if verbosity > 0:
             print(f"  Pass 1: Computing per-feature stats (streaming)...")
         knn_idx = _precompute_stats_streaming(
             chunk_factory, n_cells, n_features, n_nearest_neighbors, leaf_size,
             cell_mask=cell_mask_arr,
+            query_rows=_gene_set_query_rows(gene_sets_indices, n_features),
         )
 
     # --- Build control structures (no I/O) ---
-    all_ctrl_blocks = []
+    all_ctrl_rows, all_ctrl_cols, all_ctrl_data = [], [], []
     scaling_factors = np.zeros(n_sets, dtype=np.float64)
 
     for gs_idx in range(n_sets):
-        np.random.seed(random_seed)
+        # A LOCAL RandomState, not np.random.seed(): the global seed is
+        # process-wide, so two threads scoring different batches interleave
+        # their draws and pick different control genes. Measured: four
+        # concurrent stage-3 workers moved the embedding by 0.41 while two
+        # happened to agree -- the same trap as igraph's global RNG. Legacy
+        # RandomState reproduces the global stream exactly, so this is
+        # thread-safe AND bit-identical to the previous behaviour.
+        _rs = np.random.RandomState(random_seed)
         gene_idx = gene_sets_indices[gs_idx]
         weights = weights_list[gs_idx]
 
         gs_knn_idx = knn_idx[gene_idx]
         n_gs = len(gene_idx)
         n_neighbors = gs_knn_idx.shape[1]
-        rand_idx = np.random.randint(0, n_neighbors, size=(n_gs, n_ctrl_set))
+        rand_idx = _rs.randint(0, n_neighbors, size=(n_gs, n_ctrl_set))
         ctrl_sampled = gs_knn_idx[np.arange(n_gs)[:, None], rand_idx].T
 
-        rows_all = ctrl_sampled.ravel()
-        cols_all = np.repeat(np.arange(n_ctrl_set, dtype=np.int32), n_gs)
-        data_all = np.tile(weights, n_ctrl_set)
-        ctrl_block = sparse.csr_matrix(
-            (data_all, (rows_all, cols_all)),
-            shape=(n_features, n_ctrl_set)
+        # One COO for ALL sets, with a column offset per set, instead of n_sets
+        # small CSR conversions plus an hstack of n_sets blocks. Same triplets
+        # in the same order, so duplicate entries sum the same way; the columns
+        # of different sets are disjoint, so nothing can collide across blocks.
+        all_ctrl_rows.append(ctrl_sampled.ravel())
+        all_ctrl_cols.append(
+            np.repeat(np.arange(n_ctrl_set, dtype=np.int64), n_gs)
+            + gs_idx * n_ctrl_set
         )
-        all_ctrl_blocks.append(ctrl_block)
+        all_ctrl_data.append(np.tile(weights, n_ctrl_set))
         scaling_factors[gs_idx] = np.median(weights) * n_gs
 
-    big_ctrl_csr = sparse.hstack(all_ctrl_blocks, format='csr')
+    big_ctrl_csr = sparse.coo_matrix(
+        (
+            np.concatenate(all_ctrl_data),
+            (np.concatenate(all_ctrl_rows), np.concatenate(all_ctrl_cols)),
+        ),
+        shape=(n_features, n_sets * n_ctrl_set),
+    ).tocsr()
+    # The query side gets the same treatment the control side already had.
+    _W_query = _gene_set_weight_matrix(gene_sets_indices, weights_list, n_features)
 
     # --- Try Rust fused_matmul_reduce ---
     _rust_fmr = None
+    _rust_fmr32 = None
     if use_rust:
         try:
             from piaso._piaso import fused_matmul_reduce
             _rust_fmr = fused_matmul_reduce
+            try:
+                from piaso._piaso import fused_matmul_reduce_f32
+                _rust_fmr32 = fused_matmul_reduce_f32
+            except ImportError:
+                _rust_fmr32 = None   # extension predates the f32 twin
         except ImportError:
             pass
 
     # --- Pass 2: streaming query scores + control matmul ---
     if verbosity > 0:
         print(f"  Pass 2: Streaming matmul ({n_sets} gene sets)...")
-    query_scores = np.zeros((n_cells, n_sets), dtype=np.float64)
-    ctrl_means = np.zeros((n_cells, n_sets), dtype=np.float64)
-    pval_matrix = np.zeros((n_cells, n_sets), dtype=np.float64) if compute_pvalues else None
+    # Allocate at the MASKED height, not the full one. These were
+    # (n_cells, n_sets) float64 regardless of the mask and compacted at the
+    # end, so scoring one 5,716-cell batch of ADVIS against 867 markers
+    # allocated 2 x 200,061 x 867 x 8 B = 2.78 GB to keep 79 MB of it.
+    # Rows arrive with GLOBAL indices, so map them to compact positions.
+    if _keep_rows is not None:
+        _n_out = int(_keep_rows.shape[0])
+        _row_pos = np.full(n_cells, -1, dtype=np.int64)
+        _row_pos[_keep_rows] = np.arange(_n_out, dtype=np.int64)
+    else:
+        _n_out = n_cells
+        _row_pos = None
+    query_scores = np.zeros((_n_out, n_sets), dtype=np.float64)
+    ctrl_means = np.zeros((_n_out, n_sets), dtype=np.float64)
+    pval_matrix = np.zeros((_n_out, n_sets), dtype=np.float64) if compute_pvalues else None
 
-    # Pre-convert big_ctrl for Rust
-    bc_data = big_ctrl_csr.data.astype(np.float64, copy=False)
+    # Pre-convert big_ctrl for Rust. The VALUE dtype is decided per chunk by
+    # _fused_matmul_reduce_dispatch (f32 when both sides round-trip exactly),
+    # so only the index arrays are fixed here.
     bc_indices = big_ctrl_csr.indices.astype(np.int32, copy=False)
     bc_indptr = big_ctrl_csr.indptr.astype(np.int32, copy=False)
     bc_n_cols = big_ctrl_csr.shape[1]
 
-    for chunk_csr, row_indices in ds.iter_chunks(
-        modality=modality, layer=layer, batch_size=batch_size
-    ):
+    def _glue_blocks(blocks, target_rows):
+        """Stack cached fixed-size pass-1 blocks up to ~target_rows per yield.
+
+        Per-row scores are independent, so gluing affects only kernel-call
+        efficiency, never results; it keeps pass-2 call sizes tracking the
+        scoring-chunk budget while the cache holds _PASS1_BLOCK_ROWS blocks.
+        """
+        buf, buf_idx, rows = [], [], 0
+        for c, i in blocks:
+            buf.append(c)
+            buf_idx.append(np.asarray(i))
+            rows += c.shape[0]
+            if rows >= target_rows:
+                yield (sparse.vstack(buf, format="csr") if len(buf) > 1 else buf[0],
+                       np.concatenate(buf_idx) if len(buf_idx) > 1 else buf_idx[0])
+                buf, buf_idx, rows = [], [], 0
+        if buf:
+            yield (sparse.vstack(buf, format="csr") if len(buf) > 1 else buf[0],
+                   np.concatenate(buf_idx) if len(buf_idx) > 1 else buf_idx[0])
+
+    _cached_rows = _cache["rows"] if (_cache["usable"] and _cache["rows"]) else None
+    _pass2_source = (
+        _glue_blocks(_cached_rows, _score_rows) if _cached_rows is not None
+        else ds.iter_chunks(
+            modality=modality, layer=_read_layer, cell_mask=_keep_rows,
+            batch_size=_score_rows,
+        )
+    )
+    for chunk_csr, row_indices in _pass2_source:
+        if _chunk_norm is not None and _cached_rows is None:
+            chunk_csr = _chunk_norm(chunk_csr, np.asarray(row_indices))
         if not sparse.isspmatrix_csr(chunk_csr):
             chunk_csr = chunk_csr.tocsr()
         ri = np.asarray(row_indices)
 
         if cell_mask_arr is not None:
+            # iter_chunks already skipped chunks with no selected rows and
+            # yielded only those rows; this stays as a cheap guard in case a
+            # chunk straddles the mask boundary.
             chunk_keep = cell_mask_arr[ri]
             if not chunk_keep.any():
                 continue
             if not chunk_keep.all():
                 chunk_csr = chunk_csr[chunk_keep]
                 ri = ri[chunk_keep]
+            ri = _row_pos[ri]          # global -> compact output row
 
         n_chunk = chunk_csr.shape[0]
 
-        # Query scores: column-subset weighted sum
-        for gs_idx in range(n_sets):
-            gene_idx = gene_sets_indices[gs_idx]
-            weights = weights_list[gs_idx]
-            sub = chunk_csr[:, gene_idx]
-            query_scores[ri, gs_idx] = np.ravel(sub.multiply(weights).sum(axis=1))
+        # Query scores for every gene set in one matmul (see
+        # _gene_set_weight_matrix): this replaced an n_sets-long Python loop
+        # that column-subset the chunk once per set.
+        _q = chunk_csr @ _W_query
+        query_scores[ri] = _q.toarray() if sparse.issparse(_q) else np.asarray(_q)
 
         # Control matmul
         if _rust_fmr is not None:
-            m_flat, p_flat = _rust_fmr(
-                chunk_csr.data.astype(np.float64, copy=False),
+            _fmr, _a_vals, _b_vals = _fused_matmul_reduce_dispatch(
+                _rust_fmr, _rust_fmr32, chunk_csr.data, big_ctrl_csr.data)
+            m_flat, p_flat = _fmr(
+                _a_vals,
                 chunk_csr.indices.astype(np.int32, copy=False),
                 chunk_csr.indptr.astype(np.int32, copy=False),
                 n_chunk, n_features,
-                bc_data, bc_indices, bc_indptr, bc_n_cols,
+                _b_vals, bc_indices, bc_indptr, bc_n_cols,
                 query_scores[ri].ravel().astype(np.float64, copy=False),
-                n_sets, n_ctrl_set, n_chunk, max(1, max_workers), compute_pvalues,
+                n_sets, n_ctrl_set,
+                # The kernel's TILE, not the chunk. Passing n_chunk here made
+                # one tile, so one thread did all the work — see
+                # _kernel_tile_rows.
+                _kernel_tile_rows(n_chunk, max(1, max_workers)),
+                max(1, max_workers), compute_pvalues,
             )
             ctrl_means[ri] = m_flat.reshape(n_chunk, n_sets)
             if compute_pvalues and p_flat is not None:
@@ -1120,20 +1642,18 @@ def _score_streaming_multi(
     # Background-subtracted scores
     score_matrix = (query_scores / scaling_factors[None, :]) - (ctrl_means / scaling_factors[None, :])
 
-    # Truncate to true cell count if defensive over-allocation was used
-    if n_alloc > n_true_cells:
-        score_matrix = score_matrix[:n_true_cells]
-        if pval_matrix is not None:
-            pval_matrix = pval_matrix[:n_true_cells]
-
-    # If cell_mask was set, the output rows correspond to MASKED cells only.
-    # Filter to (n_masked, n_sets) so downstream multi-batch GDR can drop
-    # the per-batch scores into the correct slots.
-    if cell_mask is not None:
-        cell_mask_short = np.asarray(cell_mask).astype(bool)[:n_true_cells]
-        score_matrix = score_matrix[cell_mask_short]
-        if pval_matrix is not None:
-            pval_matrix = pval_matrix[cell_mask_short]
+    if _row_pos is None:
+        # Unmasked: truncate if the defensive over-allocation was used.
+        if n_alloc > n_true_cells:
+            score_matrix = score_matrix[:n_true_cells]
+            if pval_matrix is not None:
+                pval_matrix = pval_matrix[:n_true_cells]
+    else:
+        # Masked: the arrays were already allocated at the masked height and
+        # filled through _row_pos, so the rows are the masked cells in order.
+        # The old code allocated full height and sliced here; doing both would
+        # compact twice and silently return the wrong rows.
+        pass
 
     return score_matrix, gene_set_names, pval_matrix
 
@@ -1188,9 +1708,11 @@ def score(
     n_ctrl_set: int = 100,
     key_added: str = None,
     compute_pvalues: bool = False,
-    chunk_size: int = 10000,
+    fallback_chunk_size: int = 10000,
+    chunk_size: Optional[int] = None,   # deprecated alias for fallback_chunk_size
     max_workers: int = 1,
     use_rust: bool = True,
+    compute_on_fly: bool = True,
     precomputed_knn: np.ndarray = None,
     verbosity: int = 0,
     verbose: int = None,                       # deprecated alias for `verbosity` (matches runGDR/infog)
@@ -1198,6 +1720,9 @@ def score(
     modality: str = "RNA",
     batch_size: int = 1024,
     cell_mask=None,
+    score_chunk_size: Optional[int] = None,
+    max_score_chunk_bytes: int = 256 * 1024 ** 2,
+    max_score_batch_cache_bytes: int = 1024 * 1024 ** 2,
     pvalue_to: str = "both",                   # cytome single-set: 'cells' | 'metadata' | 'both'
     # ---- deprecated aliases (back-compat) ----
     adata=_UNSET,
@@ -1270,8 +1795,38 @@ def score(
         Compute Monte Carlo p-values in multi-set mode. Single-set mode
         always computes full p-values. Default is False.
 
+    fallback_chunk_size : int, default 10000
+        Rows per dense block in the **pure-Python** matmul fallback, which runs
+        only when the compiled extension is unavailable. It sizes an allocation
+        of ``(fallback_chunk_size, n_sets * n_ctrl_set)`` float64 — with 900
+        gene sets and ``n_ctrl_set=100`` the default is 7.3 GB, so lower it if
+        you are on the fallback with many gene sets. It has no effect on the
+        Rust path, whose unit of parallel work is derived from the row count and
+        thread count.
     chunk_size : int, optional
-        Cell chunk size for Python dense matmul fallback. Default is 10000.
+        Deprecated alias for ``fallback_chunk_size``. It used to mean two
+        things — this, and the Rust kernel's tile — and the tile is now derived.
+    score_chunk_size : int, optional
+        **Cytome only.** Rows handed to the scoring kernel per call. ``None``
+        (default) derives it from ``max_score_chunk_bytes``, the dataset's
+        nonzeros per cell and the number of gene sets. Note this also blocks the
+        first pass's per-feature sums, so changing it perturbs results in the
+        last bits (~1e-2 on a score of order 1) — it is not a free tuning knob.
+    max_score_chunk_bytes : int, default 256 MB
+        **Cytome only.** Memory budget behind ``score_chunk_size``. Bigger
+        chunks amortise the kernel's per-call setup; past a few thousand rows
+        the curve is flat, so there is little reason to raise this.
+    max_score_batch_cache_bytes : int, default 1 GB
+        **Cytome only.** Budget for holding a batch's chunks between the two
+        streaming passes, so the second pass does not re-read and re-decompress
+        rows the first pass just read (about 45% of pass 1). A batch needs
+        roughly ``n_cells * nnz_per_cell * 8`` bytes; batches that do not fit
+        simply stream twice, as before.
+
+        Sizing it: on a 200k-cell dataset with 35 batches of 384-13,105 cells,
+        the 512 MB default covers 30 of them and buys roughly 10 s per 100 MB
+        until every batch fits, then nothing. Raise it if your batches are large
+        and you have the memory; set it to 0 to disable caching entirely.
 
     max_workers : int, optional
         Thread count for Rust backend (1 = single-threaded). Default is 1.
@@ -1304,6 +1859,21 @@ def score(
     ...     compute_pvalues=True, max_workers=8
     ... )
     """
+    # `chunk_size` used to mean two things: the Rust kernel's tile AND the
+    # Python fallback's dense block. The tile is derived now
+    # (see _kernel_tile_rows), so only the second meaning is left, and the name
+    # says so. The old name still works.
+    if chunk_size is not None:
+        warnings.warn(
+            "score(chunk_size=...) is deprecated: it now only sizes the "
+            "pure-Python fallback's dense block, so it is named "
+            "fallback_chunk_size. The Rust kernel's tile is derived "
+            "automatically.",
+            DeprecationWarning, stacklevel=2,
+        )
+        fallback_chunk_size = int(chunk_size)
+    chunk_size = fallback_chunk_size
+
     adata = _resolve_data_arg(data, 'score', adata=adata)
     if gene_list is _UNSET:
         raise TypeError("score() missing required argument: 'gene_list'")
@@ -1333,11 +1903,15 @@ def score(
                 n_nearest_neighbors=n_nearest_neighbors, leaf_size=leaf_size,
                 modality=modality, layer=layer,
                 random_seed=random_seed, n_ctrl_set=n_ctrl_set,
-                compute_pvalues=compute_pvalues, chunk_size=chunk_size,
+                compute_pvalues=compute_pvalues,
                 max_workers=max_workers, use_rust=use_rust,
+                compute_on_fly=compute_on_fly,
                 precomputed_knn=precomputed_knn,
                 batch_size=batch_size, verbosity=verbosity,
                 cell_mask=cell_mask,
+                score_chunk_size=score_chunk_size,
+                max_score_chunk_bytes=max_score_chunk_bytes,
+                max_score_batch_cache_bytes=max_score_batch_cache_bytes,
             )
         else:
             # Single gene set via cytome: wrap in dict, call multi, unwrap
@@ -1348,11 +1922,15 @@ def score(
                 n_nearest_neighbors=n_nearest_neighbors, leaf_size=leaf_size,
                 modality=modality, layer=layer,
                 random_seed=random_seed, n_ctrl_set=n_ctrl_set,
-                compute_pvalues=compute_pvalues, chunk_size=chunk_size,
+                compute_pvalues=compute_pvalues,
                 max_workers=max_workers, use_rust=use_rust,
+                compute_on_fly=compute_on_fly,
                 precomputed_knn=precomputed_knn,
                 batch_size=batch_size, verbosity=verbosity,
                 cell_mask=cell_mask,
+                score_chunk_size=score_chunk_size,
+                max_score_chunk_bytes=max_score_chunk_bytes,
+                max_score_batch_cache_bytes=max_score_batch_cache_bytes,
             )
             score_val = sm[:, 0]
             pval = pm[:, 0] if pm is not None else None
@@ -1361,7 +1939,8 @@ def score(
                                     pvalue_to, cell_mask, verbosity)
             return score_val, _names, pval
 
-    np.random.seed(random_seed)
+    # No global seeding: the draws below use local RandomState instances, which
+    # reproduce the same stream without disturbing the caller.
 
     # cell_mask on AnnData: subset adata, then run the existing logic on the
     # subset. Output rows correspond to masked cells only — matches the
@@ -1391,20 +1970,32 @@ def score(
             f"'infog'), pass an existing layer, or pass layer=None to use adata.X.")
     cellxgene = adata.layers[layer] if layer is not None else adata.X
     n_cells, n_genes = cellxgene.shape
+    var_names_to_idx = {name: idx for idx, name in enumerate(adata.var_names)}
     if precomputed_knn is not None:
         knn_idx = precomputed_knn
     else:
-        knn_idx = _precompute_stats(cellxgene, n_nearest_neighbors, leaf_size)
-    var_names_to_idx = {name: idx for idx, name in enumerate(adata.var_names)}
+        # Resolved before the tree is queried, so only the rows control sampling
+        # will read get computed — same shortcut the cytome path takes.
+        knn_idx = _precompute_stats(
+            cellxgene, n_nearest_neighbors, leaf_size,
+            query_rows=_gene_set_query_rows(
+                _gene_list_feature_indices(gene_list, var_names_to_idx), n_genes),
+        )
 
     # --- Try Rust backend (multi-set only) ---
     _rust_fmr = None
+    _rust_fmr32 = None
     _rust_sc = None
     if use_rust and _multi:
         try:
             from piaso._piaso import fused_matmul_reduce, score_complete
             _rust_fmr = fused_matmul_reduce
             _rust_sc = score_complete
+            try:
+                from piaso._piaso import fused_matmul_reduce_f32
+                _rust_fmr32 = fused_matmul_reduce_f32
+            except ImportError:
+                _rust_fmr32 = None
         except ImportError:
             try:
                 from piaso._piaso import fused_matmul_reduce
@@ -1496,7 +2087,12 @@ def score(
                 np.array(gs_offsets, dtype=np.int32),
                 np.array(w_flat, dtype=np.float64),
                 np.array(w_offsets, dtype=np.int32),
-                n_ctrl_set, random_seed, chunk_size,
+                n_ctrl_set, random_seed,
+                # The kernel's TILE, not a memory chunk. `chunk_size` still
+                # means rows-per-dense-block in the Python fallback below, so
+                # this is fixed at the use site rather than by redefining the
+                # parameter.
+                _kernel_tile_rows(n_cells, max(1, max_workers)),
                 max(1, max_workers), compute_pvalues,
             )
             score_matrix = scores_flat.reshape(n_cells, n_sets)
@@ -1504,13 +2100,13 @@ def score(
             return score_matrix, gene_set_names, pval_matrix
 
         # --- Python fallback: build control blocks + matmul ---
-        all_ctrl_blocks = []
+        all_ctrl_rows, all_ctrl_cols, all_ctrl_data = [], [], []
         query_scores = np.zeros((n_cells, n_sets), dtype=np.float64)
         scaling_factors = np.zeros(n_sets, dtype=np.float64)
 
         for gs_idx in range(n_sets):
             # Reset seed per gene set for reproducibility
-            np.random.seed(random_seed)
+            _rs = np.random.RandomState(random_seed)  # thread-safe, same stream
 
             gene_idx = gene_sets_indices[gs_idx]
             weights = weights_list[gs_idx]
@@ -1521,45 +2117,60 @@ def score(
             # Sample control genes (vectorized)
             n_gs = len(gene_idx)
             n_neighbors = gs_knn_idx.shape[1]
-            rand_idx = np.random.randint(0, n_neighbors, size=(n_gs, n_ctrl_set))
+            rand_idx = _rs.randint(0, n_neighbors, size=(n_gs, n_ctrl_set))
             ctrl_sampled = gs_knn_idx[np.arange(n_gs)[:, None], rand_idx].T
 
-            # Build sparse block (vectorized)
-            rows_all = ctrl_sampled.ravel()
-            cols_all = np.repeat(np.arange(n_ctrl_set, dtype=np.int32), n_gs)
-            data_all = np.tile(weights, n_ctrl_set)
-            ctrl_block = sparse.csr_matrix(
-                (data_all, (rows_all, cols_all)),
-                shape=(n_genes, n_ctrl_set)
+            # One COO for all sets with a column offset per set — see the
+            # cytome path for why this is equivalent to n_sets blocks + hstack.
+            all_ctrl_rows.append(ctrl_sampled.ravel())
+            all_ctrl_cols.append(
+                np.repeat(np.arange(n_ctrl_set, dtype=np.int64), n_gs)
+                + gs_idx * n_ctrl_set
             )
-            all_ctrl_blocks.append(ctrl_block)
+            all_ctrl_data.append(np.tile(weights, n_ctrl_set))
 
-            # Query scores
-            subset = cellxgene[:, gene_idx]
-            query_scores[:, gs_idx] = np.ravel(subset.multiply(weights).sum(axis=1))
             scaling_factors[gs_idx] = np.median(weights) * n_gs
+
+        # Query scores for every gene set in one matmul rather than a
+        # column-subset per set inside the loop above — same change as the
+        # cytome path, same reason (see _gene_set_weight_matrix).
+        _W_query = _gene_set_weight_matrix(gene_sets_indices, weights_list, n_genes)
+        _q = cellxgene @ _W_query
+        query_scores[:] = _q.toarray() if sparse.issparse(_q) else np.asarray(_q)
+
+        _big_ctrl_coo = sparse.coo_matrix(
+            (
+                np.concatenate(all_ctrl_data),
+                (np.concatenate(all_ctrl_rows), np.concatenate(all_ctrl_cols)),
+            ),
+            shape=(n_genes, n_sets * n_ctrl_set),
+        )
 
         # Batched matrix multiply
         if _rust_fmr is not None:
-            big_ctrl_csr = sparse.hstack(all_ctrl_blocks, format='csr')
+            big_ctrl_csr = _big_ctrl_coo.tocsr()
             cellxgene_csr = cellxgene.tocsr() if not sparse.isspmatrix_csr(cellxgene) else cellxgene
-            means_flat, pval_flat = _rust_fmr(
-                cellxgene_csr.data.astype(np.float64, copy=False),
+            _fmr, _a_vals, _b_vals = _fused_matmul_reduce_dispatch(
+                _rust_fmr, _rust_fmr32, cellxgene_csr.data, big_ctrl_csr.data)
+            means_flat, pval_flat = _fmr(
+                _a_vals,
                 cellxgene_csr.indices.astype(np.int32, copy=False),
                 cellxgene_csr.indptr.astype(np.int32, copy=False),
                 n_cells, cellxgene_csr.shape[1],
-                big_ctrl_csr.data.astype(np.float64, copy=False),
+                _b_vals,
                 big_ctrl_csr.indices.astype(np.int32, copy=False),
                 big_ctrl_csr.indptr.astype(np.int32, copy=False),
                 big_ctrl_csr.shape[1],
                 query_scores.ravel().astype(np.float64, copy=False),
-                n_sets, n_ctrl_set, chunk_size, max(1, max_workers), compute_pvalues,
+                n_sets, n_ctrl_set,
+                _kernel_tile_rows(n_cells, max(1, max_workers)),
+                max(1, max_workers), compute_pvalues,
             )
             ctrl_means = means_flat.reshape(n_cells, n_sets)
             pval_matrix = pval_flat.reshape(n_cells, n_sets) if pval_flat is not None else None
         else:
             # Python fallback: chunked dense conversion
-            big_ctrl = sparse.hstack(all_ctrl_blocks, format='csc')
+            big_ctrl = _big_ctrl_coo.tocsc()
             ctrl_means = np.zeros((n_cells, n_sets), dtype=np.float64)
             pval_matrix = np.zeros((n_cells, n_sets), dtype=np.float64) if compute_pvalues else None
 
@@ -1624,7 +2235,8 @@ def score(
         # Vectorized control gene sampling
         n_genes_gs = len(gene_idx)
         n_neighbors = gene_list_knn_idx.shape[1]
-        rand_idx = np.random.randint(0, n_neighbors, size=(n_genes_gs, n_ctrl_set))
+        _rs_single = np.random.RandomState(random_seed)
+        rand_idx = _rs_single.randint(0, n_neighbors, size=(n_genes_gs, n_ctrl_set))
         ctrl_sampled = gene_list_knn_idx[np.arange(n_genes_gs)[:, None], rand_idx].T
 
         # Build sparse control weight matrix (vectorized)

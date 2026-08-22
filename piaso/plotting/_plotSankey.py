@@ -17,6 +17,7 @@ from functools import wraps
 
 from ..utils._cytome_compat import is_cytome_input as _is_cytome_input
 from ..utils._cytome_compat import read_cells_columns as _read_cells_columns
+from ._group_order import resolve_group_order
 
 
 def _get_category_pairs(data, left_col, right_col):
@@ -100,8 +101,8 @@ def sankey(
     df[left] = df[left].astype(str)
     df[right] = df[right].astype(str)
 
-    left_cats = sorted(df[left].unique())
-    right_cats = sorted(df[right].unique())
+    left_cats = resolve_group_order(df[left])
+    right_cats = resolve_group_order(df[right])
 
     ct = pd.crosstab(df[left], df[right])
     total = ct.values.sum()
@@ -214,7 +215,13 @@ def sankey(
             right_cursor[rc] += h_right
 
     ax.set_xlim(-0.3, 1.3)
-    ax.set_ylim(-0.05, 1.05 + gap * max(len(left_cats), len(right_cats)))
+    # `_compute_positions` fits the bars AND their gaps into [0, 1] --
+    # `available = 1 - total_gap` -- so the diagram already spans exactly one
+    # unit. The old limit added `gap * n_categories` on top of that, padding
+    # the axis for space the layout had already reserved; with 27 categories
+    # and gap=0.03 the top of the axis reached 1.86 and nearly half the figure
+    # came out blank. The padding has to be constant, not per-category.
+    ax.set_ylim(-0.05, 1.05)
     ax.set_axis_off()
 
     if title:

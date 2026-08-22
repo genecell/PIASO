@@ -28,6 +28,43 @@ import matplotlib.pyplot as plt
 # ---------------------------------------------------------------------------
 
 figdir: Path = Path('./')
+
+#: Session-level override for the PIASO data root (datasets, genomes, and the
+#: registry cache). Resolution order, most specific wins:
+#:   1. the ``data_dir=`` argument of ``fetch_dataset`` / ``load_dataset``
+#:   2. this setting
+#:   3. the ``PIASO_DATA_DIR`` environment variable
+#:   4. ``~/.piaso/data`` (the historical default)
+#: The dataset store and the genome store share this root, so the two cannot
+#: end up configured differently by accident.
+data_dir = None
+
+#: Numeric width for matrices, embeddings and graphs that PIASO **computes**
+#: and writes to a cytome: INFOG, TF-IDF, log1p, gene activity, SVD/GDR/UMAP
+#: embeddings, neighbour graphs.
+#:
+#: float32 because a normalised expression value is a ratio of int32 counts
+#: and carries nothing like 15 significant digits, and because floats do not
+#: compress: a float64 INFOG layer measured 6.52 GB against 1.34 GB of int32
+#: counts for the same matrix, half of that being width alone. scanpy makes
+#: the same choice (int counts through normalize_total + log1p come out
+#: float32); Seurat, SingleCellExperiment and ArchR are float64 only because
+#: R's Matrix package has no float32 sparse type.
+#:
+#: This governs what PIASO computes. It deliberately does NOT govern format
+#: conversion: `cytome.from_h5ad` preserves the source dtype, and narrowing
+#: someone's float64 matrix on import would turn a lossless conversion into a
+#: lossy one.
+#:
+#: Accumulators are a separate matter and stay float64. Storage width and
+#: summation precision are different decisions, and conflating them would
+#: undo the float64 fix to `_precompute_stats`.
+layer_dtype: str = 'float32'
+
+
+def _resolve_layer_dtype(dtype=None) -> str:
+    """Per-call override, else the package default."""
+    return str(layer_dtype if dtype is None else dtype)
 """Directory for saving figures. Used when ``save`` is a suffix string
 (e.g. ``'_leiden'``) or ``True``."""
 
