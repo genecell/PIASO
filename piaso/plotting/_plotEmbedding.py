@@ -528,6 +528,9 @@ def plot_embeddings_split(data,
                           x_max=None,
                           y_min=None,
                           y_max=None,
+                          image=False,
+                          img_key="hires",
+                          image_alpha=1.0,
                           **kwargs):
     """
     Plot cell embeddings side by side based on a categorical variable.
@@ -617,6 +620,18 @@ def plot_embeddings_split(data,
         and ``size`` (→ ``point_size``) for compatibility with existing
         call sites.
 
+    image : bool or str, default False
+        Draw the library's tissue image under the spots (``basis='spatial'``
+        workflows). ``True`` auto-selects when exactly one library has an
+        image (or the plotted cells span one) and raises naming the options
+        otherwise; a string selects that library. Sources: AnnData
+        ``uns['spatial']`` or a cytome's stored images (cytome ≥ 0.2.6). The
+        y-axis follows the image convention (top of the tissue at the top)
+        only when an image is drawn.
+    img_key : str, default 'hires'
+        Which image of the library to draw ('hires', 'lowres', ...).
+    image_alpha : float, default 1.0
+        Opacity of the tissue image.
     Returns
     -------
     None.
@@ -806,6 +821,50 @@ def plot_embeddings_split(data,
     _panel_point_size = (point_size if point_size is not None
                          else max(0.1, min(3, 22000 / coords.shape[0])))
 
+    # ---- optional tissue image per panel ----
+    # A panel gets an image only when its cells resolve to ONE library:
+    # per-panel when splitting by the library column, the single library
+    # otherwise. Panels that mix libraries draw no image (overlaying several
+    # tissues in one panel is not meaningful) — warned once, not fatal.
+    _spatial_store = {}
+    _lib_for_all = None
+    _warned_mixed = [False]
+    if image:
+        from ._spatial_image import _spatial_uns_from
+        _spatial_store = _spatial_uns_from(data)
+        if not _spatial_store:
+            import warnings as _w
+            _w.warn("image= requested but no spatial images found")
+            image = False
+        elif isinstance(image, str):
+            if image not in _spatial_store:
+                raise KeyError(f"library {image!r} has no stored image; "
+                               f"available: {sorted(_spatial_store)}")
+            _lib_for_all = image
+        elif len(_spatial_store) == 1:
+            _lib_for_all = next(iter(_spatial_store))
+
+    def _panel_image_ctx(panel_categories_value, mask):
+        if not image:
+            return None
+        from ._spatial_image import _resolve_spatial_image
+        lib = _lib_for_all
+        if lib is None:
+            # splitting by the library column itself?
+            if str(panel_categories_value) in _spatial_store:
+                lib = str(panel_categories_value)
+            else:
+                if not _warned_mixed[0]:
+                    import warnings as _w
+                    _w.warn(
+                        f"image=True with {len(_spatial_store)} libraries: "
+                        f"panels that do not correspond to a single library "
+                        f"are drawn without an image. Split by the library "
+                        f"column or pass image='<library_id>'.")
+                    _warned_mixed[0] = True
+                return None
+        return _resolve_spatial_image(data, lib, img_key)
+
     for i in range(len(axs)):
         if i >= len(variables):
             axs[i].set_visible(False)
@@ -836,6 +895,11 @@ def plot_embeddings_split(data,
         else:
             panel_title = f"{color} in\n{category}"
 
+        _img_ctx = _panel_image_ctx(category, mask)
+        if _img_ctx is not None:
+            from ._spatial_image import _draw_image_overlay
+            _draw_image_overlay(axs[i], _img_ctx, image_alpha)
+
         # Render natively from arrays — no proxy AnnData round-trip.
         _render_embedding(
             axs[i],
@@ -855,7 +919,11 @@ def plot_embeddings_split(data,
 
         # --- per-panel polish that plotEmbedding doesn't expose ---
         axs[i].set_xlim(xy_min[0] - xy_margin[0], xy_max[0] + xy_margin[0])
-        axs[i].set_ylim(xy_min[1] - xy_margin[1], xy_max[1] + xy_margin[1])
+        if _img_ctx is not None:
+            # image convention: y increases downward
+            axs[i].set_ylim(xy_max[1] + xy_margin[1], xy_min[1] - xy_margin[1])
+        else:
+            axs[i].set_ylim(xy_min[1] - xy_margin[1], xy_max[1] + xy_margin[1])
         if not fix_coordinate_ratio:
             axs[i].set_aspect('auto')
 
@@ -1470,11 +1538,37 @@ def plotEmbedding(
     wspace=None,
     groups=None,
     na_color="lightgray",
+    image=False,
+    img_key="hires",
+    image_alpha=1.0,
+    image_crop=True,
+    cell_mask=None,
     return_fig=False,
     **kwargs,
 ):
     """Plot a 2-D embedding colored by a cell annotation or continuous value.
 
+    cell_mask : array-like, optional
+        Plot only these cells: a boolean mask of length ``n_cells`` or
+        integer indices. Applied after the coordinates and colour values are
+        resolved, so both stay aligned — pairs with a cytome's
+        ``cells_in_region(x=, y=)`` for ROI views without writing a subset
+        file.
+    image : bool or str, default False
+        Draw the library's tissue image under the spots (``basis='spatial'``
+        workflows). ``True`` auto-selects when exactly one library has an
+        image (or the plotted cells span one) and raises naming the options
+        otherwise; a string selects that library. Sources: AnnData
+        ``uns['spatial']`` or a cytome's stored images (cytome ≥ 0.2.6). The
+        y-axis follows the image convention (top of the tissue at the top)
+        only when an image is drawn.
+    img_key : str, default 'hires'
+        Which image of the library to draw ('hires', 'lowres', ...).
+    image_alpha : float, default 1.0
+        Opacity of the tissue image.
+    image_crop : bool, default True
+        With an image, crop to the plotted cells' bounding box padded by one
+        spot diameter instead of showing the whole slide.
     Returns ``None`` by default — pass ``return_fig=True`` to get
     ``(fig, ax)`` back.
 
@@ -1767,6 +1861,27 @@ def plotEmbedding(
         compute_on_fly=compute_on_fly, use_cached_stats=use_cached_stats,
     )
 
+    # Plot a subset without writing a subset file: a boolean mask (length
+    # n_cells) or integer indices, applied after the coordinates and colour
+    # values are resolved so both stay aligned. Pairs with a cytome's
+    # ``cells_in_region`` for ROI views.
+    if cell_mask is not None:
+        _m = np.asarray(cell_mask)
+        if _m.dtype == bool:
+            if _m.shape[0] != coords.shape[0]:
+                raise ValueError(
+                    f"cell_mask has length {_m.shape[0]} but the embedding has "
+                    f"{coords.shape[0]} cells")
+            _sel = np.where(_m)[0]
+        else:
+            _sel = _m.astype(np.int64)
+        if _sel.size == 0:
+            raise ValueError("cell_mask selects no cells")
+        coords = coords[_sel]
+        if values is not None:
+            values = np.asarray(values)[_sel]
+
+
     # Robust color limits for continuous features: when vmin/vmax are not set
     # explicitly, derive them from percentiles of the values (0-100 scale, like
     # numpy). vmax_pct=99 clips the top 1% of outliers so the colour scale isn't
@@ -1788,6 +1903,18 @@ def plotEmbedding(
         fig, ax = plt.subplots(1, 1, figsize=figsize, dpi=dpi)
     else:
         fig = ax.figure
+
+    # Tissue image under the scatter (basis='spatial' workflows). The image
+    # is drawn in full-resolution coordinate units with y increasing downward
+    # (see _spatial_image), so the scatter needs no changes; only the axis
+    # orientation follows the image.
+    _img_ctx = None
+    if image:
+        from ._spatial_image import (_draw_image_overlay, _image_axis_limits,
+                                     _resolve_spatial_image)
+        _img_ctx = _resolve_spatial_image(data, image, img_key)
+        if _img_ctx is not None:
+            _draw_image_overlay(ax, _img_ctx, image_alpha)
 
     # Resolve the categorical palette + display order from the cytome
     # ``set_categories`` store (or AnnData categorical dtype + uns) before
@@ -1826,6 +1953,16 @@ def plotEmbedding(
         ax.tick_params(labelbottom=False, labelleft=False, length=0)
     ax.set_xlabel("")
     ax.set_ylabel("")
+    if _img_ctx is not None and image_crop and x_min is None and x_max is None \
+            and y_min is None and y_max is None:
+        from ._spatial_image import _image_axis_limits
+        _image_axis_limits(ax, coords, _img_ctx)
+    elif _img_ctx is not None:
+        # explicit limits: still honour the image's top-down orientation
+        lo, hi = ax.get_ylim()
+        if lo < hi:
+            ax.set_ylim(hi, lo)
+
     # --- Custom axis limits (x_min/x_max/y_min/y_max) ---
     if x_min is not None or x_max is not None:
         cur = ax.get_xlim()

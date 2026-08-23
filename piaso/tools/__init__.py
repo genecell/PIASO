@@ -67,18 +67,16 @@ except ImportError:      # pragma: no cover - the public-package path
 # GRN inference moved to the CytoRete package (pip install cytorete); lazy shims.
 from .._grn_shim import inferTFActivity, inferGRN
 
+# Released: the RNA trans leg and the specificity matrix (cytorete's regulon
+# assembly sits on them). The genomic map/genome-wide machinery stays held.
+from ._cospecificity_core import (  # noqa: F401
+    cospecificity_trans,
+    _specificity_matrix as specificity_matrix,
+)
 try:
-    from ._cospecificity import cospecificity_map, cospecificity_genome_wide, cospecificity_trans
-except ImportError:      # pragma: no cover - public-package path
-    from .._internal_shim import forward_many as _forward_many
-    globals().update(_forward_many("piaso.tools._cospecificity", ['cospecificity_map', 'cospecificity_genome_wide', 'cospecificity_trans'], "tl"))
-# Public co-specificity / feature-specificity primitives (used by the CytoRete
-# GRN package; promoted from private on the CytoRete extraction).
-try:
-    from ._cospecificity import _specificity_matrix as specificity_matrix
-except ImportError:      # pragma: no cover - public-package path
-    from .._internal_shim import forward_many as _forward_many
-    globals().update(_forward_many("piaso.tools._cospecificity", ['_specificity_matrix'], "tl"))
+    from ._cospecificity import cospecificity_map, cospecificity_genome_wide
+except ImportError:
+    globals().update(_forward_many("piaso.tools._cospecificity", ['cospecificity_map', 'cospecificity_genome_wide'], "tl"))
 try:
     from ._inferGeneActivity import _infer_gene_specificity as infer_feature_specificity
 except ImportError:      # pragma: no cover - public-package path

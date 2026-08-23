@@ -298,6 +298,52 @@ def smoothCellTypePrediction(
     ...     key_added='CellTypes_pred_smoothed'
     ... )
     """
+    # ---------------- cytome (Dataset or path): label + embedding proxy ----
+    # KNN smoothing touches ONE obs column and ONE embedding — never the
+    # matrix — so the cytome path reads exactly those two arrays, runs the
+    # same logic, and writes the smoothed column(s) back into ds.cells.
+    from ..utils._cytome_compat import _is_cytome_dataset_obj as _is_cy
+    if isinstance(adata, str) or _is_cy(adata):
+        if not inplace:
+            raise ValueError(
+                "inplace=False is AnnData-only: a cytome is a file and the "
+                "smoothed labels are written into it (ds.cells).")
+        from ..utils._cytome_compat import open_cytome_sync as _open_cy
+        from ..plotting._plotEmbedding import _resolve_cytome_basis
+        import anndata as _ad
+        import scipy.sparse as _sp
+
+        def _run(ds):
+            if groupby not in ds.cells:
+                raise ValueError(f"Group key '{groupby}' not found in ds.cells")
+            emb = np.asarray(ds.embeddings[_resolve_cytome_basis(ds, use_rep)])
+            proxy = _ad.AnnData(X=_sp.csr_matrix((emb.shape[0], 1),
+                                                 dtype=np.float32))
+            proxy.obs[groupby] = pd.Categorical(np.asarray(ds.cells[groupby]))
+            proxy.obsm[use_rep] = emb
+            smoothCellTypePrediction(
+                proxy, groupby=groupby, use_rep=use_rep,
+                k_nearest_neighbors=k_nearest_neighbors,
+                return_confidence=return_confidence, inplace=True,
+                key_added=key_added, use_faiss=use_faiss,
+                use_existing_adjacency_graph=False,
+                verbosity=verbosity, n_jobs=n_jobs)
+            _key = key_added if key_added is not None else f"{groupby}_smoothed"
+            ds.cells[_key] = np.asarray(proxy.obs[_key])
+            if return_confidence:
+                # mirror the AnnData body's naming exactly
+                _ck = (f"{key_added}_confidence" if key_added is not None
+                       else f"{_key}_confidence")
+                ds.cells[_ck] = np.asarray(proxy.obs[_ck], dtype=float)
+            ds.flush()
+
+        if isinstance(adata, str):
+            with _open_cy(adata) as ds:
+                _run(ds)
+        else:
+            _run(adata)
+        return None
+
     # Input validation
     if groupby not in adata.obs:
         raise ValueError(f"Group key '{groupby}' not found in adata.obs")

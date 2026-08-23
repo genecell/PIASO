@@ -1276,6 +1276,12 @@ def calculateScoreParallel_multiBatch(
     >>> print(score_list)
     >>> print(cellbarcode_info)
     """
+    from ..utils._cytome_compat import _is_cytome_dataset_obj as _is_cy
+    if isinstance(adata, str) or _is_cy(adata):
+        raise TypeError(
+            "calculateScoreParallel_multiBatch() is the AnnData shared-memory path; for a cytome, call "
+            "piaso.tl.runGDR(ds, ...), which streams per batch without "
+            "loading the matrix.")
 
     batch_order_map = {batch: i for i, batch in enumerate(np.unique(adata.obs[batch_key]))}
     batch_list = list(batch_order_map.keys())
@@ -1676,6 +1682,12 @@ def runCOSGParallel(
     ... )
     >>> print(marker_genes.head())
     """
+    from ..utils._cytome_compat import _is_cytome_dataset_obj as _is_cy
+    if isinstance(adata, str) or _is_cy(adata):
+        raise TypeError(
+            "runCOSGParallel() is the AnnData shared-memory path; for a cytome, call "
+            "piaso.tl.runGDR(ds, ...), which streams per batch without "
+            "loading the matrix.")
     # Generate batch list
     batch_list = np.unique(adata.obs[batch_key])
 
