@@ -548,10 +548,23 @@ def _get_infog_chunk_iterator(source, batch_size, layer=None, modality="RNA",
             (matrix_name,),
         ).fetchone()
         if row is None:
+            _present = [r[0] for r in _ds._conn.execute(
+                'SELECT matrix_name FROM matrix_meta').fetchall()]
+            _hint = ""
+            if _layer == "counts" and f"{_modality}_data" in _present:
+                # cytome >= 0.3.0 refuses to name a non-integer matrix
+                # `counts`, so its absence here is deliberate and informative
+                _hint = (
+                    f"\n{_modality}_data is present, which is how cytome >= 0.3.0 "
+                    f"stores an adata.X that was not integer counts. INFOG "
+                    f"models count dispersion, so it needs the raw counts: "
+                    f"re-convert with counts_layer= pointing at the layer that "
+                    f"holds them. If this matrix really is what you want to "
+                    f"normalise, pass layer='data' and read the result with "
+                    f"that in mind.")
             raise ValueError(
                 f"piaso.tl.infog: matrix {matrix_name!r} not found in cytome. "
-                f"Available matrices: "
-                f"{[r[0] for r in _ds._conn.execute('SELECT matrix_name FROM matrix_meta').fetchall()]}"
+                f"Available matrices: {_present}{_hint}"
             )
         return int(row[0])
 
@@ -1858,7 +1871,22 @@ def score(
     ...     adata, {'SetA': ['Gene1', 'Gene2'], 'SetB': ['Gene3', 'Gene4']},
     ...     compute_pvalues=True, max_workers=8
     ... )
-    """
+    
+
+    Notes
+    -----
+    The matched-control-set design and the empirical-null p-value follow
+    scDRS (Zhang et al., Nature Genetics 54, 1572-1580, 2022); the idea is
+    shared in spirit with AUCell and Vision. What differs here is the
+    evaluation: all gene sets and all of their control sets are packed into
+    one sparse weight matrix and computed as a single matrix multiplication
+    per chunk, rather than looping and column-subsetting once per set. The
+    loop is O(nnz) per set and grows linearly in the number of controls; the
+    matmul is essentially flat (measured 1.95/6.45/24.41 s versus
+    0.55/0.62/0.78 s at 20/80/320 sets). The multiplication runs in a Rust
+    kernel over streamed chunks, so the same path serves an in-memory AnnData
+    and a cytome larger than RAM.
+"""
     # `chunk_size` used to mean two things: the Rust kernel's tile AND the
     # Python fallback's dense block. The tile is derived now
     # (see _kernel_tile_rows), so only the second meaning is left, and the name

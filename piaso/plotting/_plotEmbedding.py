@@ -161,9 +161,23 @@ def _resolve_cytome_basis(ds, basis):
     if basis in emb_names:
         return basis
     keyword = basis.lower().replace("x_", "")
+    # Rank candidates instead of taking the last substring hit. Plain
+    # `in` made basis='spatial' resolve to 'spatial_aligned' as soon as an
+    # aligned copy existed -- so adding an embedding silently changed what an
+    # existing call meant. Prefer the name that IS the key (possibly behind a
+    # modality prefix) over one that merely contains it.
+    def _rank(name):
+        low = name.lower()
+        stem = low.split("_", 1)[1] if "_" in low else low
+        if low == keyword or stem == keyword:
+            return 0                       # 'spatial' / 'RNA_spatial'
+        if low.endswith("_" + keyword):
+            return 1                       # 'RNA_obsm_spatial'
+        return 2                           # 'spatial_aligned', 'spatial_chip'
     matches = [n for n in emb_names if keyword in n.lower()]
     if matches:
-        return matches[-1]
+        matches.sort(key=lambda n: (_rank(n), len(n)))
+        return matches[0]
     raise KeyError(f"Embedding '{basis}' not found. Available: {emb_names}")
 
 
@@ -223,9 +237,23 @@ def _resolve_categorical_style(data, color, user_palette=None):
     Returns ``(palette, category_order)`` where ``palette`` is a dict
     ``{cat: hex}``, a list, or None, and ``category_order`` is a list or None.
     The shared renderer applies both.
+
+    ``user_palette`` may also be the NAME of a matplotlib colormap, which is
+    sampled evenly across the categories in their resolved order -- useful
+    when the categories are ordered (ages, timepoints) and a sequential ramp
+    carries that order.
     """
     palette = user_palette
     category_order = None
+    # A colormap NAME is a reasonable thing to pass for an ORDERED categorical
+    # -- ages, timepoints, stages -- where the categories have a direction and
+    # a sequential ramp says so. It used to be accepted and silently ignored,
+    # which is worse than refusing it. Expanded to one colour per category
+    # after the order is known, below.
+    _cmap_palette = None
+    if isinstance(palette, str):
+        _cmap_palette = palette
+        palette = None
     try:
         if _is_cytome_input(data):
             with _open_cytome(data) as ds:
@@ -251,7 +279,25 @@ def _resolve_categorical_style(data, color, user_palette=None):
                     palette = list(data.uns[key])
     except Exception:
         # Styling is best-effort: never let a metadata read break plotting.
-        return user_palette, None
+        return (None if isinstance(user_palette, str) else user_palette), None
+
+    if _cmap_palette is not None:
+        # Sample the colormap once per category, in the resolved order, so the
+        # ramp runs along the categories rather than along whatever order the
+        # renderer happens to see.
+        try:
+            import matplotlib as _mpl
+            cats = category_order
+            if cats is None:
+                vals = (data.cells[color] if _is_cytome_input(data)
+                        else data.obs[color])
+                cats = sorted({str(v) for v in np.asarray(vals)})
+            cm = _mpl.colormaps.get_cmap(_cmap_palette)
+            n = max(len(cats), 1)
+            palette = {str(c): _mpl.colors.to_hex(cm(i / max(n - 1, 1)))
+                       for i, c in enumerate(cats)}
+        except Exception:
+            palette = None          # unknown colormap: fall back to the default
     return palette, category_order
 
 
@@ -502,6 +548,8 @@ def plot_embeddings_split(data,
                           alpha:float=1.0,
                           vmax:float=None,
                           vmin:float=None,
+                          vmin_pct:float=None,
+                          vmax_pct:float=None,
                           show_figure:bool=True,
                           save:bool=None,
                           layer:str=None,
@@ -712,7 +760,25 @@ def plot_embeddings_split(data,
         }
 
     # --- 2. Resolve splitby categories ---
-    if isinstance(splitby_series.dtype, pd.CategoricalDtype):
+    # A cytome column arrives as plain objects, so an ordering stored with
+    # ``ds.set_categories`` would otherwise be lost and the panels fall back to
+    # alphabetical -- which puts E10.5 before E9.5 and reads as a bug.
+    _stored_order = None
+    if _is_cytome_input(data):
+        try:
+            with _open_cytome(data) as _ds:
+                _cats = _ds.get_categories(splitby)
+                if isinstance(_cats, dict):        # {'order': [...], ...}
+                    _cats = _cats.get("order")
+                _stored_order = list(_cats) if _cats else None
+        except Exception:
+            _stored_order = None
+    if _stored_order:
+        present = set(pd.unique(splitby_series.values))
+        variables = [c for c in _stored_order if c in present]
+        variables += [c for c in pd.unique(splitby_series.values)
+                      if c not in set(_stored_order) and not pd.isnull(c)]
+    elif isinstance(splitby_series.dtype, pd.CategoricalDtype):
         variables = list(splitby_series.cat.categories)
     elif pd.api.types.is_float_dtype(splitby_series):
         raise ValueError(
@@ -768,6 +834,17 @@ def plot_embeddings_split(data,
     expr_min, expr_max = None, None
     if is_numeric:
         try:
+            # Percentile limits, matching plotEmbedding. These were reaching
+            # this function through **kwargs and being silently dropped, so a
+            # caller asking for 10/90 got the full range and no error --
+            # exactly the shape of bug that survives review, because the plot
+            # still renders and only the contrast is wrong.
+            _fcd = np.asarray(full_color_data, dtype=float)
+            _fcd = _fcd[np.isfinite(_fcd)]
+            if vmax is None and vmax_pct is not None and _fcd.size:
+                vmax = float(np.percentile(_fcd, vmax_pct))
+            if vmin is None and vmin_pct is not None and _fcd.size:
+                vmin = float(np.percentile(_fcd, vmin_pct))
             expr_max = vmax if vmax is not None else float(np.nanmax(full_color_data))
             expr_min = vmin if vmin is not None else float(np.nanmin(full_color_data))
         except (ValueError, TypeError):
@@ -924,8 +1001,11 @@ def plot_embeddings_split(data,
             axs[i].set_ylim(xy_max[1] + xy_margin[1], xy_min[1] - xy_margin[1])
         else:
             axs[i].set_ylim(xy_min[1] - xy_margin[1], xy_max[1] + xy_margin[1])
-        if not fix_coordinate_ratio:
-            axs[i].set_aspect('auto')
+        # Both branches must act. Only the False branch did, so the documented
+        # default (True) left matplotlib's 'auto' in place and every panel was
+        # stretched to its subplot box -- which on spatial coordinates makes
+        # the tissue look squashed.
+        axs[i].set_aspect('equal' if fix_coordinate_ratio else 'auto')
 
     # --- 8. Global legend coalesces labels from all panels ---
     if not is_numeric and legend_loc in ('right', 'both'):
@@ -1053,7 +1133,7 @@ def _get_embedding_and_color(
             # (Was `np.floating`, which mis-flagged INTEGER metrics like
             # n_fragments / n_counts as categorical.)
             is_cat = not np.issubdtype(values.dtype, np.number)
-            return coords, values, is_cat, None
+            return coords, values, is_cat, None, True
         # color is not an obs column — resolve via the modality registry.
         with _open_cytome(data) as ds:
             values, resolved = _resolve_cytome_feature_values(
@@ -1062,7 +1142,7 @@ def _get_embedding_and_color(
                 compute_on_fly=compute_on_fly,
                 use_cached_stats=use_cached_stats,
             )
-        return coords, values, False, resolved
+        return coords, values, False, resolved, False
 
     # AnnData path
     coords = np.asarray(data.obsm[basis])
@@ -1073,7 +1153,8 @@ def _get_embedding_and_color(
     else:
         values = np.asarray(data.obs_vector(color, layer=layer))
         is_cat = False
-    return coords, values, is_cat, None
+        return coords, values, is_cat, None, False
+    return coords, values, is_cat, None, True
 
 
 # --------------------------------------------------------------------------
@@ -1316,9 +1397,31 @@ def _resolve_cytome_feature_values(
 
     counts_name = f"{resolved_modality}_counts"
     if ds.matrix_meta(counts_name) is None:
+        # cytome >= 0.3.0 only writes `{modality}_counts` for raw integer
+        # counts, so a file converted from normalised data has none. For
+        # PLOTTING that is not fatal -- the values the user wants to see are in
+        # the matrix that was adata.X. Use it, and say so. (Analysis functions
+        # that genuinely need counts, INFOG above all, still refuse.)
+        _main = f"{resolved_modality}_data"
+        if ds.matrix_meta(_main) is not None:
+            import warnings
+            warnings.warn(
+                f"'{counts_name}' is absent -- cytome >= 0.3.0 reserves that "
+                f"name for raw integer counts. Reading '{_main}', the matrix "
+                f"that was adata.X, as given. Pass cytome_layer='data' to "
+                f"silence this, or re-convert with counts_layer= if you meant "
+                f"to normalise from counts.",
+                UserWarning, stacklevel=3,
+            )
+            return (_read_feature_column(
+                ds, resolved_modality, "data", feat_idx, batch_size),
+                resolved_modality)
+        _present = [r[0] for r in ds._conn.execute(
+            "SELECT matrix_name FROM matrix_meta").fetchall()]
         raise ValueError(
             f"Cannot compute '{cytome_layer}' on-the-fly: required source "
-            f"matrix '{counts_name}' is missing from the cytome."
+            f"matrix '{counts_name}' is missing from the cytome. "
+            f"Available: {_present}."
         )
 
     # Read the per-feature counts column once.
@@ -1855,7 +1958,7 @@ def plotEmbedding(
                 return fig, axs_flat
             return None
 
-    coords, values, is_cat, resolved_modality = _get_embedding_and_color(
+    coords, values, is_cat, resolved_modality, _from_obs = _get_embedding_and_color(
         data, basis, color, layer=layer,
         modality=modality, cytome_layer=cytome_layer,
         compute_on_fly=compute_on_fly, use_cached_stats=use_cached_stats,
@@ -1916,12 +2019,29 @@ def plotEmbedding(
         if _img_ctx is not None:
             _draw_image_overlay(ax, _img_ctx, image_alpha)
 
+    # Continuous colour map depends on WHERE the values came from, because the
+    # two cases are read differently. A gene/peak value is an expression level:
+    # sequential, zero is meaningful, and ``c_color1`` puts the eye on the high
+    # end. A numeric cell-metadata column -- a regulon score, a stage index, a
+    # QC metric -- is a quantity spread across cells with no privileged zero,
+    # and reads better on a diverging map. Explicit ``cmap=`` always wins.
+    if cmap is None and not is_cat and _from_obs:
+        cmap = "Spectral_r"
+
     # Resolve the categorical palette + display order from the cytome
     # ``set_categories`` store (or AnnData categorical dtype + uns) before
     # delegating to the shared array-based renderer (no proxy AnnData needed).
     category_order = None
     if is_cat:
         palette, category_order = _resolve_categorical_style(data, color, palette)
+    # Continuous colour maps default by SOURCE, not by dtype: a feature
+    # (gene, peak, gene-activity) keeps PIASO's sequential `color_1`, while a
+    # numeric CELL column -- regulon activity, a QC metric, pseudotime -- gets
+    # `Spectral_r`. Both are continuous, but they answer different questions,
+    # and using one ramp for both makes a metadata panel read as expression.
+    _cmap = cmap
+    if _cmap is None and not is_cat:
+        _cmap = "Spectral_r" if _from_obs else _color_mod.c_color1
     _render_embedding(
         ax, coords, values, is_cat, color=color, palette=palette,
         category_order=category_order,
@@ -1929,7 +2049,7 @@ def plotEmbedding(
         groups=groups, na_color=na_color, legend_loc=legend_loc,
         legend_ncol=legend_ncol, legend_marker_size=legend_marker_size,
         legend_fontsize=legend_fontsize, legend_fontoutline=legend_fontoutline,
-        cmap=cmap, vmin=vmin, vmax=vmax,
+        cmap=_cmap, vmin=vmin, vmax=vmax,
     )
 
     # --- frameon ---

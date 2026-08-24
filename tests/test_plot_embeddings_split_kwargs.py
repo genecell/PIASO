@@ -257,3 +257,84 @@ def test_cytome_input_works_end_to_end(tmp_path):
     assert panels, "Cytome split plot produced no panels"
     plt.close('all')
     ds.close()
+
+
+def test_fix_coordinate_ratio_default_actually_applies():
+    """The documented default is True, and True must mean equal aspect.
+
+    The False branch was the only one that acted, so panels kept matplotlib's
+    'auto' and spatial tissue rendered squashed to the subplot box.
+    """
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    import numpy as np
+    import piaso
+
+    a = _adata() if "_adata" in globals() else None
+    if a is None:
+        import anndata as ad, pandas as pd, scipy.sparse as sp
+        rs = np.random.RandomState(0)
+        a = ad.AnnData(X=sp.csr_matrix(rs.poisson(1., (60, 5)).astype(np.float32)))
+        a.obs["grp"] = pd.Categorical(["a", "b"] * 30)
+        a.obsm["X_umap"] = rs.rand(60, 2)
+
+    piaso.pl.plot_embeddings_split(a, color="grp", splitby="grp",
+                                   basis="X_umap", show_figure=False)
+    panels = [ax for ax in plt.gcf().axes if ax.has_data()]
+    assert panels
+    for ax in panels:
+        assert ax.get_aspect() == 1.0, ax.get_aspect()
+    plt.close("all")
+
+    piaso.pl.plot_embeddings_split(a, color="grp", splitby="grp",
+                                   basis="X_umap", fix_coordinate_ratio=False,
+                                   show_figure=False)
+    panels = [ax for ax in plt.gcf().axes if ax.has_data()]
+    for ax in panels:
+        assert ax.get_aspect() == "auto"
+    plt.close("all")
+
+
+def test_vmin_pct_vmax_pct_are_applied_not_swallowed():
+    """`vmin_pct`/`vmax_pct` reached this function through **kwargs and were
+    dropped, so a caller asking for 10/90 silently got the full range.
+
+    Nothing raised and the figure still rendered -- only the contrast was
+    wrong, which is why it survived a visual review of the tutorial.
+    """
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    import numpy as np
+    import anndata as ad
+    import pandas as pd
+    import scipy.sparse as sp
+    import piaso
+
+    rs = np.random.RandomState(0)
+    n = 300
+    a = ad.AnnData(X=sp.csr_matrix(rs.poisson(1., (n, 5)).astype(np.float32)))
+    a.obs["grp"] = pd.Categorical(["a", "b"] * (n // 2))
+    v = rs.normal(size=n)
+    v[:5] = 50.0                       # a few extremes that own the range
+    a.obs["metric"] = v
+    a.obsm["X_umap"] = rs.rand(n, 2)
+
+    def limits(**kw):
+        piaso.pl.plot_embeddings_split(a, color="metric", splitby="grp",
+                                       basis="X_umap", show_figure=False, **kw)
+        sc = [c for ax in plt.gcf().axes for c in ax.collections
+              if c.get_array() is not None][0]
+        lo, hi = sc.get_clim()
+        plt.close("all")
+        return lo, hi
+
+    full_lo, full_hi = limits()
+    clip_lo, clip_hi = limits(vmin_pct=10, vmax_pct=90)
+    assert clip_hi < full_hi - 1, (clip_hi, full_hi)     # extremes excluded
+    assert clip_lo > full_lo - 1e-9
+    assert np.isclose(clip_hi, np.percentile(v, 90), rtol=1e-6)
+
+    explicit_lo, explicit_hi = limits(vmin=-1.0, vmax=2.0)
+    assert (explicit_lo, explicit_hi) == (-1.0, 2.0)      # explicit still wins

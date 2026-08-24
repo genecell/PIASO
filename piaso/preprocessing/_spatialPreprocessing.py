@@ -142,3 +142,143 @@ def rotateSpatialCoordinates(
           f"{'clockwise' if clockwise else 'counter-clockwise'}.")
 
     return None if inplace else adata_to_modify
+
+
+rotate_spatial_coordinates = rotateSpatialCoordinates
+
+
+def _center_per_group(coords, groups, with_std=False):
+    """Centre each group's coordinates on its own centroid.
+
+    Pure geometry, shared by both backends. ``with_std=True`` also divides by
+    the per-group standard deviation, which makes sections of different
+    physical size comparable at the cost of no longer preserving scale.
+    """
+    coords = np.asarray(coords, dtype=np.float64)
+    groups = np.asarray(groups).astype(str)
+    out = coords.copy()
+    for g in np.unique(groups):
+        m = groups == g
+        block = coords[m, :2]
+        out[m, :2] = block - block.mean(axis=0)
+        if with_std:
+            sd = block.std(axis=0)
+            sd[sd == 0] = 1.0
+            out[m, :2] = out[m, :2] / sd
+    return out
+
+
+def alignSpatialCoordinates(
+    data,
+    groupby: Optional[str] = None,
+    spatial_key: str = "spatial",
+    key_added: str = "spatial_aligned",
+    backup_spatial_key: Optional[str] = None,
+    with_std: bool = False,
+    inplace: bool = True,
+    copy: bool = False,
+    batch_key: Optional[str] = None,
+):
+    """Put every sample's spatial coordinates in a common frame.
+
+    Sections are placed on their chips independently, so two samples can sit
+    hundreds of microns apart in raw coordinates. Nothing is wrong with the
+    data, but a split plot then renders each panel at a different offset and
+    the tissues look displaced relative to one another. Centring each group on
+    its own centroid fixes the display without touching within-sample geometry.
+
+    The default is centring only (subtract the mean). ``with_std=True`` also
+    divides by the per-group standard deviation, which equalises apparent
+    section size — useful when samples differ a lot in extent, wrong when the
+    relative sizes are part of what you are showing.
+
+    Parameters
+    ----------
+    data
+        AnnData, an open cytome dataset, or a path to a ``.cytome`` file.
+    groupby
+        Column naming the sample/section each cell belongs to
+        (``adata.obs`` or ``ds.cells``).
+    spatial_key
+        Source coordinates. For AnnData an ``obsm`` key (``'spatial'`` and
+        ``'X_spatial'`` both accepted); for a cytome a short embedding name
+        resolved the same way ``basis=`` is in plotting.
+    key_added
+        Where the aligned coordinates are written.
+    backup_spatial_key
+        If given, the *original* coordinates are copied here first, so the
+        un-aligned frame stays available.
+    with_std
+        Also scale each group to unit standard deviation.
+    inplace
+        AnnData only; ``False`` returns a modified copy. A cytome is always
+        written in place.
+    copy
+        AnnData only; alias for ``not inplace``.
+
+    Returns
+    -------
+    The modified AnnData when ``inplace=False``/``copy=True``, else ``None``.
+
+    Examples
+    --------
+    >>> piaso.pp.alignSpatialCoordinates(adata, groupby="Sample")
+    >>> piaso.pl.plot_embeddings_split(adata, color="cell_type",
+    ...                                splitby="Sample",
+    ...                                basis="spatial_aligned")
+    """
+    # `batch_key` and `groupby` name the same column here. GDR calls it a batch,
+    # plotting calls it a group, and a reader coming from either should not
+    # have to look it up.
+    if groupby is None:
+        groupby = batch_key
+    if groupby is None:
+        raise TypeError(
+            "alignSpatialCoordinates needs the column naming each sample: "
+            "pass groupby= (or batch_key=, same thing).")
+    if batch_key is not None and batch_key != groupby:
+        raise ValueError(
+            f"groupby={groupby!r} and batch_key={batch_key!r} disagree; "
+            "they name the same column, so pass only one.")
+
+    if isinstance(data, anndata.AnnData):
+        adata = data.copy() if (copy or not inplace) else data
+        key = spatial_key if spatial_key in adata.obsm else f"X_{spatial_key}"
+        if key not in adata.obsm:
+            raise KeyError(
+                f"'{spatial_key}' not in adata.obsm; available: "
+                f"{list(adata.obsm)}")
+        if groupby not in adata.obs.columns:
+            raise KeyError(f"'{groupby}' not in adata.obs")
+        coords = np.asarray(adata.obsm[key], dtype=np.float64)
+        if backup_spatial_key:
+            adata.obsm[backup_spatial_key] = coords.copy()
+        adata.obsm[key_added] = _center_per_group(
+            coords, adata.obs[groupby].values, with_std=with_std)
+        return adata if (copy or not inplace) else None
+
+    # cytome (open dataset or path)
+    from ._spatial_cytome_io import _resolve_and_open
+    ds, opened = _resolve_and_open(data)
+    try:
+        if not inplace:
+            raise ValueError(
+                "alignSpatialCoordinates writes to the cytome in place; "
+                "inplace=False is not supported for a cytome input.")
+        from ..plotting._plotEmbedding import _resolve_cytome_basis
+        emb_name = _resolve_cytome_basis(ds, spatial_key)
+        coords = np.asarray(ds.embeddings[emb_name], dtype=np.float64)
+        groups = np.asarray(ds.cells[groupby]).astype(str)
+        if backup_spatial_key:
+            ds.add_embedding(backup_spatial_key, coords.astype(np.float32))
+        aligned = _center_per_group(coords, groups, with_std=with_std)
+        ds.add_embedding(key_added, aligned.astype(np.float32))
+        ds.flush()
+        return None
+    finally:
+        if opened:
+            ds.close()
+
+
+# camelCase / snake_case aliases, matching the rest of piaso.pp
+align_spatial_coordinates = alignSpatialCoordinates

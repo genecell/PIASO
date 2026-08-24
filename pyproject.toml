@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "piaso-tools"
-version = "1.2.2"
+version = "1.2.3"
 description = "Precise Integrative Analysis of Single-cell Omics."
 requires-python = ">=3.9"
 license = {text = "BSD-3-Clause"}
@@ -63,7 +63,13 @@ dependencies = [
     # Upper bound: cytome's public modality API is pinned by its own
     # conformance test, so 0.x minors are safe; the bound exists to stop a
     # future 1.0 API cleanup from reaching installs pinned to this release.
-    "cytome>=0.2.4,<1.0",
+    # Floor raised for 0.3.0's naming invariant: `{modality}_counts` holds raw
+    # integer counts or does not exist, and matrix_meta records is_integer.
+    # PIASO reads both -- older files still work -- but its error messages and
+    # the plotting fallback describe 0.3.0's layout, so an install that pairs
+    # this release with an older cytome would be advised about names its files
+    # do not use.
+    "cytome>=0.3.0,<1.0",
 ]
 
 # https://docs.pypi.org/project_metadata/#project-urls

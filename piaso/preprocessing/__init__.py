@@ -83,7 +83,9 @@ except ImportError:
     pass
 
 try:
-    from ._spatialPreprocessing import rotateSpatialCoordinates
+    from ._spatialPreprocessing import (
+        rotateSpatialCoordinates, rotate_spatial_coordinates,
+        alignSpatialCoordinates, align_spatial_coordinates)
 except ImportError:
     pass
 

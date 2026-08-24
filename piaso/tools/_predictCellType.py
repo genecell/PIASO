@@ -142,7 +142,10 @@ def predictCellTypeByGDR(
 
     adata_ref.obs['gdr_by']=adata_ref.obs[reference_groupby]
 
-    ### Copy query adata before mutating .X
+    ### Copy query adata before mutating .X. Keep the caller's object: every
+    ### result below must land on IT, not on this copy, or the function
+    ### announces success and the caller receives nothing.
+    _adata_out = adata
     adata = adata.copy()
     adata.obs['gdr_by']=adata.obs[query_groupby]
 
@@ -202,12 +205,11 @@ def predictCellTypeByGDR(
     clf.fit(adata_combine[adata_combine.obs['batch']=='0'].obsm['X_gdr_harmony'],
             adata_combine[adata_combine.obs['batch']=='0'].obs[reference_groupby])
     
-    if key_added is not None:
-        adata.obs[key_added]=clf.predict(adata_combine[adata_combine.obs['batch']=='1'].obsm['X_gdr_harmony'])
-        print("All finished. The predicted cell types are saved as `"+key_added+"` in adata.obs.")
-    else:
-        adata.obs['CellTypes_gdr']=clf.predict(adata_combine[adata_combine.obs['batch']=='1'].obsm['X_gdr_harmony'])
-        print("All finished. The predicted cell types are saved as `CellTypes_gdr` in adata.obs.")
+    _key = key_added if key_added is not None else 'CellTypes_gdr'
+    _pred = clf.predict(adata_combine[adata_combine.obs['batch']=='1'].obsm['X_gdr_harmony'])
+    adata.obs[_key] = _pred
+    _adata_out.obs[_key] = _pred          # the object the caller passed in
+    print("All finished. The predicted cell types are saved as `" + _key + "` in adata.obs.")
     
     
     # --- Write predictions back to cytome ---
