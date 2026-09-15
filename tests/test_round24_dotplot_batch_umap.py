@@ -59,12 +59,9 @@ def test_umap_reads_back_use_rep_from_neighbors(tmp_path):
     piaso.tl.neighbors(ds, use_rep="X_gdr", n_neighbors=10, key_added=None)
     # neighbors persisted use_rep
     assert ds.metadata.get("use_rep") == "X_gdr"
-    # umap with a DIFFERENT explicit use_rep warns about the graph/rep mismatch
-    with warnings.catch_warnings(record=True) as w:
-        warnings.simplefilter("always")
-        try:
-            piaso.tl.umap(ds, use_rep="X_pca", key_added="X_umap")
-        except Exception:
-            pass   # umap-learn/sklearn version issues are out of scope; the warning fires first
-        assert any("differs from the representation" in str(x.message) for x in w)
+    # umap with a DIFFERENT explicit use_rep now ERRORS: with a reused graph,
+    # use_rep selects data, not topology, so a conflicting value would change
+    # nothing while implying it had. (Was a warning; promoted deliberately.)
+    with pytest.raises(ValueError, match="was built on 'X_gdr'"):
+        piaso.tl.umap(ds, use_rep="X_pca", key_added="X_umap")
     ds.close()

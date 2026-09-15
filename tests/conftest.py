@@ -150,3 +150,17 @@ def _isolate_matplotlib_rcparams():
         # the test added; `rcdefaults()` would instead discard the suite's own
         # configuration.
         mpl.rcParams.update(saved)
+
+
+@pytest.fixture(scope="session")
+def scored_adata():
+    """A small real dataset carrying `infog` and an embedding, for score()."""
+    piaso = pytest.importorskip("piaso")
+    try:
+        adata = piaso.data.load_dataset("adult_cortex_multiome_rna")
+    except Exception as exc:                     # not cached on this machine
+        pytest.skip(f"adult_cortex_multiome_rna unavailable: {exc}")
+    adata = adata[:, :4000].copy()
+    piaso.tl.infog(adata, layer="raw", n_top_genes=1500, verbosity=0)
+    piaso.tl.runSVD(adata, layer="infog", n_components=20, key_added="X_svd")
+    return adata, list(adata.var_names[:8])

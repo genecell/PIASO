@@ -30,12 +30,16 @@ from scipy import sparse
 # backend detection
 # ---------------------------------------------------------------------------
 
-def _is_cytome(data) -> bool:
-    try:
-        from cytome.core.dataset import CytomeDataset
-    except ImportError:
-        return False
-    return isinstance(data, CytomeDataset)
+from ..utils._cytome_compat import (_is_path_like, is_cytome_input,
+                                    open_cytome)
+
+
+# One predicate for the whole package. Four modules each had their own: three
+# identical isinstance checks and one duck-type on `iter_chunks`, none of which
+# noticed a *closed* dataset -- which then failed as a sqlite "Cannot operate on
+# a closed database" several frames away. The shared one raises where the
+# mistake is.
+from ..utils._cytome_compat import _is_cytome_dataset_obj as _is_cytome
 
 
 # ---------------------------------------------------------------------------
@@ -679,6 +683,15 @@ def filter_cells(
     FileExistsError
         ``output`` exists and ``overwrite=False``.
     """
+
+    # A .cytome path is as valid an input as an open Dataset, and the
+    # docstring says so. The local _is_cytome only matches the Dataset class,
+    # so a path used to fall through to the AnnData branch and die on
+    # `'str' object has no attribute 'n_obs'`. Open it, delegate, close it.
+    if _is_path_like(data) and is_cytome_input(data):
+        _kw = {k: v for k, v in locals().items() if k != "data"}
+        with open_cytome(data) as _ds:
+            return filter_cells(_ds, **_kw)
     if _is_cytome(data):
         return _filter_cells_cytome(
             data,

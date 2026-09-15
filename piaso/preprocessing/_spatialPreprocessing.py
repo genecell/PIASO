@@ -34,12 +34,12 @@ def _rotate_xy(coords: np.ndarray, angle_degrees: float,
     return out
 
 
-def _is_cytome(data) -> bool:
-    try:
-        from cytome.core.dataset import CytomeDataset
-    except ImportError:
-        return False
-    return isinstance(data, CytomeDataset)
+# One predicate for the whole package. Four modules each had their own: three
+# identical isinstance checks and one duck-type on `iter_chunks`, none of which
+# noticed a *closed* dataset -- which then failed as a sqlite "Cannot operate on
+# a closed database" several frames away. The shared one raises where the
+# mistake is.
+from ..utils._cytome_compat import _is_cytome_dataset_obj as _is_cytome
 
 
 def rotateSpatialCoordinates(
@@ -97,9 +97,31 @@ def rotateSpatialCoordinates(
             emb_name = _resolve_cytome_basis(ds, spatial_key)
             coords = np.asarray(ds.embeddings[emb_name])
             if backup_spatial_key is not None:
-                ds.add_embedding(backup_spatial_key, coords)
-                print(f"Original coordinates backed up in "
-                      f"embeddings['{backup_spatial_key}'].")
+                # An existing backup means this rotation has already been
+                # applied to this file. Running the cell twice would rotate
+                # the rotated coordinates and overwrite the only copy of the
+                # original -- and nothing about the result looks wrong, which
+                # is what makes it expensive: every figure downstream is
+                # quietly at the wrong orientation.
+                try:
+                    _existing = backup_spatial_key in set(ds.list_embeddings())
+                except Exception:
+                    _existing = False
+                if _existing:
+                    import warnings as _w
+                    _w.warn(
+                        f"rotateSpatialCoordinates: "
+                        f"embeddings['{backup_spatial_key}'] already exists, so "
+                        f"'{spatial_key}' has been rotated before. Rotating "
+                        f"again compounds it and replaces the saved original. "
+                        f"Restore with ds.add_embedding('{spatial_key}', "
+                        f"ds.embeddings['{backup_spatial_key}']) first, or pass "
+                        f"a different backup_spatial_key.",
+                        UserWarning, stacklevel=3)
+                else:
+                    ds.add_embedding(backup_spatial_key, coords)
+                    print(f"Original coordinates backed up in "
+                          f"embeddings['{backup_spatial_key}'].")
             rotated = _rotate_xy(coords, angle_degrees, clockwise)
             ds.add_embedding(emb_name, rotated)
             # keep the ROI index consistent with what will be plotted

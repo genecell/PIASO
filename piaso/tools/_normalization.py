@@ -448,6 +448,12 @@ def _infog_original(
     
     
     ### Feature selection    
+    if n_top_genes > adata.n_vars:
+        import warnings as _warnings
+        _warnings.warn(
+            f"infog: n_top_genes={n_top_genes} exceeds the {adata.n_vars} "
+            f"features present; using all of them.",
+            UserWarning, stacklevel=2)
     pos_gene=_select_top_n(adata.var[key_added+'_var'],n_top_genes)
     tmp=np.repeat(False,adata.n_vars)
     tmp[pos_gene]=True
@@ -937,6 +943,12 @@ def infog(
 
 ### Refer to Scanpy for _select_top_n function
 def _select_top_n(scores, n_top):
+    # Asking for more top features than exist makes `-n_top` an out-of-range
+    # kth for argpartition, and numpy reports it as "kth(=-4216) out of bounds
+    # (784)" -- a message about an index nobody passed. Datasets with fewer
+    # features than the 3000/5000 defaults are ordinary: a targeted spatial
+    # panel is a few hundred genes, and Fashion-MNIST is 784 pixels.
+    n_top = int(min(n_top, scores.shape[0]))
     reference_indices = np.arange(scores.shape[0], dtype=int)
     partition = np.argpartition(scores, -n_top)[-n_top:]
     partial_indices = np.argsort(scores.iloc[partition])[::-1]
@@ -1073,6 +1085,57 @@ def _knn_from_mean_var(mean_var, n_nearest_neighbors, leaf_size, query_rows=None
     knn_idx[rows] = trimmed
     return knn_idx
 
+def _as_scoring_csr(X, what="the expression matrix"):
+    """The scoring matrix as CSR, with the checks that belong at the door.
+
+    Everything downstream — the (mean, variance) KD-tree, the control-gene
+    sampling, the fused Rust kernel, the p-values — is written for CSR. A dense
+    ndarray or an ``np.matrix`` used to reach two different failures deep in
+    that chain (a ragged KD-tree input, and ``.tocsr()`` on an ndarray), so the
+    conversion happens once, here, rather than as a second code path.
+
+    Non-finite values are an error: they propagate silently through the KD-tree
+    into every score. Negative values are a warning, not an error — a z-scored
+    matrix scores fine, but control genes are matched on (mean, variance) and a
+    scaled matrix has neither, so the matched null is uninformative and the
+    user should know which layer to pass instead.
+    """
+    import warnings as _warnings
+
+    if sparse.issparse(X):
+        finite_vals = X.data
+    else:
+        X = np.asarray(X)
+        finite_vals = X
+    if finite_vals.size and not np.all(np.isfinite(finite_vals)):
+        raise ValueError(
+            f"piaso.tl.score: {what} contains NaN or infinite values. They "
+            "propagate through the (mean, variance) control-gene matching into "
+            "every score, so they are rejected rather than silently carried. "
+            "Clean the matrix (e.g. np.nan_to_num) or pass a different layer.")
+    if finite_vals.size and float(finite_vals.min()) < 0.0:
+        _warnings.warn(
+            f"piaso.tl.score: {what} contains negative values and looks scaled "
+            "(e.g. sc.pp.scale). Scoring still works, but control genes are "
+            "matched on mean and variance, which carry no information once "
+            "every gene has mean 0 and variance 1 — the matched null is then "
+            "uninformative. Prefer a non-negative normalised layer such as "
+            "layer='infog'.",
+            stacklevel=3)
+    if not sparse.issparse(X):
+        n_bytes = X.size * X.dtype.itemsize
+        if n_bytes > 1_000_000_000:
+            _warnings.warn(
+                f"piaso.tl.score: converting a dense {what} of "
+                f"{n_bytes / 1e9:.1f} GB to sparse. If the data really are "
+                "dense this costs memory for nothing; pass a sparse layer.",
+                stacklevel=3)
+        X = sparse.csr_matrix(X)
+    elif not sparse.isspmatrix_csr(X):
+        X = X.tocsr()
+    return X
+
+
 def _precompute_stats(cellxgene, n_nearest_neighbors=30, leaf_size=40,
                       query_rows=None):
     """Compute KDTree-based KNN indices for control gene sampling.
@@ -1098,20 +1161,26 @@ def _precompute_stats(cellxgene, n_nearest_neighbors=30, leaf_size=40,
     knn_idx : ndarray (n_genes, n_nearest_neighbors)
         KNN indices for each gene (self-loops removed).
     """
-    mean_2d = np.array(cellxgene.mean(axis=0), dtype=np.float64)  # (1, n_genes)
-    infog_mean = mean_2d.copy()[0]  # (n_genes,)
-    mean_sq = mean_2d ** 2
+    if sparse.issparse(cellxgene) and not sparse.isspmatrix_csr(cellxgene):
+        cellxgene = cellxgene.tocsr()
+    # `.mean(axis=0)` returns (1, n_genes) for a sparse matrix or np.matrix but
+    # (n_genes,) for an ndarray, so anything indexing [0] here silently turns a
+    # dense input's per-gene means into one scalar and the KD-tree input becomes
+    # ragged. Ravel, once, and every container behaves the same.
+    infog_mean = np.asarray(cellxgene.mean(axis=0), dtype=np.float64).ravel()
+    mean_sq = infog_mean ** 2
 
     if sparse.issparse(cellxgene):
         data_sq = cellxgene.data.astype(np.float64) ** 2
         X_sq = sparse.csr_matrix((data_sq, cellxgene.indices, cellxgene.indptr),
                                   shape=cellxgene.shape, copy=False)
-        residual_var = np.squeeze(np.array(X_sq.mean(axis=0), dtype=np.float64) - mean_sq)
+        residual_var = np.asarray(X_sq.mean(axis=0), dtype=np.float64).ravel() - mean_sq
         del X_sq, data_sq
     else:
-        residual_var = np.squeeze(np.mean(np.asarray(cellxgene, dtype=np.float64) ** 2, axis=0) - mean_sq)
+        residual_var = np.asarray(
+            np.mean(np.asarray(cellxgene, dtype=np.float64) ** 2, axis=0)).ravel() - mean_sq
 
-    mean_var = np.array([infog_mean, residual_var]).T
+    mean_var = np.column_stack([infog_mean, residual_var])
     return _knn_from_mean_var(mean_var, n_nearest_neighbors, leaf_size,
                               query_rows=query_rows)
 
@@ -1710,6 +1779,22 @@ def _write_cytome_score(ds, key_added, score_val, pval, compute_pvalues, pvalue_
 
 
 #### Gene Set Scoring Method
+def _write_single_set_result(adata, key_added, score_matrix, pval_matrix,
+                             verbosity=1):
+    """Write a one-set multi-path result where a single-set call would put it.
+
+    ``gene_list={"NAME": [...]}`` takes the multi-set branch, which names each
+    score by its own key and so had nothing to do with ``key_added``. But one
+    set is one set: the caller asked for a column by that name, and plotting
+    it is the obvious next line.
+    """
+    adata.obs[key_added] = np.asarray(score_matrix)[:, 0]
+    if pval_matrix is not None:
+        adata.obs[f"{key_added}_pval"] = np.asarray(pval_matrix)[:, 0]
+    if verbosity:
+        print(f"Finished. The scores are saved in adata.obs['{key_added}'].")
+
+
 def score(
     data=_UNSET,
     gene_list=_UNSET,
@@ -1877,7 +1962,10 @@ def score(
     -----
     The matched-control-set design and the empirical-null p-value follow
     scDRS (Zhang et al., Nature Genetics 54, 1572-1580, 2022); the idea is
-    shared in spirit with AUCell and Vision. What differs here is the
+    shared in spirit with AUCell and Vision. One deliberate difference in the
+    matching itself: scDRS draws controls from mean-expression x variance
+    *bins*, whereas here each gene's controls are its k nearest neighbours in
+    (mean, variance) space — a tighter, per-gene match. What differs here is the
     evaluation: all gene sets and all of their control sets are packed into
     one sparse weight matrix and computed as a single matrix multiplication
     per chunk, rather than looping and column-subsetting once per set. The
@@ -1996,7 +2084,10 @@ def score(
             f"piaso.tl.score: layer '{layer}' not found in adata.layers "
             f"(available: {list(adata.layers)}). Create it (e.g. piaso.tl.score/normalize to make "
             f"'infog'), pass an existing layer, or pass layer=None to use adata.X.")
-    cellxgene = adata.layers[layer] if layer is not None else adata.X
+    cellxgene = _as_scoring_csr(
+        adata.layers[layer] if layer is not None else adata.X,
+        what=f"adata.layers[{layer!r}]" if layer is not None else "adata.X",
+    )
     n_cells, n_genes = cellxgene.shape
     var_names_to_idx = {name: idx for idx, name in enumerate(adata.var_names)}
     if precomputed_knn is not None:
@@ -2067,6 +2158,23 @@ def score(
         else:  # list of lists
             parsed = {f"GeneSet_{i}": gs for i, gs in enumerate(gene_list)}
 
+        # key_added names a *single* set's column. With many sets each one is
+        # named by its own key, so key_added has nothing to name and was being
+        # dropped in silence -- the caller then plotted the name they passed
+        # and got "key not found", which points at the plot rather than here.
+        # One set in a dict is still one set, and the documented contract
+        # for a single set is obs[key_added]. Warning there and writing
+        # nothing sent the caller to plot a column never created.
+        if key_added is not None and len(parsed) > 1:
+            import warnings as _warnings
+            _warnings.warn(
+                f"score(): key_added={key_added!r} is ignored when gene_list "
+                f"holds several sets -- each score is named by its own key "
+                f"({', '.join(list(parsed)[:3])}"
+                f"{', ...' if len(parsed) > 3 else ''}). Pass a single list of "
+                f"genes if you want key_added to name the result.",
+                UserWarning, stacklevel=2)
+
         # Map gene names to indices, filter invalid
         gene_set_names = []
         gene_sets_indices = []
@@ -2125,6 +2233,9 @@ def score(
             )
             score_matrix = scores_flat.reshape(n_cells, n_sets)
             pval_matrix = pval_flat.reshape(n_cells, n_sets) if pval_flat is not None else None
+            if key_added is not None and len(gene_set_names) == 1:
+                _write_single_set_result(adata, key_added, score_matrix,
+                                         pval_matrix, verbosity)
             return score_matrix, gene_set_names, pval_matrix
 
         # --- Python fallback: build control blocks + matmul ---
@@ -2222,6 +2333,9 @@ def score(
 
         # Background-subtracted scores
         score_matrix = (query_scores / scaling_factors[None, :]) - (ctrl_means / scaling_factors[None, :])
+        if key_added is not None and len(gene_set_names) == 1:
+            _write_single_set_result(adata, key_added, score_matrix,
+                                     pval_matrix, verbosity)
         return score_matrix, gene_set_names, pval_matrix
 
     else:

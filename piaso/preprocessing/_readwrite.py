@@ -440,12 +440,29 @@ def importCellRanger(
     >>> ds = piaso.pp.importCellRanger("run/outs", "rna.cytome", modality="rna")
     """
     import cytome
-    from ._importFragments import importFragments
 
     modality = str(modality).lower()
     if modality not in ("both", "rna", "atac"):
         raise ValueError(f"modality must be 'both', 'rna' or 'atac', got {modality!r}.")
     want_frag = modality in ("both", "atac")
+
+    # Imported here, not at the top: the fragment leg is not part of the
+    # public distribution, and importing it unconditionally made the
+    # RNA-only path -- which needs nothing from it -- die with
+    # `ModuleNotFoundError: piaso.preprocessing._importFragments`, an error
+    # that reads like a broken install rather than an absent method.
+    importFragments = None
+    if want_frag:
+        try:
+            from ._importFragments import importFragments
+        except ImportError as exc:
+            raise ImportError(
+                "importCellRanger(modality='both'/'atac') needs the ATAC "
+                "fragment importer, which is not available in the public "
+                "PIASO distribution -- it belongs to a method that has not "
+                "been published yet. Use modality='rna' for the gene "
+                "expression matrix, which this package does provide."
+            ) from exc
 
     # ``genome`` has no default: importing ATAC fragments without naming the genome would
     # silently build the tile grid for the wrong assembly (e.g. mm10 data quantified on an hg38

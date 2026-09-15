@@ -378,7 +378,7 @@ def _plot_vertical_layout(ax, df_plot: pd.DataFrame, circle_sizes: np.ndarray,
         
         # But keep tick labels at the specified range
         tick_values = np.linspace(-max_abs, max_abs, 5)
-        tick_labels = [f'{abs(val):.1f}' for val in tick_values]
+        tick_labels = _lollipop_tick_fmt(tick_values)
         ax.set_xticks(tick_values)
         ax.set_xticklabels(tick_labels)
     else:
@@ -389,7 +389,7 @@ def _plot_vertical_layout(ax, df_plot: pd.DataFrame, circle_sizes: np.ndarray,
         
         # Create symmetric ticks with absolute values
         tick_values = np.linspace(-max_abs, max_abs, 5)
-        tick_labels = [f'{abs(val):.1f}' for val in tick_values]
+        tick_labels = _lollipop_tick_fmt(tick_values)
         ax.set_xticks(tick_values)
         ax.set_xticklabels(tick_labels)
     
@@ -460,7 +460,7 @@ def _plot_horizontal_layout(ax, df_plot: pd.DataFrame, circle_sizes: np.ndarray,
         
         # But keep tick labels at the specified range
         tick_values = np.linspace(-max_abs, max_abs, 5)
-        tick_labels = [f'{abs(val):.1f}' for val in tick_values]
+        tick_labels = _lollipop_tick_fmt(tick_values)
         ax.set_yticks(tick_values)
         ax.set_yticklabels(tick_labels)
     else:
@@ -471,7 +471,7 @@ def _plot_horizontal_layout(ax, df_plot: pd.DataFrame, circle_sizes: np.ndarray,
         
         # Create symmetric ticks with absolute values
         tick_values = np.linspace(-max_abs, max_abs, 5)
-        tick_labels = [f'{abs(val):.1f}' for val in tick_values]
+        tick_labels = _lollipop_tick_fmt(tick_values)
         ax.set_yticks(tick_values)
         ax.set_yticklabels(tick_labels)
     
@@ -575,6 +575,19 @@ def _create_legends(fig, color_map: dict, filtered_df: pd.DataFrame, col_circle_
             fig.legend(handles=legend_patches, title='Annotation', bbox_to_anchor=(0.5, -0.02), 
                       loc='upper center', ncol=min(len(legend_patches), 4), frameon=False)
             plt.tight_layout(rect=[0, 0.08, 1, 0.98])
+
+
+def _lollipop_tick_fmt(tick_values):
+    """Tick labels with enough decimals for the axis range: ``:.1f`` renders
+    every tick of a 4e-4 axis as ``0.0``, which is what the SCALAR neuronal
+    pairs produce."""
+    import math
+    vmax = max((abs(float(v)) for v in tick_values), default=0.0)
+    if vmax == 0:
+        return [f'{abs(val):.1f}' for val in tick_values]
+    d = -int(math.floor(math.log10(vmax))) + (1 if vmax < 0.1 else 0)
+    d = max(1, d)
+    return [f'{abs(val):.{d}f}' for val in tick_values]
 
 
 def plotLigandReceptorLollipop(

@@ -13,21 +13,31 @@ it writes through a separate handle.
 This runs against a real reference because the GDR pipeline inside needs
 genuine marker structure; a toy matrix produces a malformed embedding and
 tests the fixture instead of the function. It skips where the dataset is not
-cached rather than pretending to cover it.
+cached rather than pretending to cover it; point ``PIASO_TEST_GDR_REFERENCE`` at the
+file to run it. (See REFERENCE_ENV below.)
 """
+import os
 import pathlib
 
 import numpy as np
 import pytest
 
-CACHED = pathlib.Path(
-    "/data2/rukshina/spatial_tutorials/fixups/adult_cortex_gdr.h5ad")
+#: Point this at an AnnData carrying `X_gdr` and an `infog` layer to run the
+#: test. It was a hard-coded absolute path, which pinned the suite to one
+#: machine and put that machine's directory layout into the published package.
+REFERENCE_ENV = "PIASO_TEST_GDR_REFERENCE"
 
 
 @pytest.fixture(scope="module")
 def query_reference():
+    cached = os.environ.get(REFERENCE_ENV)
+    if not cached:
+        pytest.skip(
+            f"set {REFERENCE_ENV} to an AnnData with X_gdr and an infog "
+            "layer to run this test")
+    CACHED = pathlib.Path(cached)
     if not CACHED.exists():
-        pytest.skip(f"reference not cached at {CACHED}")
+        pytest.skip(f"{REFERENCE_ENV} points at a missing file: {CACHED}")
     ad = pytest.importorskip("anndata")
     sc = pytest.importorskip("scanpy")
     ref = ad.read_h5ad(CACHED)

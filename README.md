@@ -53,8 +53,9 @@ each is useful alone:
 | | |
 |---|---|
 | **[PIASO](https://github.com/genecell/PIASO)** | analysis: normalization, dimensionality reduction, clustering, annotation, plotting |
-| **[cytome](https://github.com/genecell/cytome)** | a single-file format for single-cell multi-omics; what PIASO streams from |
+| **[cytome](https://github.com/genecell/cytome)** · **[cytome-r](https://github.com/genecell/cytome-r)** | a single-file format for single-cell multi-omics; what PIASO streams from · the same files from R |
 | **[COSG](https://github.com/genecell/COSG)** | fast, accurate marker gene and marker region identification |
+| **[cytorete](https://github.com/genecell/cytorete)** | cell type-specific gene regulatory networks: regulons, their activity and their specificity |
 | **[PIASO-data](https://github.com/genecell/PIASO-data)** | genome references and tutorial datasets, fetched and cached on demand |
 | **[PIASO-for-agents](https://github.com/genecell/PIASO-for-agents)** | the ecosystem in a form coding agents can read |
 | **[LARIS](https://github.com/genecell/LARIS)** · **[Emergene](https://github.com/genecell/Emergene)** | spatial ligand–receptor analysis · per-cell differential analysis across conditions |

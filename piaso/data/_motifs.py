@@ -58,10 +58,17 @@ __all__ = [
     "fetch_animaltfdb_tf_list",
     "build_tf_motif_map",
     "harmonize_symbol",
+    "fetch_codebook",
+    "load_codebook",
+    "CODEBOOK_DOI",
 ]
 
 # ---------------------------------------------------------------------------
-# AnimalTFDB 4.0 download URLs (opt-in; used only inside fetch_animaltfdb_tf_list)
+# AnimalTFDB 4.0 download URLs. NOT a fetchable source: the host sits behind a
+# WAF that answers every non-browser client with a captcha page (200, ~16 kB of
+# HTML) or 405, and it has no mirror -- the old bioinfo.life.hust.edu.cn domain
+# no longer resolves. Kept only so the error message can name the pages a user
+# has to open in a browser; the file they save is then read with ``path=``.
 # ---------------------------------------------------------------------------
 _ANIMALTFDB_URLS: dict[str, list[str]] = {
     "human": [
@@ -74,7 +81,48 @@ _ANIMALTFDB_URLS: dict[str, list[str]] = {
     ],
 }
 
+#: cisTarget / SCENIC+ TF universes. These serve ordinary Python HTTP clients,
+#: which is why they are the only fetchable source.
+_CISTARGET_TF_URLS: dict[str, list[str]] = {
+    "human": ["https://resources.aertslab.org/cistarget/tf_lists/allTFs_hg38.txt"],
+    "mouse": ["https://resources.aertslab.org/cistarget/tf_lists/allTFs_mm.txt"],
+}
+
+_TF_LIST_SOURCES: dict[str, dict[str, list[str]]] = {
+    "cistarget": _CISTARGET_TF_URLS,
+}
+
+#: Sources that used to be fetchable and now cannot be. Named separately so the
+#: error says *why* rather than "unknown source".
+_RETIRED_TF_LIST_SOURCES: dict[str, str] = {
+    "animaltfdb": (
+        "AnimalTFDB is no longer a fetchable source: its only host "
+        "(guolab.wchscu.cn) sits behind a WAF that answers every non-browser "
+        "client with a captcha page, and the old bioinfo.life.hust.edu.cn "
+        "mirror no longer resolves.\n"
+        "Open one of these in a browser, save the file, and read it with "
+        "path= -- the TSV parser understands its 'Symbol' column:\n"
+        "{urls}\n"
+        "    piaso.data.load_tf_list({species!r}, path='<saved file>')\n"
+        "Or use the default source, which serves ordinary clients:\n"
+        "    piaso.data.fetch_tf_list({species!r})   # cisTarget"
+    ),
+}
+
+#: File name each source caches under, per species.
+_TF_LIST_STEMS: dict[str, dict[str, str]] = {
+    "cistarget": {"human": "allTFs_hg38.txt", "mouse": "allTFs_mm.txt"},
+    "animaltfdb": {"human": "Homo_sapiens_TF", "mouse": "Mus_musculus_TF"},
+}
+
 _DEFAULT_CACHE_DIR = pathlib.Path.home() / ".piaso" / "grn"
+
+#: A TF catalogue has thousands of entries. Anything shorter than this from a
+#: *download* is an error page, not a list. Never applied to a user's own file.
+_MIN_CATALOGUE_SYMBOLS = 50
+
+#: Characters no gene symbol carries; markup fragments carry them all.
+_BAD_SYMBOL_RE = re.compile(r"[<>{};\s]")
 
 
 # ---------------------------------------------------------------------------
@@ -294,6 +342,194 @@ def fetch_jaspar(release="JASPAR2024", collection="CORE", taxon="vertebrates",
     return out
 
 
+# ---------------------------------------------------------------------------
+# Codebook (Jolma, Laverty, Fathi et al., Nature 2026) -- representative PWMs
+# for 1,421 human TFs, distributed as Supplementary Data 1 of the paper under
+# CC-BY-4.0. Downloaded from the publisher at call time, never redistributed:
+# the archive carries 130 Transfac-derived matrices among its 1,685, and the
+# provenance of every one is Supplementary Table 10 of the same paper.
+# ---------------------------------------------------------------------------
+CODEBOOK_DOI = "10.1038/s41586-026-10798-9"
+_CODEBOOK_URL = (
+    "https://static-content.springer.com/esm/"
+    "art%3A10.1038%2Fs41586-026-10798-9/MediaObjects/"
+    "41586_2026_10798_MOESM4_ESM.zip"
+)
+#: ``NAME.FL`` / ``NAME.DBD2`` name the construct assayed, not the gene.
+_CODEBOOK_CONSTRUCT_RE = re.compile(r"\.(FL|DBD\d+)$")
+#: Clone identifiers that reached the archive instead of gene symbols.
+_CODEBOOK_NON_SYMBOLS = frozenset({"AC023509.3", "AC138696.1", "AC092835"})
+
+
+def _codebook_archive_path(dest_dir=None) -> str:
+    return os.path.join(_motif_cache_dir(dest_dir), "codebook_2026_pwms.zip")
+
+
+def fetch_codebook(dest_dir=None, force=False) -> str:
+    """Download the Codebook representative PWM archive (OPT-IN, ~1 MB).
+
+    Supplementary Data 1 of Jolma, Laverty, Fathi et al., *Nature* **657**,
+    275-283 (2026) -- representative motifs for 1,421 human TFs, served by the
+    publisher under the article's CC-BY-4.0 licence.
+
+    Parameters
+    ----------
+    dest_dir : str, optional
+        Cache directory. Defaults to ``~/.piaso/data/motifs``.
+    force : bool, default False
+        Re-download even if the archive is already cached.
+
+    Returns
+    -------
+    str
+        Path to the cached ``.zip``. Pass it to :func:`load_codebook`.
+
+    See Also
+    --------
+    load_codebook : parse the archive into ``PWM`` objects.
+
+    Notes
+    -----
+    *Added in 1.2.4.* The companion Zenodo record (10.5281/zenodo.15667805)
+    holds the full GRECO-BIT/Codebook Motif Explorer output -- tens of
+    gigabytes of per-experiment results. This is the small representative set,
+    which is what a scan needs.
+    """
+    out = _codebook_archive_path(dest_dir)
+    if os.path.exists(out) and not force:
+        return out
+    import urllib.request
+    os.makedirs(os.path.dirname(out), exist_ok=True)
+    tmp = out + ".part"
+    urllib.request.urlretrieve(_CODEBOOK_URL, tmp)
+    os.replace(tmp, out)
+    return out
+
+
+def _parse_codebook_pwm(text: str, filename: str):
+    """One Codebook PWM file -> ``(tf_name, motif_id, probs)`` or ``None``.
+
+    The format is a two-line header (``TF<tab>NAME``, ``Motif<tab>ID``), a
+    ``Pos A C G T`` line, then one row per position.
+    """
+    lines = [ln for ln in text.splitlines() if ln.strip()]
+    if len(lines) < 4:
+        return None
+    tf = lines[0].split("\t")[-1].strip()
+    motif_id = lines[1].split("\t")[-1].strip()
+    rows = []
+    for ln in lines[3:]:
+        parts = ln.split("\t")[1:5]
+        if len(parts) != 4:
+            return None
+        try:
+            rows.append([float(x) for x in parts])
+        except ValueError:
+            return None
+    if not rows:
+        return None
+    arr = np.asarray(rows, dtype=np.float64)              # (w, 4)
+    # Five matrices in the archive are CIS-BP 1.94d conversions carrying
+    # all-zero positions (FOSL2_1, NR1H4, PPARG, VDR_1) or a row summing to
+    # 0.8 (ZKSCAN1). An all-zero column has no information and would make the
+    # log-odds undefined, so drop it; the rest renormalise.
+    keep = arr.sum(axis=1) > 0
+    arr = arr[keep]
+    if arr.size == 0:
+        return None
+    arr = arr / arr.sum(axis=1, keepdims=True)
+    return tf, motif_id or filename, arr.T.astype(np.float32)
+
+
+def load_codebook(path=None, *, keep_construct_variants=False) -> list[PWM]:
+    """Parse the Codebook PWM archive -> ``list[PWM]`` (``source='codebook'``).
+
+    Parameters
+    ----------
+    path : str, optional
+        The ``.zip`` from :func:`fetch_codebook`, or a directory holding the
+        unpacked ``SupplementaryData1/*.txt`` files. ``None`` fetches (and
+        caches) the archive.
+    keep_construct_variants : bool, default False
+        Some files name the construct assayed rather than the gene --
+        ``CASZ1.FL`` (full length), ``ZNF729.DBD3`` (a single DNA-binding
+        domain). By default the suffix is stripped so the motif is filed under
+        the gene symbol, which is what ``build_tf_motif_map`` matches against.
+        Set True to keep the names verbatim.
+
+    Returns
+    -------
+    list[PWM]
+        One per motif file; TFs with two representative motifs contribute two,
+        and the cistrome step pools them per TF as it does for JASPAR.
+
+    Notes
+    -----
+    *Added in 1.2.4.* **Human only** -- there is no mouse Codebook. On mouse
+    data it behaves like JASPAR's vertebrate collection:
+    :func:`build_tf_motif_map` matches case-insensitively and remaps to the
+    symbols in ``var_names``, so ALL-CAPS motif names still find ``Sox9``.
+
+    Three clone identifiers (``AC023509.3`` and two others) are dropped: they
+    are not gene symbols and cannot match an expression matrix.
+
+    Against JASPAR 2024 CORE vertebrates (754 TFs) this is 1,421 TFs, covering
+    all but eleven of JASPAR's. The extra 678 are dominated by C2H2
+    zinc-finger proteins (351), whose motifs come largely from ChIP-exo on
+    transposable elements and run up to 41 bp -- worth knowing before scanning
+    a 1.5 kb promoter window with them.
+
+    References
+    ----------
+    Jolma A., Laverty K.U., Fathi A. et al. An expanded codebook of human
+    transcription factor DNA-binding specificity. *Nature* **657**, 275-283
+    (2026). doi:10.1038/s41586-026-10798-9. Motif provenance per TF is in the
+    paper's Supplementary Table 10.
+    """
+    import zipfile
+
+    if path is None:
+        path = fetch_codebook()
+    path = str(path)
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"Codebook motifs not found: {path!r}")
+
+    if os.path.isdir(path):
+        items = []
+        for root, _dirs, files in os.walk(path):
+            for fn in sorted(files):
+                if fn.endswith(".txt"):
+                    with open(os.path.join(root, fn), encoding="utf-8") as fh:
+                        items.append((fn, fh.read()))
+    else:
+        with zipfile.ZipFile(path) as zf:
+            items = [(os.path.basename(n), zf.read(n).decode("utf-8"))
+                     for n in sorted(zf.namelist())
+                     if n.endswith(".txt") and not os.path.basename(n).startswith(".")]
+    if not items:
+        raise ValueError(
+            f"{path!r} contains no Codebook PWM files. Expected the "
+            "SupplementaryData1 archive from fetch_codebook()."
+        )
+
+    pwms: list[PWM] = []
+    for fn, text in items:
+        parsed = _parse_codebook_pwm(text, fn)
+        if parsed is None:
+            continue
+        tf, motif_id, probs = parsed
+        if not keep_construct_variants:
+            tf = _CODEBOOK_CONSTRUCT_RE.sub("", tf)
+        if tf in _CODEBOOK_NON_SYMBOLS:
+            continue
+        pwms.append(PWM(motif_id=motif_id, tf_name=tf, probs=probs,
+                        source="codebook",
+                        meta={"file": fn, "doi": CODEBOOK_DOI}))
+    if not pwms:
+        raise ValueError(f"{path!r} yielded no usable PWMs.")
+    return pwms
+
+
 def _cisbp_meme_filename(species, version) -> str:
     return f"CIS-BP_{version}_{species}.meme"
 
@@ -488,9 +724,19 @@ def _parse_cisbp_pwm_file(
 # 3. TF-list loader
 # ---------------------------------------------------------------------------
 
+def _retired_source_error(source: str, species: str) -> ValueError:
+    """Explain a source that used to work, rather than calling it unknown."""
+    urls = "\n".join(
+        f"    {u}" for u in _ANIMALTFDB_URLS.get(species.lower(), [])
+    ) or "    https://guolab.wchscu.cn/AnimalTFDB4/"
+    return ValueError(
+        _RETIRED_TF_LIST_SOURCES[source].format(urls=urls, species=species)
+    )
+
+
 def load_tf_list(
     species: str = "human",
-    source: str = "animaltfdb",
+    source: str = "cistarget",
     path: Optional[str] = None,
 ) -> Optional[set[str]]:
     """Return a set of TF gene symbols.
@@ -498,17 +744,23 @@ def load_tf_list(
     Parameters
     ----------
     species : str
-        Species identifier used with ``source="animaltfdb"`` (``"human"`` or
-        ``"mouse"``).  Ignored when ``path`` is given.
+        Species identifier (``"human"`` or ``"mouse"``). Ignored when ``path``
+        is given.
     source : str
-        ``"animaltfdb"`` (default) — AnimalTFDB 4.0 TF catalogue.
+        ``"cistarget"`` (default) — the cisTarget / SCENIC+ TF universe
+        (~1,890 human, ~1,860 mouse symbols), and the only fetchable
+        catalogue.
         ``"motifdb"`` — sentinel meaning "use the motif DB's own TF names";
         returns ``None`` and ``build_tf_motif_map`` interprets that as no
-        restriction.
+        restriction. **This is the right choice for regulon inference**: a TF
+        with no motif in the database cannot be scanned, so restricting to a
+        catalogue on top of it can only remove TFs that were usable.
     path : str or None
         Path to a local TF list.  Accepts either a one-symbol-per-line plain
         text file OR a TSV with a ``Symbol`` / ``TF`` / ``gene`` header column.
-        When provided, ``species`` and ``source`` are ignored.
+        When provided, ``species`` and ``source`` are ignored. This is the
+        route for any catalogue PIASO cannot download — an AnimalTFDB
+        ``*_TF`` table saved from a browser is read here as-is.
 
     Returns
     -------
@@ -522,8 +774,17 @@ def load_tf_list(
     FileNotFoundError
         If a local ``path`` is specified but does not exist.
     RuntimeError
-        When ``source="animaltfdb"``, no ``path`` is given, and no cached file
-        exists — instructs the caller to use :func:`fetch_animaltfdb_tf_list`.
+        When no ``path`` is given and no cached file exists — instructs the
+        caller to run :func:`fetch_tf_list` once.
+
+    Notes
+    -----
+    *Changed in 1.2.4*: ``source="animaltfdb"`` was removed. Its host serves a
+    WAF captcha page to every non-browser client, so the download never
+    produced a TF list; the page used to parse into a dozen junk "symbols".
+    Files read here are now checked for that failure mode (see
+    :func:`_read_tf_list_file`), and an AnimalTFDB table saved from a browser
+    is still read via ``path=``.
     """
     # sentinel — caller wants to use motif-DB TF names without restriction
     if source == "motifdb":
@@ -533,136 +794,270 @@ def load_tf_list(
     if path is not None:
         return _read_tf_list_file(path)
 
-    # --- AnimalTFDB: require explicit opt-in (no auto-download) --------------
-    if source == "animaltfdb":
+    if source in _RETIRED_TF_LIST_SOURCES:
+        raise _retired_source_error(source, species)
+
+    # --- A catalogue: use the cache, never download implicitly ---------------
+    if source in _TF_LIST_SOURCES:
         species_lower = species.lower()
-        if species_lower not in _ANIMALTFDB_URLS:
+        if species_lower not in _TF_LIST_SOURCES[source]:
             raise ValueError(
-                f"Unsupported species {species!r} for AnimalTFDB. "
-                f"Supported: {sorted(_ANIMALTFDB_URLS.keys())}"
+                f"Unsupported species {species!r} for {source}. "
+                f"Supported: {sorted(_TF_LIST_SOURCES[source].keys())}"
             )
-        cached = _animaltfdb_cache_path(species_lower)
+        cached = _tf_list_cache_path(species_lower, source)
         if cached.exists():
-            return _read_tf_list_file(str(cached))
+            # A catalogue has thousands of entries; a handful means the cached
+            # file is an error page, not a TF list.
+            return _read_tf_list_file(str(cached), min_symbols=_MIN_CATALOGUE_SYMBOLS)
         raise RuntimeError(
-            f"No cached AnimalTFDB TF list found for species={species!r}.\n"
+            f"No cached {source} TF list found for species={species!r}.\n"
             "To download it, call:\n"
-            f"    piaso.data.fetch_animaltfdb_tf_list({species!r})\n"
-            "Then pass the returned path to load_tf_list(path=...).\n"
+            f"    piaso.data.fetch_tf_list({species!r}, source={source!r})\n"
+            "Then call load_tf_list() again, or pass the returned path to "
+            "load_tf_list(path=...).\n"
             "Alternatively, supply any symbol-per-line or TSV file via path=."
         )
 
     raise ValueError(
-        f"Unknown source {source!r}. Supported: 'animaltfdb', 'motifdb'."
+        f"Unknown source {source!r}. Supported: "
+        f"{sorted(_TF_LIST_SOURCES) + ['motifdb']}."
     )
 
 
-def _read_tf_list_file(path: str) -> set[str]:
-    """Read a TF symbol list from a plain-text or TSV file."""
+def _read_tf_list_file(path: str, min_symbols: int = 0) -> set[str]:
+    """Read a TF symbol list from a plain-text or TSV file.
+
+    Parameters
+    ----------
+    path : str
+        One symbol per line, or a TSV carrying a ``Symbol`` / ``TF`` / ``gene``
+        header column.
+    min_symbols : int, default 0
+        Reject a file yielding fewer than this many symbols. Left at 0 for a
+        user-supplied ``path=`` (a ten-TF list is a legitimate thing to pass)
+        and set to :data:`_MIN_CATALOGUE_SYMBOLS` when reading a downloaded
+        catalogue, where a short answer means the download failed.
+
+    Raises
+    ------
+    ValueError
+        If the file is markup rather than a list, if any token cannot be a
+        gene symbol, or if ``min_symbols`` is not met.
+
+    Notes
+    -----
+    *Added in 1.2.4.* The checks exist because a WAF captcha page — served with
+    HTTP 200 — used to parse into a dozen plausible-looking "symbols" that
+    then silently shrank a TF universe. A download that fails should fail
+    loudly; these three checks make that so regardless of which host does it.
+    """
     path = str(path)
     if not os.path.exists(path):
         raise FileNotFoundError(f"TF list file not found: {path!r}")
 
-    with open(path, "r", encoding="utf-8") as fh:
+    with open(path, "r", encoding="utf-8", errors="replace") as fh:
         first_line = fh.readline()
+
+    # 1) markup, not a list -- catches an error/captcha page served as 200
+    if first_line.lstrip()[:1] == "<":
+        raise ValueError(
+            f"{path!r} looks like an HTML page, not a TF list "
+            f"(it starts with {first_line.strip()[:60]!r}).\n"
+            "A host that answers a download with a page is usually behind a "
+            "WAF or a login. Open the URL in a browser, save the file, and "
+            "pass it with load_tf_list(path=...)."
+        )
 
     # Sniff: is it a TSV with a recognised symbol column?
     sep = "\t" if "\t" in first_line else None
+    symbols: set[str] = set()
     if sep is not None:
         headers = [h.strip() for h in first_line.split(sep)]
         _known_cols = {"Symbol", "TF", "gene", "Gene", "TF_Name", "symbol", "gene_name"}
         col_name = next((h for h in headers if h in _known_cols), None)
         if col_name is not None:
-            symbols: set[str] = set()
-            with open(path, "r", encoding="utf-8", newline="") as fh:
+            with open(path, "r", encoding="utf-8", newline="", errors="replace") as fh:
                 reader = csv.DictReader(fh, delimiter="\t")
                 for row in reader:
                     sym = (row.get(col_name) or "").strip()
                     if sym:
                         symbols.add(sym)
-            return symbols
+            return _validate_tf_symbols(symbols, path, min_symbols)
 
     # Otherwise treat as one-symbol-per-line (skip blank lines / comment lines)
-    symbols = set()
-    with open(path, "r", encoding="utf-8") as fh:
+    with open(path, "r", encoding="utf-8", errors="replace") as fh:
         for line in fh:
             sym = line.strip()
             if sym and not sym.startswith("#"):
                 symbols.add(sym)
+    return _validate_tf_symbols(symbols, path, min_symbols)
+
+
+def _validate_tf_symbols(symbols: set[str], path: str, min_symbols: int) -> set[str]:
+    """Reject a parse that produced markup fragments or too few entries."""
+    bad = sorted(t for t in symbols if _BAD_SYMBOL_RE.search(t))
+    if bad:
+        raise ValueError(
+            f"{path!r} does not parse as a TF list: "
+            f"{len(bad)} of {len(symbols)} entries cannot be gene symbols, "
+            f"e.g. {bad[:3]!r}.\n"
+            "Expected one symbol per line, or a TSV with a 'Symbol' column."
+        )
+    if len(symbols) < min_symbols:
+        raise ValueError(
+            f"{path!r} yielded only {len(symbols)} symbols, fewer than the "
+            f"{min_symbols} expected of a TF catalogue -- the download most "
+            "likely returned an error page.\n"
+            f"Delete it and fetch again, or pass your own file with "
+            "load_tf_list(path=...), which applies no minimum."
+        )
     return symbols
 
 
 # ---------------------------------------------------------------------------
-# 4. AnimalTFDB fetcher (opt-in)
+# 4. TF-list fetcher (opt-in)
 # ---------------------------------------------------------------------------
 
-def fetch_animaltfdb_tf_list(
+def fetch_tf_list(
     species: str,
+    source: str = "cistarget",
     dest_dir: Optional[str] = None,
 ) -> str:
-    """Download the AnimalTFDB 4.0 TF list for *species* and cache it locally.
+    """Download a TF symbol list for *species* and cache it locally.
 
     Parameters
     ----------
     species : str
         ``"human"`` or ``"mouse"``.
+    source : str
+        ``"cistarget"`` (default), the only fetchable catalogue. See Notes.
     dest_dir : str or None
-        Directory to save the file.  Defaults to ``~/.piaso/grn/``.
+        Directory to save the file. Defaults to ``~/.piaso/grn/``.
 
     Returns
     -------
     str
-        Absolute path to the downloaded file.
-
-    Raises
-    ------
-    ValueError
-        Unsupported species.
-    RuntimeError
-        Download failed from all candidate URLs.
+        Absolute path to the cached file.
 
     Notes
     -----
-    This function makes a network request.  It is intentionally **not** called
-    automatically by :func:`load_tf_list` — the caller must invoke it
-    explicitly so that downstream pipelines have reproducible, network-free
-    behaviour after the first run.
+    This function makes a network request. It is deliberately **not** called
+    automatically by :func:`load_tf_list`, so that a pipeline is
+    network-free and reproducible after the first run.
+
+    **For regulon inference you usually need neither.** ``inferRegulon``
+    with ``tf_list=None`` already restricts to TFs that (a) are named in the
+    motif database and (b) are expressed in the data, which is the only set
+    that can produce an edge.
+
+    *Changed in 1.2.4*: ``source="animaltfdb"`` was removed. Its only host
+    (``guolab.wchscu.cn``) is behind a WAF that answers every non-browser
+    client — ``urllib``, ``requests`` and ``curl`` alike, under any
+    ``User-Agent`` — with a captcha page or 405, and the old
+    ``bioinfo.life.hust.edu.cn`` mirror no longer resolves. Save the table
+    from a browser and read it with ``load_tf_list(path=...)``.
+
+    The downloaded file is checked before it is kept: a page that arrives
+    with HTTP 200 but is not a TF list is deleted rather than cached.
     """
     import urllib.request
     import urllib.error
 
-    species_lower = species.lower()
-    if species_lower not in _ANIMALTFDB_URLS:
+    if source in _RETIRED_TF_LIST_SOURCES:
+        raise _retired_source_error(source, species)
+    if source not in _TF_LIST_SOURCES:
         raise ValueError(
-            f"Unsupported species {species!r}. "
-            f"Supported: {sorted(_ANIMALTFDB_URLS.keys())}"
+            f"Unknown source {source!r}. Supported: {sorted(_TF_LIST_SOURCES)}."
+        )
+    species_lower = species.lower()
+    if species_lower not in _TF_LIST_SOURCES[source]:
+        raise ValueError(
+            f"Unsupported species {species!r} for {source}. "
+            f"Supported: {sorted(_TF_LIST_SOURCES[source].keys())}"
         )
 
-    dest_path = _animaltfdb_cache_path(species_lower, dest_dir=dest_dir)
+    dest_path = _tf_list_cache_path(species_lower, source, dest_dir=dest_dir)
     dest_path.parent.mkdir(parents=True, exist_ok=True)
 
     last_error: Optional[Exception] = None
-    for url in _ANIMALTFDB_URLS[species_lower]:
+    for url in _TF_LIST_SOURCES[source][species_lower]:
         try:
             urllib.request.urlretrieve(url, str(dest_path))
-            return str(dest_path)
         except urllib.error.URLError as exc:
             last_error = exc
             continue
+        # Validate before the file counts as cached: a host that answers a
+        # download with an error page does so with HTTP 200, and a cached
+        # page is worse than no cache -- it silently shrinks the TF universe.
+        try:
+            _read_tf_list_file(str(dest_path), min_symbols=_MIN_CATALOGUE_SYMBOLS)
+        except ValueError as exc:
+            dest_path.unlink(missing_ok=True)
+            last_error = exc
+            continue
+        return str(dest_path)
 
     raise RuntimeError(
-        f"Failed to download AnimalTFDB TF list for species={species!r}.\n"
+        f"Failed to download the {source} TF list for species={species!r}.\n"
         f"Last error: {last_error}\n"
-        "Please download the file manually and pass its path to "
+        "Download the file manually and pass its path to "
         "load_tf_list(path=...).\n"
-        "Expected format: one TF symbol per line, or a TSV with a 'Symbol' column."
+        "Expected format: one TF symbol per line, or a TSV with a 'Symbol' "
+        "column."
     )
 
 
-def _animaltfdb_cache_path(species: str, dest_dir: Optional[str] = None) -> pathlib.Path:
+def fetch_animaltfdb_tf_list(
+    species: str,
+    dest_dir: Optional[str] = None,
+) -> str:
+    """**Removed in 1.2.4** — AnimalTFDB cannot be downloaded from Python.
+
+    .. deprecated:: 1.2.4
+       Raises immediately, without a network call. AnimalTFDB's only host is
+       behind a WAF that answers every non-browser client with a captcha page,
+       so this function could never return a TF list; the page it did return
+       parsed into a dozen junk "symbols". Save the table from a browser and
+       read it with ``load_tf_list(path=...)``, or use
+       ``fetch_tf_list(species)``, which defaults to cisTarget.
+
+       This shim exists because the function shipped in 1.2.3. It will be
+       deleted in 1.3.
+
+    Raises
+    ------
+    RuntimeError
+        Always.
+    """
+    dest = _tf_list_cache_path(species.lower(), "animaltfdb", dest_dir=dest_dir)
+    urls = "\n".join(f"    {u}" for u in _ANIMALTFDB_URLS.get(species.lower(), []))
+    raise RuntimeError(
+        f"fetch_animaltfdb_tf_list({species!r}) was removed in PIASO 1.2.4.\n"
+        "AnimalTFDB's only host (guolab.wchscu.cn) is behind a WAF that "
+        "answers every non-browser client with a captcha page, so this call "
+        "never produced a TF list -- and the page it saved parsed into junk "
+        "symbols.\n"
+        "Open one of these in a browser, save the file, and read it:\n"
+        f"{urls}\n"
+        f"    piaso.data.load_tf_list({species!r}, path={str(dest)!r})\n"
+        "Or use the default catalogue, which serves ordinary clients:\n"
+        f"    piaso.data.fetch_tf_list({species!r})   # cisTarget\n"
+        "For regulon inference you usually need neither: inferRegulon with "
+        "tf_list=None already restricts to TFs that have a motif and are "
+        "expressed."
+    )
+
+
+def _tf_list_cache_path(species: str, source: str,
+                        dest_dir: Optional[str] = None) -> pathlib.Path:
     base = pathlib.Path(dest_dir) if dest_dir else _DEFAULT_CACHE_DIR
-    stem_map = {"human": "Homo_sapiens_TF", "mouse": "Mus_musculus_TF"}
-    return base / stem_map[species]
+    return base / _TF_LIST_STEMS[source][species]
+
+
+def _animaltfdb_cache_path(species: str, dest_dir: Optional[str] = None) -> pathlib.Path:
+    """Kept for callers that used it directly; prefer ``_tf_list_cache_path``."""
+    return _tf_list_cache_path(species, "animaltfdb", dest_dir=dest_dir)
 
 
 # ---------------------------------------------------------------------------

@@ -250,8 +250,12 @@ def _reference_knn(matrix, n_nearest_neighbors=30, leaf_size=40):
 # --------------------------------------------------------------------------------------------
 # container helpers — one code path for AnnData and cytome
 # --------------------------------------------------------------------------------------------
-def _is_cytome(obj) -> bool:
-    return type(obj).__name__ == "CytomeDataset" or hasattr(obj, "iter_chunks")
+# One predicate for the whole package. Four modules each had their own: three
+# identical isinstance checks and one duck-type on `iter_chunks`, none of which
+# noticed a *closed* dataset -- which then failed as a sqlite "Cannot operate on
+# a closed database" several frames away. The shared one raises where the
+# mistake is.
+from ..utils._cytome_compat import _is_cytome_dataset_obj as _is_cytome
 
 
 def _open(obj):

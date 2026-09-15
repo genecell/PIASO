@@ -100,6 +100,7 @@ def _nice_legend_fracs(dot_max, n_target=5):
 from ..utils._cytome_compat import is_cytome_input as _is_cytome_input
 from ..utils._cytome_compat import read_cells_columns as _read_cells_columns
 from ._group_order import resolve_group_order
+from ._group_order import natural_key
 
 
 def _resolve_features(features):
@@ -200,7 +201,9 @@ def _ordered_groups(data, groupby, present):
     present = [p for p in present if pd.notna(p)]
     _, declared = _resolve_categorical_style(data, groupby)
     if not declared:
-        return sorted(present, key=str)
+        # natural, not lexicographic: cluster 10 belongs after 9, and the
+        # dot plot has to agree with the legend on the embedding above it.
+        return sorted(present, key=natural_key)
     present_str = {str(p): p for p in present}
     ordered = [present_str[str(c)] for c in declared if str(c) in present_str]
     seen = {str(c) for c in ordered}

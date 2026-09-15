@@ -1,75 +1,68 @@
-"""The Sankey diagram must fill its axes, not sit in the bottom third.
+"""The Sankey layout has to survive a lot of categories.
 
-`_compute_positions` fits the bars *and* the gaps between them into [0, 1]
-(`available = 1 - total_gap`). The y-limit used to add `gap * n_categories` on
-top of that, padding for space the layout had already reserved. With 27
-categories and the default gap that put the top of the axis at 1.86, so nearly
-half the published figure was blank.
-
-The padding has to be constant. These tests pin that: the drawn content spans
-the axis regardless of how many categories there are.
+Two defects lived in the same arithmetic. The axis limit added
+``gap * n_categories`` on top of a layout that already fitted into [0, 1], so
+with 30 categories nearly half the canvas came out blank -- that one is fixed
+and covered here. The second is that the gaps themselves are unbounded:
+``gap * (n - 1)`` at the 0.03 default reaches 1.0 at 35 categories, leaving
+negative height for every bar.
 """
 from __future__ import annotations
 
-import pytest
-
-pytest.importorskip("matplotlib")
-np = pytest.importorskip("numpy")
-pd = pytest.importorskip("pandas")
-ad = pytest.importorskip("anndata")
-piaso = pytest.importorskip("piaso")
-
 import matplotlib
 matplotlib.use("Agg")
-import matplotlib.pyplot as plt  # noqa: E402
+
+import anndata as ad
+import numpy as np
+import pandas as pd
+import pytest
+
+import piaso
+from piaso.plotting._plotSankey import _effective_gap
 
 
-def _toy(n_left=5, n_right=27, n=2000):
-    rng = np.random.default_rng(0)
-    a = ad.AnnData(np.zeros((n, 2), dtype="float32"))
-    a.obs["left"] = pd.Categorical([str(i % n_left) for i in range(n)])
-    a.obs["right"] = pd.Categorical(
-        [f"R{v}" for v in rng.integers(0, n_right, n)])
-    return a
+def _frame(n_left: int, n_right: int, n: int = 2000):
+    obs = pd.DataFrame(
+        {"l": [f"L{i % n_left}" for i in range(n)],
+         "r": [f"R{i % n_right}" for i in range(n)]},
+        index=[str(i) for i in range(n)])
+    return ad.AnnData(np.zeros((n, 2), dtype="float32"), obs=obs)
 
 
-def _fig(adata):
-    fig, ax = piaso.pl.sankey(adata, left="left", right="right",
+@pytest.mark.parametrize("n", [2, 5, 10])
+def test_small_category_counts_are_untouched(n):
+    """The cap must not change layouts that were already fine."""
+    assert _effective_gap(n, 0.03) == 0.03
+
+
+@pytest.mark.parametrize("n", [35, 60, 200])
+def test_gaps_never_consume_the_whole_axis(n):
+    """Without the cap, `available` is negative here and bars invert."""
+    eff = _effective_gap(n, 0.03)
+    assert 1.0 - eff * (n - 1) >= 0.5 - 1e-9
+
+
+def test_forty_categories_render_with_positive_bars():
+    fig, ax = piaso.pl.sankey(_frame(40, 38), left="l", right="r",
                               show=False, return_fig=True)
-    return fig, ax
+    bars = [p for p in ax.patches if hasattr(p, "get_height")]
+    heights = [p.get_height() for p in bars]
+    assert bars, "no bars drawn"
+    assert min(heights) > 0, f"non-positive bar height: {min(heights)}"
+    tops = [p.get_y() + p.get_height() for p in bars]
+    assert max(tops) <= 1.0 + 1e-6
+    assert min(p.get_y() for p in bars) >= -1e-6
 
 
-@pytest.mark.parametrize("n_right", [3, 15, 27, 40])
-def test_the_content_fills_the_axis_at_any_category_count(n_right):
-    fig, ax = _fig(_toy(n_right=n_right))
-    lo, hi = ax.get_ylim()
-    # The bars span [0, 1] by construction; the axis should hug that with a
-    # small constant margin rather than growing with the category count.
-    assert hi - lo < 1.3, (
-        f"ylim spans {hi - lo:.2f} for {n_right} categories — the axis is "
-        "padded for space the layout already reserved")
-    assert lo < 0 <= 1 < hi, "the [0, 1] band the bars occupy must be inside"
-    plt.close(fig)
+def test_the_axis_is_not_padded_per_category():
+    """The regression that left half the figure blank.
 
-
-def test_the_bars_actually_reach_the_top_of_their_band():
-    """Guards the other direction: content must not stop short of 1.0."""
-    a = _toy(n_right=27)
-    fig, ax = _fig(a)
-    # ax.patches holds the node bars (Rectangle) and the flow ribbons
-    # (PathPatch); only the bars carry the band the layout reserved.
-    from matplotlib.patches import Rectangle
-    bars = [p for p in ax.patches if isinstance(p, Rectangle)]
-    assert bars, "no node bars were drawn"
-    assert max(b.get_y() + b.get_height() for b in bars) == pytest.approx(
-        1.0, abs=0.02)
-    assert min(b.get_y() for b in bars) == pytest.approx(0.0, abs=0.02)
-    plt.close(fig)
-
-
-def test_a_lopsided_diagram_still_fills_the_axis():
-    """Left and right have different counts, so different per-side gap totals."""
-    fig, ax = _fig(_toy(n_left=2, n_right=30))
-    lo, hi = ax.get_ylim()
-    assert hi - lo < 1.3
-    plt.close(fig)
+    y-limits must be the constant padding, not something that grows with the
+    number of categories.
+    """
+    _f1, ax_small = piaso.pl.sankey(_frame(3, 3), left="l", right="r",
+                                    show=False, return_fig=True)
+    _f2, ax_big = piaso.pl.sankey(_frame(30, 28), left="l", right="r",
+                                  show=False, return_fig=True)
+    assert ax_small.get_ylim() == pytest.approx(ax_big.get_ylim())
+    assert ax_big.get_ylim()[1] < 1.2, ax_big.get_ylim()

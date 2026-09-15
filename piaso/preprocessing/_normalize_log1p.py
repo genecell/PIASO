@@ -8,7 +8,8 @@ from ..settings import _resolve_layer_dtype
 from scipy import sparse as sp
 
 
-from ..utils._cytome_compat import _is_cytome_dataset_obj as _is_cytome_dataset
+from ..utils._cytome_compat import (_is_cytome_dataset_obj as _is_cytome_dataset,
+                                    _is_path_like, is_cytome_input, open_cytome)
 
 
 def _normalize_chunk_log1p(chunk, cell_depth_chunk, scale_factor):
@@ -98,6 +99,16 @@ def normalize_log1p(data, target_sum=1e4, key_added='log1p', save_layer=False,
     None
         Modifies ``data`` in place.
     """
+
+    # Every sibling in piaso.tl takes a .cytome path as readily as a Dataset;
+    # this one took only the Dataset, so a path reached the AnnData branch and
+    # raised `'str' object has no attribute 'X'`.
+    if _is_path_like(data) and is_cytome_input(data):
+        with open_cytome(data) as _ds:
+            return normalize_log1p(_ds, target_sum=target_sum,
+                                   key_added=key_added, save_layer=save_layer,
+                                   modality=modality, layer=layer,
+                                   batch_size=batch_size)
     if _is_cytome_dataset(data):
         _normalize_log1p_cytome(data, target_sum, key_added, save_layer,
                                 modality, layer, batch_size)

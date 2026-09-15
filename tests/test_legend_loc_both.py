@@ -64,3 +64,34 @@ def test_both_labels_every_category():
     labels = {t.get_text() for t in fig.axes[0].texts}
     assert {"c0", "c1", "c2", "c3"} <= labels
     plt.close(fig)
+
+
+# ---------------------------------------------------------------------------
+# 'both' worked for a release before either docstring mentioned it, so a caller
+# reading help() saw three values and had no reason to try the fourth. A value
+# the code accepts but the documentation omits is only half-shipped.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("fn", [piaso.pl.plotEmbedding,
+                                piaso.pl.plot_embeddings_split])
+@pytest.mark.parametrize("value", _VALID_LEGEND_LOC)
+def test_every_accepted_legend_loc_is_documented(fn, value):
+    doc = fn.__doc__ or ""
+    assert f"``'{value}'``" in doc, (
+        f"{fn.__name__} accepts legend_loc={value!r} but never says so; "
+        "help() is the only place most callers will look")
+
+
+@pytest.mark.parametrize("fn", [piaso.pl.plotEmbedding,
+                                piaso.pl.plot_embeddings_split])
+def test_the_documented_default_is_the_real_one(fn):
+    """The split-panel docstring claimed 'right margin', which is not a value
+    the validator accepts -- copying it out of the docs raised ValueError."""
+    import inspect
+
+    default = inspect.signature(fn).parameters["legend_loc"].default
+    assert default in _VALID_LEGEND_LOC
+    doc = fn.__doc__ or ""
+    head = doc[:doc.index("legend_marker_size")] if "legend_marker_size" in doc else doc
+    assert f"'{default}'" in head.split("legend_loc")[1][:400]

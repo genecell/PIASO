@@ -7,6 +7,7 @@ Works with AnnData and cytome Dataset.
 from typing import Optional
 import warnings
 import numpy as np
+from ._group_order import natural_key
 import pandas as pd
 import matplotlib.pyplot as plt
 from functools import wraps
@@ -208,6 +209,8 @@ def scatter(
     cytome_layer: str = "counts",
     compute_on_fly: bool = True,
     use_cached_stats: bool = True,
+    linewidths: float = 0.0,
+    edgecolors="none",
 ):
     """Scatter plot of two features colored by a third variable.
 
@@ -400,9 +403,10 @@ def scatter(
 
         if category_order:
             ordered = [str(c) for c in category_order if str(c) in present]
-            categories = ordered + sorted(present - set(ordered))
+            categories = ordered + sorted(present - set(ordered),
+                                          key=natural_key)
         else:
-            categories = sorted(present)
+            categories = sorted(present, key=natural_key)
 
         _pal_is_dict = isinstance(palette, dict)
 
@@ -417,7 +421,8 @@ def scatter(
             ax.scatter(x_vals[mask], y_vals[mask],
                        c=[_color_for(cat, i)],
                        s=point_size, alpha=alpha, label=cat,
-                       rasterized=rasterized)
+                       rasterized=rasterized,
+                       linewidths=linewidths, edgecolors=edgecolors)
 
         if legend_loc == 'right':
             from matplotlib.lines import Line2D
@@ -457,11 +462,13 @@ def scatter(
         sc = ax.scatter(x_vals[order], y_vals[order],
                         c=np.asarray(color_vals)[order], cmap=cmap,
                         s=point_size, alpha=alpha, rasterized=rasterized,
-                        vmin=vmin, vmax=vmax)
+                        vmin=vmin, vmax=vmax,
+                        linewidths=linewidths, edgecolors=edgecolors)
         _attach_colorbar(fig, ax, sc, label=color, side_ax=ax_right)
     else:
         ax.scatter(x_vals, y_vals, c='grey', s=point_size, alpha=alpha,
-                   rasterized=rasterized)
+                   rasterized=rasterized,
+                   linewidths=linewidths, edgecolors=edgecolors)
 
     # Log axes (hexbin already applied its own scale above).
     if logx and not use_density:

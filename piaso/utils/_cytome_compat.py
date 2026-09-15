@@ -14,10 +14,41 @@ Two resolvers are exported for code that needs the underlying file path
 
 These two are the surface that lets STR_ONLY-via-subprocess and
 SQLite-bound functions accept either a `Dataset` or a string path.
+
+Why several helpers rather than one
+-----------------------------------
+They are not variations on a theme; they return different things, because
+callers need different things:
+
+===========================  =====================================  ==============
+helper                       question it answers                    returns
+===========================  =====================================  ==============
+``is_cytome_input``          take the cytome branch at all?         bool
+``_is_cytome_dataset_obj``   is it already open (do not reopen)?    bool
+``open_cytome``              give me a Dataset, manage its life     context manager
+``open_cytome_sync``         give me a Dataset, I will close it     Dataset
+``resolve_cytome_path``      I need a file path (subprocess)        str
+``resolve_cytome_conn``      I need raw SQL                         (conn, owns_it)
+===========================  =====================================  ==============
+
+Folding them into one function with a mode argument would move the branch to
+every call site and lose the return type, which is the part that stops
+mistakes.
+
+What matters is that this module is the *only* place any of it is decided.
+Four modules once carried their own ``_is_cytome`` -- three identical
+``isinstance`` checks and one duck-type on ``iter_chunks`` -- and none noticed
+a closed dataset, so that failed later as a sqlite error several frames from
+the cause. ``tests/test_cytome_helpers_are_shared.py`` fails if a private one
+reappears.
+
+Every path/Dataset fork goes through ``_is_path_like``, so ``str``,
+``pathlib.Path`` and ``Dataset`` mean the same thing everywhere.
 """
 
 from __future__ import annotations
 
+import os
 from contextlib import contextmanager
 from typing import Iterable, Iterator, Tuple
 
@@ -69,6 +100,16 @@ def _assert_cytome_open(obj) -> None:
         )
 
 
+def _is_path_like(obj) -> bool:
+    """True for a filesystem path in any of the shapes callers actually pass.
+
+    ``isinstance(obj, str)`` was the test everywhere, so ``pathlib.Path`` fell
+    through to the Dataset branch and was used as though it were one -- failing
+    later, somewhere else, with a message about the wrong thing.
+    """
+    return isinstance(obj, (str, os.PathLike))
+
+
 def is_cytome_input(obj) -> bool:
     """Return True if ``obj`` is a cytome ``Dataset`` or a path to a .cytome file.
 
@@ -76,8 +117,9 @@ def is_cytome_input(obj) -> bool:
     an actionable message instead of silently returning True. Path strings
     are not probed (no I/O).
     """
-    if isinstance(obj, str):
-        return obj.endswith('.cytome') or obj.endswith('.db')
+    if _is_path_like(obj):
+        name = os.fspath(obj)
+        return name.endswith('.cytome') or name.endswith('.db')
     if _looks_like_cytome_dataset_class(obj):
         _assert_cytome_open(obj)
         return True
@@ -90,7 +132,7 @@ def _is_cytome_dataset_obj(obj) -> bool:
     If ``obj`` is a *closed* cytome Dataset, raises ``RuntimeError`` with
     an actionable message instead of silently returning True.
     """
-    if isinstance(obj, str):
+    if _is_path_like(obj):
         return False
     if _looks_like_cytome_dataset_class(obj):
         _assert_cytome_open(obj)
@@ -105,9 +147,9 @@ def open_cytome(source) -> Iterator:
     If ``source`` is a string path, opens the dataset and closes on exit.
     If ``source`` is already a Dataset, yields it unchanged and does not close.
     """
-    if isinstance(source, str):
+    if _is_path_like(source):
         import cytome
-        ds = cytome.open(source)
+        ds = cytome.open(os.fspath(source))
         try:
             yield ds
         finally:
@@ -135,6 +177,14 @@ def open_cytome_sync(path):
     cytome.Dataset
         Open dataset. Caller is responsible for ``ds.close()``.
     """
+    if _is_cytome_dataset_obj(path):
+        # Returning it would be worse than failing: the contract here is
+        # "caller owns the close", and the caller would then close a Dataset
+        # it did not open. open_cytome() is the one that knows the difference.
+        raise TypeError(
+            "open_cytome_sync() takes a path; it was given an open Dataset, "
+            "and its caller closes what it returns. Use open_cytome() as a "
+            "context manager, which closes only what it opened.")
     try:
         import cytome
     except ImportError as exc:  # pragma: no cover
@@ -142,7 +192,7 @@ def open_cytome_sync(path):
             "The 'cytome' package is required to open a cytome file. "
             "Install with: pip install cytome"
         ) from exc
-    return cytome.open(path)
+    return cytome.open(os.fspath(path))
 
 
 def resolve_cytome_path(source) -> str:
@@ -156,8 +206,8 @@ def resolve_cytome_path(source) -> str:
     ``cytome-import-fragments``, ``cytome-quantify-peaks``) which
     require an on-disk path.
     """
-    if isinstance(source, str):
-        return source
+    if _is_path_like(source):
+        return os.fspath(source)
     if _is_cytome_dataset_obj(source):
         return str(source.path)
     raise TypeError(
@@ -177,8 +227,8 @@ def resolve_cytome_conn(source) -> Tuple["sqlite3.Connection", bool]:  # noqa: F
     ``generateBigWigFromCytome`` reading from ``fragment_chunks``).
     """
     import sqlite3
-    if isinstance(source, str):
-        return sqlite3.connect(source), True
+    if _is_path_like(source):
+        return sqlite3.connect(os.fspath(source)), True
     if _is_cytome_dataset_obj(source):
         return source._conn, False
     raise TypeError(

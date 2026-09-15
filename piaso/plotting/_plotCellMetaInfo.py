@@ -10,6 +10,8 @@ def plotConfusionMatrix(
     data,
     groupby_query,
     groupby_reference, 
+    order_query=None,
+    order_reference=None,
     normalize='query',
     figsize=None,
     square=True,
@@ -26,8 +28,9 @@ def plotConfusionMatrix(
     """
     Plot a normalized and reordered confusion matrix from clustering results.
     
-    This function creates a confusion matrix heatmap with SVD-based reordering for 
-    better visualization of cluster relationships. The matrix can be normalized 
+    This function creates a confusion matrix heatmap with automatic reordering
+    for better visualization of cluster relationships: a clustered order shared
+    by both axes when they carry the same labels, and an SVD order otherwise. The matrix can be normalized 
     in different ways and customized extensively.
     
     Parameters:
@@ -35,6 +38,14 @@ def plotConfusionMatrix(
                                           If AnnData, will use data.obs for the analysis.
         groupby_query (str): Column name for the query labels (typically predicted clusters).
         groupby_reference (str): Column name for the reference labels (typically true labels).
+        order_query, order_reference: how to order each axis. An explicit
+            sequence of labels, None (keep the categorical order), or a
+            strategy name: 'auto' (the default — one clustered order on both
+            axes when the two label sets match, otherwise SVD on both, or
+            barycentre for the free axis when the other is pinned), 'svd',
+            'hclust' (average linkage on that axis's own profiles), or
+            'hclust_symmetric' (one clustered order on both axes; requires
+            matching label sets).
         normalize (str): How to normalize the confusion matrix. Options:
                         - 'query': normalize by query (row-wise) - default
                         - 'reference': normalize by reference (column-wise)  
@@ -233,25 +244,26 @@ def plotConfusionMatrix(
     else:
         raise ValueError("normalize must be 'query', 'reference', 'all', or None")
     
-    # Handle case where matrix has only one row or column
-    if conf_matrix_norm.shape[0] <= 1 or conf_matrix_norm.shape[1] <= 1:
-        warnings.warn("Confusion matrix has only one row or column. Skipping SVD reordering.")
-        row_order = np.arange(conf_matrix_norm.shape[0])
-        col_order = np.arange(conf_matrix_norm.shape[1])
-    else:
-        # Singular Value Decomposition (SVD) to find the optimal ordering
-        try:
-            U, s, Vt = np.linalg.svd(conf_matrix_norm.fillna(0), full_matrices=False)
-            row_scores = U[:, 0] * s[0]
-            col_scores = Vt.T[:, 0] * s[0]
-            # Sorting indices based on scores
-            row_order = np.argsort(row_scores)
-            col_order = np.argsort(col_scores)
-        except np.linalg.LinAlgError:
-            warnings.warn("SVD failed. Using original order.")
-            row_order = np.arange(conf_matrix_norm.shape[0])
-            col_order = np.arange(conf_matrix_norm.shape[1])
-    
+    # Both axes SVD-ordered was the only behaviour; `order_query` and
+    # `order_reference` now also take an explicit sequence, or "auto" to
+    # follow whichever axis the other one pins. Pinning one and asking SVD for
+    # the other is not a thing SVD can do -- it orders the two together -- so
+    # "auto" against a fixed axis means the barycentre, which is the
+    # conditional answer to that question.
+    from ._seriation import resolve_pair_order
+
+    _q_none = order_query is None
+    _r_none = order_reference is None
+    rows, cols = resolve_pair_order(
+        conf_matrix_norm.fillna(0),
+        left_order="auto" if _q_none else order_query,
+        right_order="auto" if _r_none else order_reference,
+        default_left=list(conf_matrix_norm.index),
+        default_right=list(conf_matrix_norm.columns),
+    )
+    row_order = np.array([conf_matrix_norm.index.get_loc(r) for r in rows])
+    col_order = np.array([conf_matrix_norm.columns.get_loc(c) for c in cols])
+
     # Reorder the confusion matrix
     conf_matrix_reordered = conf_matrix_norm.iloc[row_order, col_order]
     

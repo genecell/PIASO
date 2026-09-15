@@ -23,6 +23,7 @@ except ImportError:
 
 
 
+from ._group_order import natural_key
 from ..utils._cytome_compat import is_cytome_input as _is_cytome_input  # backward-compat re-export
 from ..utils._cytome_compat import open_cytome as _open_cytome
 
@@ -38,12 +39,44 @@ from ..utils._cytome_compat import open_cytome as _open_cytome
 _VALID_LEGEND_LOC = ("right", "on_data", "both", "none")
 
 
+def _is_numeric_dtype(values) -> bool:
+    """Is this column continuous?
+
+    ``np.issubdtype(values.dtype, np.number)`` answered this until pandas 3,
+    which stores an object string column as ``StringDtype`` -- an extension
+    dtype numpy cannot interpret, so the check *raised* rather than returning
+    False and every categorical embedding crashed. pandas' own predicate
+    understands both its extension dtypes and plain numpy ones.
+
+    Integer columns stay continuous on purpose: ``n_counts`` is a metric, not a
+    category. **Booleans do not**, and that is the one place the two libraries
+    disagree: ``np.issubdtype(bool, np.number)`` is False while pandas'
+    predicate says True, so switching to it wholesale would have turned every
+    True/False mask into a colour bar.
+    """
+    from pandas.api.types import is_bool_dtype as _pd_is_bool
+    from pandas.api.types import is_numeric_dtype as _pd_is_numeric
+
+    dtype = getattr(values, "dtype", None)
+    if dtype is None:
+        return False
+    try:
+        if _pd_is_bool(dtype):
+            return False
+        return bool(_pd_is_numeric(dtype))
+    except TypeError:                       # a dtype neither library knows
+        return False
+
+
 def _render_embedding(ax, coords, values, is_cat, *, color="value", palette=None,
                       point_size=1.0, alpha=1.0, rasterized=True, groups=None,
                       na_color="lightgray", legend_loc="right", legend_ncol=None,
                       legend_marker_size=None, legend_fontsize=10,
-                      legend_fontoutline=None, cmap=None, vmin=None, vmax=None,
-                      add_colorbar=True, category_order=None, strict_groups=True):
+                      legend_fontoutline=None, legend_fontbackground="white",
+                      legend_fontbackground_alpha=0.7,
+                      cmap=None, vmin=None, vmax=None,
+                      add_colorbar=True, category_order=None, strict_groups=True,
+                      linewidths=0.0, edgecolors="none"):
     """Render one embedding scatter (categorical or continuous) into ``ax`` from
     plain arrays — no AnnData / cytome dependency. Shared by ``plotEmbedding`` and
     ``plot_embeddings_split`` so the split needs no proxy-AnnData round-trip.
@@ -55,16 +88,31 @@ def _render_embedding(ax, coords, values, is_cat, *, color="value", palette=None
     present categories follow alphabetically. Both are populated from a cytome's
     ``ds.set_categories`` store / AnnData categorical dtype + ``uns`` by the callers.
 
+    ``linewidths`` / ``edgecolors`` default to **no stroke**. Matplotlib
+    otherwise strokes every marker at ``rcParams['patch.linewidth']`` (1.0 pt)
+    in ``edgecolors='face'``, which for cell-sized points is most of the dot:
+    ``point_size=0.2`` is a disc 0.45 pt across inside a 1.0 pt stroke, so the
+    marker draws **3.2x** the requested size, and with ``alpha < 1`` the stroke
+    and the fill composite twice around the rim — the ringed, washed-out dots
+    reported at 600 dpi. A stroke is a no-op on a 20 pt marker and a
+    misrepresentation on a 0.5 pt one, so it is off unless asked for.
+
     Returns the continuous mappable (for a shared colorbar) or None.
     """
     from . import color as _color_mod
     if is_cat:
         present = set(str(v) for v in values)
+        # natural_key, not plain sorted: Leiden labels are strings, so a
+        # lexicographic sort gives 0, 1, 10, 11, 2 in the legend while the
+        # Sankey beside it -- which resolves order through resolve_group_order
+        # -- gives 0, 1, 2, and the two figures disagree about which cluster is
+        # which. A cytome round-trip stores the column as plain strings, so no
+        # categorical order survives to fall back on and this decides it.
         if category_order:
             ordered = [str(c) for c in category_order if str(c) in present]
-            categories = ordered + sorted(present - set(ordered))
+            categories = ordered + sorted(present - set(ordered), key=natural_key)
         else:
-            categories = sorted(present)
+            categories = sorted(present, key=natural_key)
         str_values = np.array([str(v) for v in values])
         if palette is None:
             palette = _color_mod.d_color4
@@ -93,6 +141,7 @@ def _render_embedding(ax, coords, values, is_cat, *, color="value", palette=None
             if bg.any():
                 ax.scatter(coords[bg, 0], coords[bg, 1], c=na_color,
                            s=point_size, alpha=alpha, rasterized=rasterized,
+                           linewidths=linewidths, edgecolors=edgecolors,
                            label='_nolegend_')
             plot_categories = [c for c in categories if c in groups_list]
 
@@ -101,7 +150,8 @@ def _render_embedding(ax, coords, values, is_cat, *, color="value", palette=None
             mask = str_values == cat
             ax.scatter(coords[mask, 0], coords[mask, 1],
                        c=[_color_for(cat, i)],
-                       s=point_size, alpha=alpha, label=cat, rasterized=rasterized)
+                       s=point_size, alpha=alpha, label=cat, rasterized=rasterized,
+                       linewidths=linewidths, edgecolors=edgecolors)
 
         if legend_loc in ("right", "both"):
             from matplotlib.lines import Line2D
@@ -128,8 +178,18 @@ def _render_embedding(ax, coords, values, is_cat, *, color="value", palette=None
                 text_kwargs = dict(
                     fontsize=legend_fontsize - 1, ha="center", va="center",
                     fontweight="bold",
-                    bbox=dict(boxstyle="round,pad=0.1", fc="white", ec="none", alpha=0.7),
                 )
+                # A label sitting on its own cluster is unreadable against the
+                # cluster colour, so it gets a background patch. The colour and
+                # opacity are arguments because the useful value depends on the
+                # palette: the default white at 0.7 disappears against white
+                # figure background, which is exactly where a sparse cluster's
+                # label lands.
+                if legend_fontbackground is not None:
+                    text_kwargs["bbox"] = dict(
+                        boxstyle="round,pad=0.2", fc=legend_fontbackground,
+                        ec="none", alpha=legend_fontbackground_alpha,
+                    )
                 if legend_fontoutline is not None and legend_fontoutline > 0:
                     import matplotlib.patheffects as patheffects
                     text_kwargs['path_effects'] = [
@@ -144,7 +204,8 @@ def _render_embedding(ax, coords, values, is_cat, *, color="value", palette=None
         order = np.argsort(values)
         sc = ax.scatter(coords[order, 0], coords[order, 1],
                         c=values[order], cmap=cmap, s=point_size, alpha=alpha,
-                        rasterized=rasterized, vmin=vmin, vmax=vmax)
+                        rasterized=rasterized, vmin=vmin, vmax=vmax,
+                        linewidths=linewidths, edgecolors=edgecolors)
         if add_colorbar:
             plt.colorbar(sc, ax=ax, shrink=0.6, pad=0.02)
         return sc
@@ -559,6 +620,8 @@ def plot_embeddings_split(data,
                           margin_ratio:float=0.05,
                           legend_fontsize:int=10,
                           legend_fontoutline:int=2,
+                          legend_fontbackground="white",
+                          legend_fontbackground_alpha:float=0.7,
                           legend_loc:str='right',
                           legend_marker_size: float=6.0,
                           groups=None,
@@ -579,6 +642,8 @@ def plot_embeddings_split(data,
                           image=False,
                           img_key="hires",
                           image_alpha=1.0,
+                          linewidths: float = 0.0,
+                          edgecolors="none",
                           **kwargs):
     """
     Plot cell embeddings side by side based on a categorical variable.
@@ -629,8 +694,23 @@ def plot_embeddings_split(data,
         Font size in pt.
     legend_fontoutline: int, optional (default=2)
         Line width of the legend font outline in pt. 
-    legend_loc: str, optional (default='right margin')
-        Location of legend, defaults to 'right margin'.
+    legend_fontbackground: str or None, optional (default='white')
+        Colour of the patch behind each ``'on_data'`` label; None for no patch.
+    legend_fontbackground_alpha: float, optional (default=0.7)
+        Opacity of that patch.
+    legend_loc: str, optional (default='right')
+        Where to put the category labels. One of:
+
+        - ``'right'`` — a single shared legend in the figure's right margin.
+        - ``'on_data'`` — labels drawn at each cluster's centroid, in every panel.
+        - ``'both'`` — centroid labels *and* the shared right-margin legend.
+          Use this while you are still working out what a cluster is: the
+          on-data label tells you which cluster you are looking at, the margin
+          legend lets you read a colour off the list. Neither alone does both.
+        - ``'none'`` — no legend.
+
+        Any other value raises ``ValueError`` rather than silently drawing
+        nothing.
     legend_marker_size: float, optional (default=4.0)
         Legend dot size. In the right-margin legend it is the marker scale
         (relative to the data points); in the global/multi-panel legend it is
@@ -662,11 +742,30 @@ def plot_embeddings_split(data,
         legend frame. Mirrors ``piaso.pl.plotEmbedding(frameon=...)``.
     rasterized : bool, optional (default True)
         Forward to per-panel scatter for compact vector output.
+    linewidths : float, optional (default 0)
+        Marker stroke width, in points. **Zero by default.** Matplotlib
+        otherwise strokes every point at ``rcParams['patch.linewidth']``
+        (1.0 pt) in ``edgecolors='face'``, which for cell-sized markers is
+        most of the dot: ``point_size=0.2`` is a disc 0.45 pt across inside a
+        1.0 pt stroke, so it draws 3.2x the size asked for, and under
+        ``alpha < 1`` the stroke and fill composite twice around the rim —
+        ringed dots with a washed-out core, visible once a PDF is enlarged.
+        Pass a positive value to outline markers deliberately.
+
+        *Changed in 1.2.4*: was matplotlib's 1.0 pt default.
+    edgecolors : color or 'none', optional (default 'none')
+        Marker stroke colour. Only meaningful with ``linewidths > 0``.
+
+        *Changed in 1.2.4*: was matplotlib's ``'face'``.
     **kwargs : dict
-        Forwarded verbatim to :func:`piaso.pl.plotEmbedding` for each
-        panel. Accepts the scanpy-style aliases ``ncols`` (→ ``ncol``)
-        and ``size`` (→ ``point_size``) for compatibility with existing
-        call sites.
+        Accepts the aliases ``ncols`` (→ ``ncol``), ``size``
+        (→ ``point_size``) and ``show`` (→ ``show_figure``). Anything else
+        raises ``TypeError``.
+
+        *Changed in 1.2.4*: unrecognised keywords used to be accepted and
+        silently discarded, so a caller styling the panels got no error and no
+        effect — and ``show=False``, which every other ``piaso.pl`` function
+        understands, displayed the figure regardless.
 
     image : bool or str, default False
         Draw the library's tissue image under the spots (``basis='spatial'``
@@ -703,6 +802,22 @@ def plot_embeddings_split(data,
         point_size = kwargs.pop('size')
     elif 'size' in kwargs:
         kwargs.pop('size')
+    # `show` is what every other piaso.pl function calls this, and it was being
+    # dropped here -- so `show=False` displayed the figure anyway. Accept it.
+    if 'show' in kwargs:
+        _show = kwargs.pop('show')
+        if show_figure is True:            # untouched default, so honour the alias
+            show_figure = _show
+    # Anything left was accepted and then silently dropped -- the shape of bug
+    # that already cost this function its vmin_pct/vmax_pct (see below), and
+    # cost `show=False` its meaning. Raise as plotEmbedding does, so a caller
+    # learns at the call site instead of from a figure that looks almost right.
+    if kwargs:
+        unexpected = ", ".join(sorted(kwargs))
+        raise TypeError(
+            "plot_embeddings_split() got unexpected keyword argument(s): "
+            f"{unexpected}"
+        )
 
     from . import color as _color_mod
 
@@ -859,9 +974,10 @@ def plot_embeddings_split(data,
         resolved_palette, category_order = _resolve_categorical_style(data, color, palette)
         if category_order:
             ordered = [str(c) for c in category_order if str(c) in present]
-            all_color_cats = ordered + sorted(present - set(ordered))
+            all_color_cats = ordered + sorted(present - set(ordered),
+                                               key=natural_key)
         else:
-            all_color_cats = sorted(present)
+            all_color_cats = sorted(present, key=natural_key)
         if isinstance(resolved_palette, dict):
             cat_to_color = {
                 cat: resolved_palette.get(
@@ -963,7 +1079,8 @@ def plot_embeddings_split(data,
                 # non-group cells are greyed out.
                 panel_palette = dict(cat_to_color)
             else:
-                panel_cats = sorted(set(str(v) for v in full_color_data[mask]))
+                panel_cats = sorted(set(str(v) for v in full_color_data[mask]),
+                                    key=natural_key)
                 panel_palette = [cat_to_color[c] for c in panel_cats]
 
         # Inject the resolved modality into per-panel titles when requested.
@@ -985,9 +1102,12 @@ def plot_embeddings_split(data,
             (not is_numeric),
             color=color, palette=panel_palette, point_size=_panel_point_size,
             alpha=alpha, rasterized=rasterized, legend_loc=panel_legend,
+            legend_fontbackground=legend_fontbackground,
+            legend_fontbackground_alpha=legend_fontbackground_alpha,
             groups=groups, strict_groups=False,
             cmap=cmap, vmin=expr_min, vmax=expr_max,
             legend_fontsize=legend_fontsize, legend_fontoutline=legend_fontoutline,
+            linewidths=linewidths, edgecolors=edgecolors,
         )
         if not frameon:
             for spine in axs[i].spines.values():
@@ -1132,7 +1252,7 @@ def _get_embedding_and_color(
             # bool/category columns (e.g. Leiden, CellTypes) are categorical.
             # (Was `np.floating`, which mis-flagged INTEGER metrics like
             # n_fragments / n_counts as categorical.)
-            is_cat = not np.issubdtype(values.dtype, np.number)
+            is_cat = not _is_numeric_dtype(values)
             return coords, values, is_cat, None, True
         # color is not an obs column — resolve via the modality registry.
         with _open_cytome(data) as ds:
@@ -1149,7 +1269,7 @@ def _get_embedding_and_color(
     if color in data.obs.columns:
         values = np.asarray(data.obs[color])
         # numeric (int/float) → continuous; object/str/bool/category → categorical
-        is_cat = not np.issubdtype(values.dtype, np.number)
+        is_cat = not _is_numeric_dtype(values)
     else:
         values = np.asarray(data.obs_vector(color, layer=layer))
         is_cat = False
@@ -1612,6 +1732,8 @@ def plotEmbedding(
     legend_loc="right",
     legend_fontsize=10,
     legend_fontoutline=None,
+    legend_fontbackground="white",
+    legend_fontbackground_alpha=0.7,
     legend_ncol=None,
     rasterized=True,
     dpi=None,
@@ -1647,6 +1769,8 @@ def plotEmbedding(
     image_crop=True,
     cell_mask=None,
     return_fig=False,
+    linewidths: float = 0.0,
+    edgecolors="none",
     **kwargs,
 ):
     """Plot a 2-D embedding colored by a cell annotation or continuous value.
@@ -1730,18 +1854,52 @@ def plotEmbedding(
         ``ValueError`` if a name is not among the categories.
     na_color : str, default ``'lightgray'``
         Colour for the greyed-out (non-``groups``) cells.
-    legend_loc : str
-        ``'right'`` (outside), ``'on_data'`` (centroid labels), or ``'none'``.
+    legend_loc : str, default ``'right'``
+        Where to put the category labels. One of:
+
+        - ``'right'`` — legend box outside the axes, in the right margin.
+        - ``'on_data'`` — labels drawn at each category's centroid.
+        - ``'both'`` — centroid labels *and* the right-margin legend, so you can
+          name a cluster where the points are and still read its colour off the
+          list. Neither alone does both jobs.
+        - ``'none'`` — no legend.
+
+        Any other value raises ``ValueError`` rather than silently drawing
+        nothing.
     legend_fontsize : int
         Font size for legend labels.
     legend_fontoutline : float or None
         Width of text outline for ``legend_loc='on_data'`` labels.
+    legend_fontbackground : str or None, default ``'white'``
+        Colour of the patch drawn behind each ``'on_data'`` label. ``None``
+        draws the text with no background. The default is readable over a
+        cluster and invisible over the figure background, which is where a
+        small or sparse cluster's label ends up — pass a tinted colour
+        (``'0.9'``, ``'#fffbe6'``) when labels need to read in both places.
+    legend_fontbackground_alpha : float, default ``0.7``
+        Opacity of that patch. Raise it towards 1.0 to hide the points
+        underneath a label; lower it to let them show through.
         Adds a contrasting stroke around text for readability.  If None
         (default), no outline is drawn.
     legend_ncol : int, optional
         Number of legend columns.  If None, auto-calculated (~12 per column).
     rasterized : bool
         Rasterize scatter points for smaller vector files.
+    linewidths : float, optional (default 0)
+        Marker stroke width, in points. **Zero by default.** Matplotlib
+        otherwise strokes every point at ``rcParams['patch.linewidth']``
+        (1.0 pt) in ``edgecolors='face'``, which for cell-sized markers is
+        most of the dot: ``point_size=0.2`` is a disc 0.45 pt across inside a
+        1.0 pt stroke, so it draws 3.2x the size asked for, and under
+        ``alpha < 1`` the stroke and fill composite twice around the rim —
+        ringed dots with a washed-out core, visible once a PDF is enlarged.
+        Pass a positive value to outline markers deliberately.
+
+        *Changed in 1.2.4*: was matplotlib's 1.0 pt default.
+    edgecolors : color or 'none', optional (default 'none')
+        Marker stroke colour. Only meaningful with ``linewidths > 0``.
+
+        *Changed in 1.2.4*: was matplotlib's ``'face'``.
     dpi : int, optional
         Display DPI. If None, uses ``rcParams['figure.dpi']``.
     vmin, vmax : float
@@ -1916,7 +2074,10 @@ def plotEmbedding(
                     show=False, ax=axs_flat[i],
                     palette=palette,
                     legend_loc=legend_loc, legend_fontsize=legend_fontsize,
-                    legend_fontoutline=legend_fontoutline, legend_ncol=legend_ncol,
+                    legend_fontoutline=legend_fontoutline,
+                    legend_fontbackground=legend_fontbackground,
+                    legend_fontbackground_alpha=legend_fontbackground_alpha,
+                    legend_ncol=legend_ncol,
                     rasterized=rasterized, dpi=dpi,
                     vmin=vmin, vmax=vmax, vmin_pct=vmin_pct, vmax_pct=vmax_pct,
                     cmap=cmap,
@@ -2049,7 +2210,10 @@ def plotEmbedding(
         groups=groups, na_color=na_color, legend_loc=legend_loc,
         legend_ncol=legend_ncol, legend_marker_size=legend_marker_size,
         legend_fontsize=legend_fontsize, legend_fontoutline=legend_fontoutline,
+        legend_fontbackground=legend_fontbackground,
+        legend_fontbackground_alpha=legend_fontbackground_alpha,
         cmap=_cmap, vmin=vmin, vmax=vmax,
+        linewidths=linewidths, edgecolors=edgecolors,
     )
 
     # --- frameon ---

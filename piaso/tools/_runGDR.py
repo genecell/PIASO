@@ -558,10 +558,9 @@ def runGDR(
                 score_list_collection = []
                 cellbarcode_info = list()
                 for batch_u in tqdm(batch_list, desc="Calculating cell embeddings", unit="batch"):
-                    cellbarcode_info.append(adata.obs_names[adata.obs[batch_key] == batch_u].values)
-                    with warnings.catch_warnings():
-                        warnings.simplefilter("ignore", FutureWarning)
-                        adata_batch_u = adata[adata.obs[batch_key] == batch_u].copy()
+                    _mask_u = (adata.obs[batch_key] == batch_u).values
+                    cellbarcode_info.append(adata.obs_names[_mask_u].values)
+                    adata_batch_u = _batch_anndata(adata, _mask_u, score_layer)
                     score_list, gene_set_names = calculateScoreParallel(
                         adata_batch_u, gene_set=marker_gene,
                         score_method=scoring_method, score_layer=score_layer,
@@ -1214,6 +1213,39 @@ def _calculateScoreParallel_single_batch(batch_key, shared_data, batch_i, marker
 from typing import Literal
 from concurrent.futures import ThreadPoolExecutor
 
+def _batch_anndata(adata, mask, layer=None):
+    """A batch's expression as a standalone AnnData, without slicing a view.
+
+    ``adata[mask].copy()`` builds an anndata **view** first, and the view
+    constructor rewrites every categorical ``obs`` column through
+    ``_remove_unused_categories``. That helper assigns into a sliced frame,
+    which is what raised ``SettingWithCopyWarning`` from inside anndata on
+    every multi-batch GDR run -- and it is pure overhead here, because the
+    scorer reads only the matrix and ``var_names``. Building the object
+    directly skips both the warning and the work.
+
+    Suppressing the warning instead would have meant a ``catch_warnings``
+    block inside a ``ThreadPoolExecutor`` worker, and ``catch_warnings``
+    mutates the process-global filter list: two workers entering and leaving
+    it concurrently race, and which warnings survive becomes a matter of
+    timing. Not making the view removes the reason to have the block at all.
+    """
+    import anndata as _ad
+
+    idx = np.flatnonzero(np.asarray(mask))
+    # layer=None means .X; a named layer must exist (KeyError if it does not,
+    # which is the same failure the scorer would raise one call later).
+    X = (adata.layers[layer] if layer is not None else adata.X)[idx]
+    sub = _ad.AnnData(
+        X=X,
+        obs=pd.DataFrame(index=pd.Index(adata.obs_names[idx])),
+        var=pd.DataFrame(index=pd.Index(adata.var_names)),
+    )
+    if layer is not None:
+        sub.layers[layer] = X
+    return sub
+
+
 def calculateScoreParallel_multiBatch(
     adata,
     batch_key: str,
@@ -1302,10 +1334,8 @@ def calculateScoreParallel_multiBatch(
 
         def _score_one_batch(batch_idx_and_name):
             idx, batch_i = batch_idx_and_name
-            batch_mask = adata.obs[batch_key] == batch_i
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore", FutureWarning)
-                adata_batch = adata[batch_mask].copy()
+            batch_mask = (adata.obs[batch_key] == batch_i).values
+            adata_batch = _batch_anndata(adata, batch_mask, score_layer)
 
             # NOTE: the OMP_NUM_THREADS / OPENBLAS_NUM_THREADS assignments in
             # the workers are inoperative -- OpenBLAS reads them when it loads,

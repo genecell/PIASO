@@ -76,12 +76,18 @@ def leiden(
 
     Returns
     -------
-    np.ndarray or None
-        For AnnData and the in-memory ``cell_mask`` / ``data=None`` paths,
-        returns the string array of cluster labels. For a **cytome.Dataset**
-        (no ``cell_mask``) returns ``None`` — labels are written to
-        ``ds.cells[key_added]`` and read back from there. Self-contained: pass
-        the Dataset and access ``ds.cells[key_added]`` afterwards.
+    None, or np.ndarray when the labels cannot be written
+        Nothing, on both backends: the labels are written to
+        ``adata.obs[key_added]`` or to ``ds.cells[key_added]`` and read back
+        from there. The two paths that **cannot** write still return the
+        label array — ``cell_mask`` (the labels cover the masked cells only,
+        so writing them full-length would mis-align) and ``data=None`` (no
+        object to write to).
+
+        *Changed in 1.2.4*: the AnnData path used to return the labels as
+        well as writing them, so the same call had two different contracts
+        depending on the backend and echoed an array of strings in a
+        notebook. Read them from ``adata.obs[key_added]``.
     """
     # A cytome path is as valid an input as it is for infog / runSVD / runGDR.
     # Without this a pipeline written entirely with a path worked for three
@@ -191,13 +197,27 @@ def leiden(
             data.cells[key_added] = labels
             data.flush()
             # Persist the numeric category order so plots show 0,1,2,…,10.
+            # Not wrapped in a silent except: the old `except Exception: pass`
+            # here swallowed the KeyError from a case-mismatched column name
+            # ("leiden" vs an existing "Leiden"), which left the STALE order
+            # attached to the NEW labels until a plot noticed. Cytome resolves
+            # the casing now; if set_categories still fails, say so — labels
+            # without an order beat labels with a wrong one.
             try:
                 data.set_categories(key_added, order=_order)
-            except Exception:
-                pass
+            except Exception as e:
+                import warnings
+                warnings.warn(
+                    f"leiden: labels written to cells[{key_added!r}] but the "
+                    f"category order could not be stored ({e}). Plots will "
+                    f"fall back to a default order; run "
+                    f"ds.set_categories({key_added!r}, order=...) to set one.",
+                    stacklevel=2)
             # Strict / self-contained: labels live on the cytome.
             return None
         else:
             data.obs[key_added] = pd.Categorical(labels, categories=_order)
+        return None
 
+    # cell_mask, or data=None: nowhere to write them, so hand them back.
     return labels

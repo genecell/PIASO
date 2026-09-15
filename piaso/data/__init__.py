@@ -32,17 +32,20 @@ from ._motifs import (
     load_meme,
     load_jaspar_meme,
     load_cisbp_meme,
+    load_codebook,
     load_cisbp,
     load_tf_list,
     fetch_jaspar,
     resolve_jaspar_path,
     fetch_cisbp,
+    fetch_codebook,
     resolve_cisbp_meme_path,
     fetch_cistarget_motifs,
     load_cistarget_motifs,
     resolve_cistarget_paths,
     write_meme,
     fetch_animaltfdb_tf_list,
+    fetch_tf_list,
     build_tf_motif_map,
 )
 
@@ -50,6 +53,7 @@ from ._motifs import (
 fetchGenomeFasta = fetch_2bit
 loadMotifs = load_jaspar_meme        # JASPAR .meme; use load_cisbp_meme / load_cisbp for CIS-BP
 loadTFList = load_tf_list
+fetchTFList = fetch_tf_list
 buildTFMotifMap = build_tf_motif_map
 fetchJASPAR = fetch_jaspar
 fetchCISBP = fetch_cisbp

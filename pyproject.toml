@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "piaso-tools"
-version = "1.2.3"
+version = "1.2.4"
 description = "Precise Integrative Analysis of Single-cell Omics."
 requires-python = ">=3.9"
 license = {text = "BSD-3-Clause"}
@@ -38,6 +38,12 @@ dependencies = [
     "anndata>=0.8",
     "numpy>=1.21.6",
     "matplotlib>=3.5.2",
+    # No upper bound. pandas 3 turns on `future.infer_string`, so a string
+    # column is StringDtype rather than object -- which broke dtype dispatch
+    # until the checks stopped asking numpy about a pandas extension dtype.
+    # The suite passes on 3.x; capping here would have made PIASO
+    # uninstallable beside anything that requires it, for a problem that was
+    # ours and is fixed.
     "pandas>=1.4.4",
     "scipy>=1.7.3",
     "seaborn>=0.11.2",
@@ -69,7 +75,7 @@ dependencies = [
     # the plotting fallback describe 0.3.0's layout, so an install that pairs
     # this release with an older cytome would be advised about names its files
     # do not use.
-    "cytome>=0.3.0,<1.0",
+    "cytome>=0.3.2,<1.0",
 ]
 
 # https://docs.pypi.org/project_metadata/#project-urls
@@ -106,5 +112,10 @@ scanpy = [
 ]
 
 [tool.maturin]
+# picco and quantify gate call_peaks_pyo3 and quantify_peaks_pyo3. Without
+# them the extension still builds and imports -- it simply has no such
+# symbols, so the failure surfaces later as an ImportError from inside
+# quantifyPeakActivity rather than as a build error. publish.sh drops them
+# again for the public tree, where the sources they gate do not ship.
 features = ["pyo3/extension-module"]
 module-name = "piaso._piaso"

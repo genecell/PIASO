@@ -37,7 +37,19 @@ def umap(
         If AnnData: reads kNN from uns, stores UMAP in obsm.
         If cytome.Dataset: reads embedding, stores UMAP embedding in cytome.
     use_rep : str
-        Embedding name for the representation to use.
+        Name of the representation whose ARRAY is fed to umap-learn. What it
+        controls depends on whether a stored kNN graph is being reused:
+
+        - cytome, or AnnData with a stored piaso kNN: neighbors are **not**
+          re-run — the embedding's topology comes wholly from the stored
+          graph, and ``use_rep`` only selects the data array (umap-learn's
+          API requires one even with ``precomputed_knn``). Naming a different
+          representation than the graph was built on raises, because it
+          would change nothing while implying it had.
+        - AnnData with **no** stored kNN: umap-learn computes its own
+          neighbors from this array (its defaults, not ours) — announced
+          with a warning. Run :func:`piaso.tl.neighbors` first to control
+          and reuse the graph.
     min_dist : float
         Minimum distance parameter for UMAP.
     spread : float
@@ -62,10 +74,17 @@ def umap(
 
     Returns
     -------
-    np.ndarray or None
-        For AnnData and in-memory inputs, returns the UMAP coordinates. For a
-        **cytome.Dataset**, returns ``None`` — the embedding is written to the
-        cytome under ``key_added`` and read back from there.
+    None, or np.ndarray for an in-memory call
+        Nothing, on both backends: the embedding is written to
+        ``adata.obsm[key_added]`` or to the cytome under ``key_added``, and
+        read back from there. Only the in-memory form — ``data=None`` with a
+        ``knn_result`` — returns the coordinates, because there is nowhere to
+        write them.
+
+        *Changed in 1.2.4*: the AnnData path used to return the coordinates
+        as well as writing them, so the same call had two different contracts
+        depending on the backend and echoed a 2-column array in a notebook.
+        Read them from ``adata.obsm[key_added]``.
     """
     # A cytome path is as valid an input as it is for infog / runSVD / runGDR.
     # Without this a pipeline written entirely with a path worked for three
@@ -99,14 +118,29 @@ def umap(
         if use_rep is None:
             use_rep = stored_use_rep or 'X_svd'
         elif stored_use_rep and use_rep != stored_use_rep:
-            warnings.warn(
-                f"umap(use_rep='{use_rep}') differs from the representation the "
-                f"'{neighbors_key}' neighbors graph was built on ('{stored_use_rep}'). "
-                f"The cytome UMAP is driven by the reused graph; use_rep only sets the "
-                f"array fed to UMAP. Pass the matching neighbors_key, or rerun "
-                f"piaso.tl.neighbors on '{use_rep}'.", stacklevel=2)
+            # An error, not a warning. With a precomputed graph, use_rep
+            # selects DATA, not topology — the embedding's structure comes
+            # wholly from the stored graph. A use_rep that names a different
+            # representation therefore does nothing topological, and a
+            # parameter that silently does nothing is worse than one that
+            # stops you: the figure would *imply* it was built on use_rep
+            # when it was built on whatever neighbors() used.
+            raise ValueError(
+                f"umap(use_rep='{use_rep}'): the '{neighbors_key}' neighbors "
+                f"graph was built on '{stored_use_rep}', and the UMAP is "
+                f"driven by that graph — use_rep only selects the array fed "
+                f"to umap-learn, not the topology. Run "
+                f"piaso.tl.neighbors(ds, use_rep='{use_rep}') first if you "
+                f"want the '{use_rep}' topology, or drop use_rep to use the "
+                f"graph as stored.")
         knn_indices, knn_dists = reconstruct_knn_from_cytome(data, neighbors_key, modality)
         precomputed_knn = (knn_indices, knn_dists, None)
+    elif data is None:
+        # No object and no kNN: there is nothing to embed. Checked here rather
+        # than below because the AnnData branch reads `data.uns` immediately.
+        raise ValueError(
+            "umap(data=None) needs knn_result= from piaso.tl.neighbors: with "
+            "no object there is no representation and no stored graph.")
     elif not _is_cytome_dataset(data):
         # `neighbors_key` used to be ignored here: the keys were hard-coded to
         # '_neighbors_*', so neighbors(key_added='x') followed by
@@ -127,6 +161,19 @@ def umap(
             knn_indices = data.uns[knn_idx_key]
             knn_dists = data.uns[knn_dist_key]
             precomputed_knn = (knn_indices, knn_dists, None)
+        else:
+            # The one path where use_rep genuinely decides the topology: with
+            # no stored kNN, umap-learn computes its own neighbors from the
+            # use_rep array, with its defaults rather than ours. Say so —
+            # silently running a second, differently-parameterised kNN is how
+            # "why does tl.umap have use_rep, is it re-running neighbors?"
+            # becomes a reasonable question with no discoverable answer.
+            warnings.warn(
+                f"umap: no stored kNN found for "
+                f"neighbors_key='{uns_key}' — umap-learn will compute its own "
+                f"neighbors from use_rep='{use_rep or 'X_svd'}' with its "
+                f"internal defaults. Run piaso.tl.neighbors first to control "
+                f"and reuse the graph.", stacklevel=2)
         # Fall back to the representation the graph was built on, but never
         # override one the caller passed explicitly -- doing so silently
         # embedded X_svd when the call said use_rep='X_gdr'.
@@ -138,18 +185,33 @@ def umap(
         use_rep = 'X_svd'
 
     # Load embedding
-    if _is_cytome_dataset(data):
+    if data is None:
+        # The in-memory path: a knn_result and nothing to read a representation
+        # from. umap-learn uses X only for its row count when the graph is
+        # precomputed, so the kNN's own shape is the whole requirement -- and
+        # asking `None` for `.obsm` is how this path used to end. It was
+        # invisible here because the test covering it skips wherever
+        # umap-learn and scikit-learn disagree, which is most of our machines.
+        X = np.zeros((len(precomputed_knn[0]), 1), dtype=np.float32)
+    elif _is_cytome_dataset(data):
         X = _load_embedding_from_cytome(data, use_rep, modality)
     else:
         X = data.obsm[use_rep]
 
-    reducer = umap_module.UMAP(
+    # umap-learn's default for precomputed_knn is the sentinel (None, None,
+    # None), not None — passing None crashes inside fit at
+    # `self.precomputed_knn[0]`. The no-stored-kNN fallback always hit this,
+    # which means that path never actually worked; it now runs (with the
+    # warning above announcing whose neighbors are being used).
+    _umap_kwargs = dict(
         n_components=n_components,
         min_dist=min_dist,
         spread=spread,
         random_state=random_state,
-        precomputed_knn=precomputed_knn,
     )
+    if precomputed_knn is not None:
+        _umap_kwargs["precomputed_knn"] = precomputed_knn
+    reducer = umap_module.UMAP(**_umap_kwargs)
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", message="n_jobs value.*overridden.*random_state")
         warnings.filterwarnings("ignore", message="precomputed_knn.*transform")
@@ -157,14 +219,19 @@ def umap(
 
     # Store results
     if _is_cytome_dataset(data):
-        # Store as {modality}_{name}, like runSVD. Previously this wrote the
-        # caller's key verbatim, so one cytome could hold RNA_svd next to
-        # X_umap and a second modality's UMAP had nowhere to go.
-        # NOTE: writes the caller's key verbatim. Standardising on
-        # {modality}_{name} like runSVD is the consistent choice, but the
+        # Writes the caller's key verbatim, so one cytome can hold RNA_svd
+        # (runSVD, via _embedding_names.storage_name) next to X_umap. That
+        # inconsistency is real: `ds.embeddings["X_svd"]` raises after
+        # runSVD(key_added="X_svd") because the stored name is RNA_svd.
+        #
+        # Standardising on {modality}_{name} is the consistent choice, but the
         # current names are a tested contract (test_round24, projectGDR's
-        # reference lookup), so it is a migration rather than a patch.
-        # Reads already accept every spelling via _embedding_names.
+        # reference lookup), so it is a migration rather than a patch, and it
+        # is not attempted here.
+        #
+        # Reads are unaffected either way: _embedding_names.candidate_names
+        # accepts every spelling, which is why this has stayed invisible to
+        # anyone using use_rep= rather than indexing ds.embeddings directly.
         from ..settings import _resolve_layer_dtype
         data.add_embedding(
             key_added, embedding,
@@ -175,7 +242,10 @@ def umap(
         data.flush()
         # Strict / self-contained: embedding lives on the cytome.
         return None
-    else:
-        data.obsm[key_added] = embedding
+    if data is None:
+        # In-memory: a knn_result and no object to write to, so the array is
+        # the only possible result.
+        return embedding
 
-    return embedding
+    data.obsm[key_added] = embedding
+    return None

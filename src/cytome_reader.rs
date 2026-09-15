@@ -50,6 +50,58 @@ pub struct FragmentBlock {
     pub cell_indices: Vec<i32>,
 }
 
+/// One storage row of `fragment_chunks` for a chromosome, in `chunk_idx`
+/// order. `min_start` is the row's smallest fragment start (None on legacy
+/// files written before the column existed); rows of a sorted cytome cover
+/// non-overlapping, increasing start ranges, which is what lets the peak
+/// caller read only the rows a genomic window needs.
+#[derive(Clone, Debug)]
+pub struct ChunkRow {
+    pub id: i64,
+    pub min_start: Option<i32>,
+    pub n_fragments: i64,
+}
+
+/// List the fragment rows of a chromosome in storage order (no blobs read).
+pub fn list_chromosome_rows(conn: &Connection, chrom: &str) -> Vec<ChunkRow> {
+    let mut stmt = conn.prepare(
+        "SELECT id, min_start, n_fragments FROM fragment_chunks WHERE chrom = ? ORDER BY chunk_idx"
+    ).unwrap();
+    stmt.query_map([chrom], |r| Ok(ChunkRow {
+        id: r.get(0)?,
+        min_start: r.get(1)?,
+        n_fragments: r.get(2)?,
+    })).unwrap().filter_map(|r| r.ok()).collect()
+}
+
+/// Decode one storage row by id, keeping only fragments whose length lies in
+/// `[frag_len_min, frag_len_max]` (`0, i32::MAX` = no filter, fast path).
+pub fn read_row(conn: &Connection, id: i64, frag_len_min: i32, frag_len_max: i32) -> FragmentBlock {
+    let (starts_blob, ends_blob, cell_blob, compression, encoding): (Vec<u8>, Vec<u8>, Vec<u8>, String, i32) =
+        conn.query_row(
+            "SELECT starts_blob, ends_blob, cell_idx_blob, compression, COALESCE(encoding, 0) \
+             FROM fragment_chunks WHERE id = ?",
+            [id],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
+        ).expect("fragment_chunks row disappeared while reading");
+    let starts = encoder::decode_starts(&starts_blob, &compression, encoding);
+    let ends = encoder::decode_ends(&ends_blob, &compression, &starts, encoding);
+    let cells = encoder::decode_cell_indices(&cell_blob, &compression);
+    if frag_len_min <= 0 && frag_len_max == i32::MAX {
+        return FragmentBlock { starts, ends, cell_indices: cells };
+    }
+    let mut fs = Vec::with_capacity(starts.len());
+    let mut fe = Vec::with_capacity(starts.len());
+    let mut fc = Vec::with_capacity(starts.len());
+    for i in 0..starts.len() {
+        let len = ends[i] - starts[i];
+        if len >= frag_len_min && len <= frag_len_max {
+            fs.push(starts[i]); fe.push(ends[i]); fc.push(cells[i]);
+        }
+    }
+    FragmentBlock { starts: fs, ends: fe, cell_indices: fc }
+}
+
 /// Load cell_idx → cluster_int mapping from cytome cells table.
 /// Returns array where arr[cell_idx] = cluster_int, or -1 if unmatched.
 pub fn build_cell_to_cluster_int(

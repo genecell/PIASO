@@ -13,6 +13,8 @@ there is exactly one implementation of each.
 """
 from __future__ import annotations
 
+import functools
+
 import base64
 import pickle
 import warnings
@@ -22,12 +24,12 @@ import numpy as np
 import pandas as pd
 import scipy.sparse as sp
 
-def _is_cytome(data) -> bool:
-    try:
-        from cytome.core.dataset import CytomeDataset
-    except ImportError:
-        return False
-    return isinstance(data, CytomeDataset)
+# One predicate for the whole package. Four modules each had their own: three
+# identical isinstance checks and one duck-type on `iter_chunks`, none of which
+# noticed a *closed* dataset -- which then failed as a sqlite "Cannot operate on
+# a closed database" several frames away. The shared one raises where the
+# mistake is.
+from ..utils._cytome_compat import _is_cytome_dataset_obj as _is_cytome
 
 
 # ---------------------------------------------------------------------------
@@ -303,7 +305,7 @@ def _specificity_matrix(
     return pd.DataFrame(dense, index=var_names, columns=groups)
 
 
-def cospecificity_trans(
+def _cospecificity_trans_impl(
     data,
     *,
     groupby: str = "leiden",
@@ -424,3 +426,16 @@ def cospecificity_trans(
     return {"edges": edges, "celltypes": celltypes,
             "per_celltype": per_ct, "S": S}
 
+
+
+@functools.wraps(_cospecificity_trans_impl)
+def cospecificity_trans(data, **kwargs) -> dict:
+    """Trans co-specificity, accepting a cytome path as well as an open one."""
+    from ..utils._cytome_compat import _is_path_like, open_cytome
+
+    if _is_path_like(data):
+        # A path opened here is closed here; a Dataset handed in belongs to
+        # the caller and is left open.
+        with open_cytome(data) as ds:
+            return _cospecificity_trans_impl(ds, **kwargs)
+    return _cospecificity_trans_impl(data, **kwargs)

@@ -37,11 +37,21 @@ def test_numeric_category_order_survives_the_dotplot():
     assert list(mean.index) == numeric
 
 
-def test_falls_back_to_string_sort_without_a_declared_order():
+def test_falls_back_to_natural_sort_without_a_declared_order():
+    """Without a categorical order the fallback is a NATURAL sort.
+
+    This asserted `sorted(key=str)` when the fallback was lexicographic. That
+    put cluster 10 between 1 and 2 in every plot that had no declared order,
+    while plotEmbedding's legend -- reading the same labels -- put it after 9.
+    The two disagreed on the same figure, so the fallback is now natural
+    everywhere and this pins that rather than the old behaviour.
+    """
+    from piaso.plotting._group_order import natural_key
+
     a, _ = _toy()
     a.obs["plain"] = a.obs["leiden"].astype(str)      # not categorical
     frac, _ = _get_expression_data_anndata(a, ["g0"], "plain")
-    assert list(frac.index) == sorted(frac.index, key=str)
+    assert list(frac.index) == sorted(frac.index, key=natural_key)
 
 
 def test_levels_absent_from_the_declared_order_are_appended_not_dropped():

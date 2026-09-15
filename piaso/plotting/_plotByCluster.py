@@ -144,7 +144,15 @@ def _plot_violin_on_ax(ax, values, groups_dict, feature, size, show_grid,
     """Draw a single violin plot on the given axes."""
     if groups_dict is not None:
         groups = list(groups_dict.keys())
-        group_data = [groups_dict[g] for g in groups]
+        # Drop non-finite values per group before anything else. A single NaN
+        # makes the gaussian KDE's covariance NaN, and matplotlib then draws an
+        # invisible violin without raising -- so one missing measurement in a
+        # group silently removes that group from the panel. Seen on a Xenium
+        # object where `nucleus_area` is NaN for 1% of cells: every cluster but
+        # one vanished, and the one that survived was the only one with no NaN.
+        # The ungrouped branch below already filters this way.
+        group_data = [np.asarray(groups_dict[g], dtype=float) for g in groups]
+        group_data = [d[np.isfinite(d)] for d in group_data]
         # Filter out empty groups
         non_empty = [(g, d) for g, d in zip(groups, group_data) if len(d) > 0]
         if not non_empty:
@@ -185,7 +193,8 @@ def _plot_violin_on_ax(ax, values, groups_dict, feature, size, show_grid,
                     x_jitter = pos + np.random.default_rng(42).uniform(
                         -jitter_width * 0.3, jitter_width * 0.3, size=len(gd))
                     ax.scatter(x_jitter, gd, s=size, alpha=0.3, color=c,
-                               zorder=3, rasterized=True)
+                               zorder=3, rasterized=True,
+                               linewidths=0, edgecolors='none')
         ax.set_xticks(range(len(groups)))
         if is_last:
             ax.set_xticklabels(groups, rotation=90)
@@ -207,7 +216,8 @@ def _plot_violin_on_ax(ax, values, groups_dict, feature, size, show_grid,
                 x_jitter = np.random.default_rng(42).uniform(
                     -0.12, 0.12, size=len(clean))
                 ax.scatter(x_jitter, clean, s=size, alpha=0.3, color='black',
-                           zorder=3, rasterized=True)
+                           zorder=3, rasterized=True,
+                           linewidths=0, edgecolors='none')
         if is_last:
             ax.set_xticks([0])
             ax.set_xticklabels(['All cells'])
