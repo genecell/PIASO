@@ -5,6 +5,14 @@ edition = "2021"
 license = "BSD-3-Clause"
 description = "Rust acceleration for PIASO: gene-set scoring + scATAC peak calling + quantification + fragment import"
 
+# Keep the rendered documentation out of the source distribution. maturin
+# builds the sdist from this cargo package, so without the exclude it picked up
+# docs/ -- 469 MB of tutorial images out of a 471 MB archive. PyPI refuses any
+# file over 100 MB, so the upload failed on the sdist *after* the three wheels
+# had gone up: a red build on every release since 1.2.0, and no sdist on PyPI
+# for any of them. The docs are published to the website, not to PyPI.
+exclude = ["docs/**", "web/**", "benchmarks/**", "notebooks/**", "*.ipynb"]
+
 [lib]
 name = "_piaso"
 crate-type = ["cdylib", "rlib"]
