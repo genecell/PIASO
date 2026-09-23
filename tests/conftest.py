@@ -164,3 +164,45 @@ def scored_adata():
     piaso.tl.infog(adata, layer="raw", n_top_genes=1500, verbosity=0)
     piaso.tl.runSVD(adata, layer="infog", n_components=20, key_added="X_svd")
     return adata, list(adata.var_names[:8])
+
+
+def make_column_major(ds, X, matrix_name, chunk_cols=None):
+    """Rewrite ``matrix_name`` as CSC-only, the importer's default layout.
+
+    Shared by every test that needs to prove a reader handles both layouts.
+    A column-major matrix has `n_chunks = 0` and `has_csc = 1`, so anything
+    that iterates row chunks raises instead of silently returning nothing.
+    """
+    import numpy as _np
+    import scipy.sparse as _sp
+
+    csc = _sp.csc_matrix(X)
+    n_cols = X.shape[1]
+    # Write the blobs in the dtype `matrix_meta` declares. Readers size the
+    # data buffer from that column, so a float32 blob under a float64
+    # declaration is read as half as many values and indexes off the end --
+    # which is a fixture bug that looks exactly like an engine bug.
+    declared = ds._conn.execute(
+        "SELECT dtype FROM matrix_meta WHERE matrix_name=?", (matrix_name,)
+    ).fetchone()
+    dtype = _np.dtype(declared[0]) if declared else _np.dtype("float32")
+    width = int(chunk_cols or max(1, n_cols // 3 or 1))
+    ds._conn.execute("DELETE FROM matrix_chunks WHERE matrix_name=?", (matrix_name,))
+    ds._conn.execute("DELETE FROM matrix_csc_chunks WHERE matrix_name=?", (matrix_name,))
+    n_chunks = 0
+    for k, start in enumerate(range(0, n_cols, width)):
+        end = min(start + width, n_cols)
+        sub = csc[:, start:end].tocsc()
+        ds._conn.execute(
+            "INSERT INTO matrix_csc_chunks (matrix_name, chunk_idx, col_start, col_end,"
+            " n_nonzero, data_blob, indices_blob, indptr_blob, dtype, compression) "
+            "VALUES (?,?,?,?,?,?,?,?,?,'none')",
+            (matrix_name, k, start, end, int(sub.nnz),
+             sub.data.astype(dtype).tobytes(),
+             sub.indices.astype(_np.int32).tobytes(),
+             sub.indptr.astype(_np.int32).tobytes(), str(dtype)))
+        n_chunks = k + 1
+    ds._conn.execute(
+        "UPDATE matrix_meta SET n_chunks=0, has_csc=1, csc_chunk_size=?, csc_n_chunks=? "
+        "WHERE matrix_name=?", (width, n_chunks, matrix_name))
+    ds._conn.commit()

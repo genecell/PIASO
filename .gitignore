@@ -2,11 +2,14 @@
 **/.ipynb_checkpoints/
 **/__pycache__/
 target/
-Cargo.lock
+# Cargo.lock is tracked: this crate builds a binary and an extension, and the
+# lock is what makes every lab build resolve the same crate versions.
 *.so
 *.pyd
 *.dll
 .snakemake/
 
-# compiled Rust binaries — build artifacts; piaso-atac embeds PICCO
-bin/
+# compiled Rust binaries — build artifacts; piaso-atac embeds PICCO.
+# Anchored to the repository root: an unanchored `bin/` also matched
+# src/bin/, so new Rust sources there were silently left out of `git add`.
+/bin/

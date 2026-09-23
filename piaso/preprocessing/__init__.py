@@ -6,6 +6,11 @@ try:
 except ImportError:      # pragma: no cover - the public-package path
     from .._internal_shim import forward_many as _forward_many
     globals().update(_forward_many("piaso.preprocessing._selectPeaks", ['selectPeaks'], "pp"))
+try:
+    from ._selectFeatures import selectFeatures
+except ImportError:      # pragma: no cover - the public-package path
+    from .._internal_shim import forward_many as _forward_many
+    globals().update(_forward_many("piaso.preprocessing._selectFeatures", ['selectFeatures'], "pp"))
 from ._filtering import filter_cells, filter_features, subset_cells
 from ._normalize_log1p import normalize_log1p
 
@@ -107,3 +112,9 @@ scanMotifs = scan_motifs
 buildCistrome = build_cistrome
 buildPeakCistrome = build_peak_cistrome
 bulkBaseCistrome = bulk_base_cistrome
+
+try:
+    from ._indexFragments import indexFragments  # noqa: E402,F401
+except ImportError:      # pragma: no cover - the public-package path
+    from .._internal_shim import forward_many as _forward_many
+    globals().update(_forward_many("piaso.preprocessing._indexFragments", ['indexFragments'], "pp"))

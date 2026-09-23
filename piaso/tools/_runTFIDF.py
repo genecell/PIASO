@@ -23,6 +23,16 @@ from ..utils._cytome_compat import open_cytome_sync as _open_cytome
 from ._compat import resolve_data_arg as _resolve_data_arg, _UNSET
 
 
+# Where the two TF-IDF vectors live. The feature table is per-modality so the
+# IDF column needs no prefix; the cells table is shared, so the depth column
+# does.
+_IDF_COLUMN = "tfidf_idf"
+
+
+def _cell_depth_column(modality: str) -> str:
+    return f"{modality}_tfidf_cell_depth"
+
+
 # ===================================================================
 #  Public API — dispatcher
 # ===================================================================
@@ -73,6 +83,13 @@ def run_TFIDF(
         result. The default (``False``) writes only to ``adata.layers[output_layer]``
         and leaves ``adata.X`` untouched. Useful when downstream calls
         (e.g. ``infog_svd(layer=None)``) expect TF-IDF on ``.X``.
+    data : AnnData, CytomeDataset or str
+        The data. The preferred name for ``adata``.
+
+    Other Parameters
+    ----------------
+    adata
+        Deprecated alias for ``data``; passing it warns.
 
     Returns
     -------
@@ -173,6 +190,63 @@ def _runTFIDF_original(
 #  TF-IDF stats-only (for fused TF-IDF + SVD)
 # ===================================================================
 
+def assert_raw_counts(ds, modality, layer, *, what="TF-IDF", n_check=1):
+    """Refuse to normalise a matrix that has already been normalised.
+
+    TF-IDF is ``log1p(count / cell_depth * scale) * idf``, which only means
+    anything on raw integer counts. Point it at a layer that is already TF-IDF
+    or already log1p and it normalises the normalised: no error, no warning,
+    an embedding that looks plausible and is wrong.
+
+    One chunk answers the question, against the seventeen or more full passes
+    the SVD is about to do, so the check is free. Raw ATAC counts are small
+    non-negative integers; anything fractional or negative is not a count.
+    """
+    import numpy as _np
+    import scipy.sparse as _sp
+
+    from ..utils._cytome_compat import column_major_layer
+
+    # A column-major matrix has no row chunks, and `iter_chunks` refuses it.
+    # The guard only needs *some* values, so take whichever chunks the layout
+    # actually has rather than insisting on rows -- this check must never be
+    # the thing that stops a legitimate run.
+    _cm = column_major_layer(ds, modality, layer)
+    if _cm is not None:
+        chunks = ((c, None) for _s, _e, c in _cm.iter_columns())
+    else:
+        chunks = ds.iter_chunks(modality=modality, layer=layer, batch_size=256)
+
+    seen = scanned = 0
+    for chunk, _indices in chunks:
+        data = chunk.data if _sp.issparse(chunk) else _np.asarray(chunk).ravel()
+        if data.size:
+            finite = data[_np.isfinite(data)]
+            if finite.size:
+                if (finite < 0).any():
+                    raise ValueError(
+                        f"{what} needs raw counts, but "
+                        f"'{modality}_{layer}' holds negative values. "
+                        f"This layer looks already normalised (z-scored or "
+                        f"centred). Point measurement= at the raw count "
+                        f"matrix, usually 'counts'.")
+                if not _np.allclose(finite, _np.round(finite), rtol=0, atol=1e-6):
+                    raise ValueError(
+                        f"{what} needs raw counts, but "
+                        f"'{modality}_{layer}' holds fractional values, so it "
+                        f"has already been normalised (TF-IDF, log1p or "
+                        f"similar). Applying it again gives a plausible-looking "
+                        f"and wrong result. Point measurement= at the raw count "
+                        f"matrix, usually 'counts'.")
+            seen += 1
+        # Only chunks that held values count toward the check: the importer
+        # writes empty column chunks for chromosomes absent from the input, so
+        # a guard that stopped at the first chunk could inspect nothing at all.
+        scanned += 1
+        if seen >= n_check or scanned >= 64:
+            break
+
+
 def compute_tfidf_stats(
     source,
     measurement: str = "counts",
@@ -200,6 +274,9 @@ def compute_tfidf_stats(
         TF-IDF scale factor.
     modality : str
         Modality prefix (default 'ATAC').
+    write_to_metadata : bool, default True
+        Cache the statistics in the cytome's metadata under
+        ``'{modality}_tfidf_params'`` so later calls reuse them.
 
     Returns
     -------
@@ -225,15 +302,29 @@ def compute_tfidf_stats(
     _meta_n_rows, n_features = meta_row
     n_alloc, n_true_cells = _safe_n_cells(ds, modality, _layer)
 
-    # Pass 1: accumulate row sums and column sums
-    cell_depth = np.zeros(n_alloc, dtype=np.float64)
-    peak_depth = np.zeros(n_features, dtype=np.float64)
+    # Pass 1: row sums and column sums.
+    # Both are sums over every entry, which is exactly what the importer did
+    # while writing the matrix; when it recorded them, this pass is a table
+    # scan instead of a full read. Only taken when the cells table and the
+    # matrix agree on the cell count -- if they do not, _safe_n_cells has
+    # over-allocated and the stored column is the wrong length to place.
+    from ..utils._importer_stats import read_feature_stats, read_cell_stats
 
-    for chunk, indices in ds.iter_chunks(
-        modality=modality, layer=_layer, batch_size=batch_size
-    ):
-        cell_depth[indices] = np.array(chunk.sum(axis=1)).ravel()
-        peak_depth += np.array(chunk.sum(axis=0)).ravel()
+    _feat = read_feature_stats(ds, modality, _layer)
+    _cell = read_cell_stats(ds, modality, _layer) if n_alloc == _meta_n_rows else None
+    if _feat is not None and _cell is not None:
+        cell_depth = _cell[1]
+        peak_depth = _feat[1]
+    else:
+        # Row sums and column sums are marginals, and `matrix_sums` takes them
+        # from whichever direction the matrix is stored -- ATAC and tiles are
+        # column-major by default, where the row-only form raised.
+        from cytome import matrix_sums
+
+        _cs, _cn, peak_depth, _fn = matrix_sums(
+            ds, modality, _layer, batch_size=batch_size)
+        cell_depth = np.zeros(n_alloc, dtype=np.float64)
+        cell_depth[:_cs.shape[0]] = _cs
 
     # Compute IDF (use true cell count for the IDF formula)
     idf = np.log1p(n_true_cells / np.maximum(peak_depth, 1.0)).astype(np.float32)
@@ -244,34 +335,92 @@ def compute_tfidf_stats(
         "scale_factor": scale_factor,
     }
     # Cache to per-modality metadata so plotting on-the-fly TF-IDF can
-    # reuse without recomputing. The legacy un-prefixed alias is also
-    # written for any consumer not yet on the new key.
+    # reuse without recomputing.
+    #
+    # The two arrays go in their tables, not in the metadata. Metadata is a
+    # JSON document rewritten whole on every write, so a per-cell vector and a
+    # per-feature vector living there made it grow with the dataset -- large
+    # enough on a real ATAC cytome for cytome to warn about the size on every
+    # save. cell_depth is one value per cell and idf is one value per feature,
+    # so each belongs as a column; metadata keeps the scalar and the names
+    # needed to find them again. Measured at 20K cells x 30K peaks: 1.0 MB of
+    # JSON becomes 98 bytes.
     if write_to_metadata:
-        ds.metadata[f"{modality}_tfidf_params"] = params
+        stored = {"scale_factor": scale_factor}
+
+        # Per-feature IDF. MUST use ds.features(modality), NOT
+        # getattr(ds, entity_name): for 'tiles'/'GA' the modality name collides
+        # with / differs from the table name, so getattr resolves to a Modality
+        # (no __setitem__). ds.features() returns the writable EntityTable
+        # uniformly across modalities.
+        try:
+            ds.features(modality)[_IDF_COLUMN] = idf.astype(np.float32)
+            stored["idf_column"] = _IDF_COLUMN
+        except Exception as e:
+            # Best-effort: if the modality isn't in the registry or the entity
+            # is read-only, fall back to carrying the array in metadata rather
+            # than losing it.
+            import warnings as _warnings
+            _warnings.warn(
+                f"compute_tfidf_stats: could not write {_IDF_COLUMN} to "
+                f"var entity for modality={modality!r}: {e}",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+            stored["idf"] = idf
+
+        # Per-cell depth. The cells table is shared between modalities, so the
+        # column carries the modality in its name.
+        depth_col = _cell_depth_column(modality)
+        try:
+            if len(cell_depth) != ds.n_cells:
+                # _safe_n_cells over-allocated because the matrix and the cells
+                # table disagree (it warned already). A column of the wrong
+                # length would be worse than the metadata copy.
+                raise ValueError(
+                    f"cell_depth has {len(cell_depth)} entries but the cells "
+                    f"table has {ds.n_cells}")
+            # float64, not float32: the cached value has to reproduce the
+            # in-memory one exactly, and a float32 round trip would move
+            # every TF-IDF value in the seventh digit depending on whether
+            # the stats came from cache.
+            ds.cells[depth_col] = np.asarray(cell_depth, dtype=np.float64)
+            stored["cell_depth_column"] = depth_col
+        except Exception as e:
+            import warnings as _warnings
+            _warnings.warn(
+                f"compute_tfidf_stats: could not write {depth_col} to the "
+                f"cells table: {e}",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+            stored["cell_depth"] = cell_depth
+
         # NOTE: the modality-blind un-prefixed 'tfidf_params' legacy alias is no
         # longer written — it clobbered across modalities (an ATAC payload then a
         # tiles payload overwriting each other), the write-side of a cross-modality
         # leak. Readers use the prefixed '{modality}_tfidf_params' and fall back to
         # a residual legacy key only under a feature-count guard.
-        # Write per-feature IDF as a column on the modality's feature table. MUST
-        # use ds.features(modality), NOT getattr(ds, entity_name): for 'tiles'/'GA'
-        # the modality name collides with / differs from the table name, so getattr
-        # resolves to a Modality (no __setitem__). ds.features() returns the
-        # writable EntityTable uniformly across modalities.
-        try:
-            ds.features(modality)['tfidf_idf'] = idf.astype(np.float32)
-        except Exception as e:
-            # Best-effort write; don't fail the whole stats computation
-            # if the modality isn't in the registry or the entity is
-            # read-only. Metadata stays the source of truth.
-            import warnings as _warnings
-            _warnings.warn(
-                f"compute_tfidf_stats: could not write tfidf_idf to "
-                f"var entity for modality={modality!r}: {e}",
-                RuntimeWarning,
-                stacklevel=2,
-            )
+        ds.metadata[f"{modality}_tfidf_params"] = stored
         ds.flush()
+    return params
+
+
+def _hydrate_tfidf_params(ds, stored, modality):
+    """Fill in the arrays a cached params dict refers to by column name.
+
+    Older cytomes carry `cell_depth` and `idf` inline; those are returned
+    untouched. Newer ones carry only the scalar and the column names, so the
+    vectors are read back from the tables here. Either way the caller gets the
+    same three keys.
+    """
+    params = dict(stored)
+    depth_col = params.pop("cell_depth_column", None)
+    if depth_col is not None and "cell_depth" not in params:
+        params["cell_depth"] = np.asarray(ds.cells[depth_col], dtype=np.float64)
+    idf_col = params.pop("idf_column", None)
+    if idf_col is not None and "idf" not in params:
+        params["idf"] = np.asarray(ds.features(modality)[idf_col], dtype=np.float32)
     return params
 
 
@@ -293,9 +442,24 @@ def _load_or_compute_tfidf_stats(
     """
     key = f"{modality}_tfidf_params"
     if not force_recompute and key in ds.metadata:
-        if verbosity > 0:
-            print(f"  Using cached TF-IDF stats from ds.metadata[{key!r}]")
-        return ds.metadata[key]
+        stored = ds.metadata[key]
+        try:
+            params = _hydrate_tfidf_params(ds, stored, modality)
+        except Exception as e:
+            # The cache points at a column that is no longer there (a dropped
+            # feature table, a subset that did not carry it). Recompute rather
+            # than fail on someone else's stale metadata.
+            if verbosity > 0:
+                print(f"  Cached TF-IDF stats at {key!r} are unusable ({e}); "
+                      f"recomputing")
+        else:
+            if "cell_depth" in params and "idf" in params:
+                if verbosity > 0:
+                    print(f"  Using cached TF-IDF stats from ds.metadata[{key!r}]")
+                return params
+            if verbosity > 0:
+                print(f"  Cached TF-IDF stats at {key!r} are incomplete; "
+                      f"recomputing")
     if verbosity > 0:
         print(f"  No cached TF-IDF stats at {key!r}; computing (one pass)")
     return compute_tfidf_stats(
@@ -404,14 +568,12 @@ def _runTFIDF_streaming(
     n_alloc, n_true_cells = _safe_n_cells(ds, modality, _layer)
 
     # --- Pass 1: Accumulate global statistics ---
-    cell_depth = np.zeros(n_alloc, dtype=np.float64)    # row sums (safe size)
-    peak_depth = np.zeros(n_features, dtype=np.float64)  # column sums
+    from cytome import matrix_sums
 
-    for chunk, indices in ds.iter_chunks(
-        modality=modality, layer=_layer, batch_size=batch_size
-    ):
-        cell_depth[indices] = np.array(chunk.sum(axis=1)).ravel()
-        peak_depth += np.array(chunk.sum(axis=0)).ravel()
+    _cs, _cn, peak_depth, _fn = matrix_sums(
+        ds, modality, _layer, batch_size=batch_size)
+    cell_depth = np.zeros(n_alloc, dtype=np.float64)    # row sums (safe size)
+    cell_depth[:_cs.shape[0]] = _cs
 
     # Compute IDF (use true cell count, not inflated n_alloc)
     idf = np.log1p(n_true_cells / np.maximum(peak_depth, 1.0))
@@ -427,6 +589,24 @@ def _runTFIDF_streaming(
         col_entity=col_entity,
         overwrite=True,
     )
+
+    # Pass 2 materialises a row-major layer, which needs row chunks. A
+    # column-major source has none, and assembling rows from columns would
+    # read the whole matrix per row block. Say so, and name the two routes
+    # that do work: the fused TF-IDF inside runSVD reads columns directly and
+    # never materialises a layer, which is what the pipeline uses.
+    from ..utils._cytome_compat import column_major_layer
+    if column_major_layer(ds, modality, _layer) is not None:
+        raise ValueError(
+            f"run_TFIDF cannot materialise '{out_name}' from "
+            f"'{modality}_{_layer}', which is stored column-major: writing a "
+            f"row-major layer needs row chunks, and building them from "
+            f"columns would read the whole matrix once per row block.\n"
+            f"Use the fused path instead -- runSVD(..., auto_tfidf=True) "
+            f"applies TF-IDF inline while it reads, with no layer on disk -- "
+            f"or compute_tfidf_stats(...) for the statistics alone (it reads "
+            f"either layout)."
+        )
 
     for chunk, indices in ds.iter_chunks(
         modality=modality, layer=_layer, batch_size=batch_size

@@ -89,11 +89,82 @@ def test_compute_tfidf_stats_caches_to_metadata(tmp_path):
     assert "tfidf_params" not in {k for k in ds.metadata.keys()}
     cached = ds.metadata.get("ATAC_tfidf_params")
     assert cached is not None
-    assert "cell_depth" in cached and "idf" in cached
+
+    # The two vectors are columns, not metadata. Metadata is rewritten whole on
+    # every save, so a per-cell and a per-feature array living there made the
+    # JSON document grow with the dataset.
+    assert "cell_depth" not in cached and "idf" not in cached
+    assert cached["cell_depth_column"] == "ATAC_tfidf_cell_depth"
+    assert cached["idf_column"] == "tfidf_idf"
     np.testing.assert_allclose(
-        np.asarray(cached["cell_depth"]),
-        np.asarray(params["cell_depth"]),
+        np.asarray(ds.cells["ATAC_tfidf_cell_depth"]),
+        np.asarray(params["cell_depth"]), rtol=1e-6,
     )
+    np.testing.assert_allclose(
+        np.asarray(ds.features("ATAC")["tfidf_idf"]),
+        np.asarray(params["idf"]), rtol=1e-6,
+    )
+
+    # and the resolver still hands back the arrays, from wherever they are
+    from piaso.tools._normalize_resolve import ensure_tfidf_params
+    resolved = ensure_tfidf_params(ds, "ATAC")
+    np.testing.assert_allclose(
+        np.asarray(resolved["cell_depth"]), np.asarray(params["cell_depth"]),
+        rtol=1e-6)
+    np.testing.assert_allclose(
+        np.asarray(resolved["idf"]), np.asarray(params["idf"]), rtol=1e-6)
+    assert resolved["scale_factor"] == params["scale_factor"]
+    ds.close()
+
+
+def test_legacy_tfidf_params_with_inline_arrays_still_resolve(tmp_path):
+    """A cytome written before the vectors moved out of metadata.
+
+    Those payloads carry `cell_depth` and `idf` inline. They must keep working
+    untouched -- an existing file is not going to be rewritten just because the
+    storage changed.
+    """
+    import numpy as np
+    import pandas as pd
+    import scipy.sparse as sp
+    import cytome
+    import piaso
+
+    path = tmp_path / "legacy.cytome"
+    ds = cytome.create(str(path))
+    n = 12
+    ds.set_entity("cells", pd.DataFrame({
+        "cell_idx": np.arange(n), "barcode": [f"AAA-{i}" for i in range(n)],
+    }))
+    ds.set_entity("peaks", pd.DataFrame({
+        "peak_idx": np.arange(3),
+        "peak_id": ["chr1:0-100", "chr1:200-300", "chr2:0-100"],
+        "chr": ["chr1", "chr1", "chr2"],
+        "start": [0, 200, 0], "end_": [100, 300, 100],
+    }))
+    rng = np.random.default_rng(1)
+    ds.add_matrix("ATAC_counts",
+                  sp.csr_matrix(rng.poisson(1.5, size=(n, 3)).astype(np.float32)))
+    ds.flush()
+
+    params = piaso.tl.compute_tfidf_stats(
+        ds, modality="ATAC", measurement="counts", batch_size=8,
+        write_to_metadata=False,
+    )
+    # write the payload the old way, and nothing else
+    ds.metadata["ATAC_tfidf_params"] = {
+        "cell_depth": params["cell_depth"],
+        "idf": params["idf"],
+        "scale_factor": params["scale_factor"],
+    }
+    ds.flush()
+
+    from piaso.tools._normalize_resolve import ensure_tfidf_params
+    resolved = ensure_tfidf_params(ds, "ATAC")
+    np.testing.assert_allclose(
+        np.asarray(resolved["cell_depth"]), np.asarray(params["cell_depth"]))
+    np.testing.assert_allclose(
+        np.asarray(resolved["idf"]), np.asarray(params["idf"]))
     ds.close()
 
 

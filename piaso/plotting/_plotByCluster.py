@@ -313,6 +313,21 @@ def plot_features_violin(data,
         Path to save the figure. Default is None.
     return_fig : bool, optional
         Return ``(fig, axes)`` instead of closing the figure.
+    
+    show : bool, optional
+        Show the figure; ``None`` follows ``show_figure``.
+    modality : str, optional
+        Cytome only: which modality the data was stored under (``'RNA'``,
+        ``'ATAC'``, ``'tiles'``, ``'GA'``). ``None`` takes the store's first
+        modality.
+    cytome_layer : str, default 'counts'
+        Cytome only: the layer to read the values from.
+    compute_on_fly : bool, default True
+        Cytome only: normalise the raw layer while streaming (INFOG for RNA,
+        TF-IDF for ATAC) instead of requiring a materialised layer.
+    use_cached_stats : bool, default True
+        Cytome only: reuse normalisation statistics already stored in the
+        cytome's metadata rather than recomputing them.
     """
     if show is not None:
         show_figure = show

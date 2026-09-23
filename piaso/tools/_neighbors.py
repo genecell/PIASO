@@ -200,6 +200,12 @@ def neighbors(
         metadata); ``'SVD'`` writes ``SVD_connectivities`` / ``SVD_distances``.
         The legacy value ``'neighbors'`` is a back-compat alias for "no prefix".
         Pass the same string as ``neighbors_key`` to ``leiden`` / ``umap``.
+    modality : str, default 'RNA'
+        Cytome only: the modality ``use_rep`` was stored under, so that
+        ``'X_svd'`` resolves to ``ATAC_svd`` for an ATAC run.
+    cell_mask : ndarray, optional
+        Cytome only: boolean mask or sorted indices of the cells to build the
+        graph on; the result covers those cells only.
 
     Returns
     -------

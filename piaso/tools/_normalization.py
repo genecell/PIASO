@@ -547,6 +547,14 @@ def _get_infog_chunk_iterator(source, batch_size, layer=None, modality="RNA",
     so non-RNA modalities (GA / ATAC / tiles) get the correct feature
     count (cytome's ``ds.n_genes`` is hardcoded to the RNA gene table).
     """
+    from ..utils._cytome_compat import (is_cytome_input as _is_cyt,
+                                        require_row_major)
+    if _is_cyt(source):
+        require_row_major(
+            source, modality, layer or "counts", "INFOG's chunk reader",
+            "INFOG is a gene-expression normalisation; on peaks or tiles use "
+            "TF-IDF, which runSVD(auto_tfidf=True) applies while reading "
+            "either layout.")
     def _n_features_for_matrix(_ds, _modality, _layer):
         matrix_name = f"{_modality}_{_layer}"
         row = _ds._conn.execute(
@@ -908,6 +916,39 @@ def infog(
         already-corrected matrices. Ignored when ``layer``/``infog_layer`` is
         given, since naming a layer already answers the question.
     [all other parameters unchanged from original infog()]
+    
+    data : AnnData, CytomeDataset or str
+        The data: an AnnData, an open cytome, or a path to one. The preferred
+        name for ``source``.
+    copy : bool, default False
+        AnnData: return a normalised copy instead of editing in place.
+    inplace : bool, default False
+        AnnData: store the normalised matrix in ``adata.X`` rather than in
+        ``adata.layers[key_added]``.
+    n_top_genes : int, default 3000
+        Number of highly variable genes to select.
+    key_added : str, default 'infog'
+        Name of the normalised layer.
+    key_added_highly_variable_gene : str, default 'highly_variable'
+        Name of the boolean gene-selection column.
+    trim : bool, default True
+        Trim extreme normalised values, as INFOG does by default.
+    verbosity : int, default 1
+        ``0`` is silent.
+    layer : str, optional
+        AnnData: the layer holding raw counts; ``None`` is ``adata.X``.
+    dtype : str, optional
+        Storage dtype of the normalised layer; ``None`` keeps the package
+        default (``float32``).
+    return_info : bool, default False
+        Also return a dict with the normalisation parameters and the selected
+        gene indices, so a caller can normalise more data the same way.
+    
+
+    Other Parameters
+    ----------------
+    source, adata
+        Deprecated aliases for ``data``; passing either warns.
     """
     data = _resolve_data_arg(data, 'infog', source=source, adata=adata)
     is_cytome = isinstance(data, str) or _is_cytome_dataset(data)
@@ -960,7 +1001,7 @@ def _get_p_from_empi_null(
     v_t,
     v_t_null
 ):
-    """
+    r"""
     Compute p-value from empirical null
     For score T and a set of null score T_1,...T_N, the p-value is
 
@@ -1235,7 +1276,15 @@ def _precompute_stats_streaming(
     else:
         n_effective = n_cells
 
-    for chunk_csr, row_indices in iter_chunks_fn():
+    for item in iter_chunks_fn():
+        # A row-major source yields (rows x all-features, row_indices); a
+        # column-major one yields (all-rows x a run of features, row_indices,
+        # (col_start, col_end)) and its sums land in that slice.
+        if len(item) == 3:
+            chunk_csr, row_indices, (cs, ce) = item
+        else:
+            chunk_csr, row_indices = item
+            cs, ce = 0, n_features
         if cell_mask is not None:
             chunk_keep = cell_mask[row_indices]
             if not chunk_keep.any():
@@ -1243,14 +1292,14 @@ def _precompute_stats_streaming(
             if not chunk_keep.all():
                 chunk_csr = chunk_csr[chunk_keep]
         # Accumulate per-column sum
-        col_sum += np.array(chunk_csr.sum(axis=0), dtype=np.float64).ravel()
-        # CSR sharing trick: reuse indices/indptr, only square data
+        col_sum[cs:ce] += np.array(chunk_csr.sum(axis=0), dtype=np.float64).ravel()
+        # Sharing trick: reuse indices/indptr, only square data
         sq_data = chunk_csr.data.astype(np.float64) ** 2
-        X_sq = sparse.csr_matrix(
+        X_sq = type(chunk_csr)(
             (sq_data, chunk_csr.indices, chunk_csr.indptr),
             shape=chunk_csr.shape, copy=False,
         )
-        col_sq_sum += np.array(X_sq.sum(axis=0), dtype=np.float64).ravel()
+        col_sq_sum[cs:ce] += np.array(X_sq.sum(axis=0), dtype=np.float64).ravel()
 
     infog_mean = col_sum / max(n_effective, 1)
     mean_sq = infog_mean ** 2
@@ -1455,7 +1504,9 @@ def _score_streaming_multi(
             continue
         gene_set_names.append(name)
         gene_sets_indices.append(valid_idx)
-        weights_list.append(np.array(valid_w, dtype=float))
+        weights_list.append(
+            np.array(valid_w, dtype=float) if gene_weights is None
+            else _check_gene_weights(valid_w, name))
 
     n_sets = len(gene_set_names)
     if n_sets == 0:
@@ -1504,6 +1555,13 @@ def _score_streaming_multi(
               f"{max_score_batch_cache_bytes / 1024 ** 2:.0f} MB)")
 
     # --- Pass 1: streaming stats -> KNN ---
+    # Resolved before pass 1 because pass 2 needs it whether or not pass 1
+    # ran (a precomputed KNN skips pass 1 entirely).
+    from ..utils._cytome_compat import column_major_layer
+    _cm_layer = column_major_layer(ds, modality, _read_layer)
+    if _cm_layer is not None:
+        # Column-major store: pass 2 walks the columns; nothing to cache.
+        _cache["usable"] = False
     if precomputed_knn is not None:
         knn_idx = precomputed_knn
     else:
@@ -1512,7 +1570,18 @@ def _score_streaming_multi(
         # 0.37 s on one ADVIS batch — 196 chunks read where 6 hold the rows —
         # and stage 3 does this twice per batch, 70 times on a 35-batch run.
         # The NORMALISED chunk is cached, so pass 2 must not normalise again.
-        def chunk_factory():
+        _cm_rows = np.arange(n_cells)
+
+        def _column_chunk_factory():
+            # Column-major store: walk the columns once; the per-cell
+            # normaliser, if any, sees every row of a column chunk.
+            for cs, ce, chunk in _cm_layer.iter_columns():
+                c = chunk
+                if _chunk_norm is not None:
+                    c = _chunk_norm(chunk.tocsr(), _cm_rows).tocsc()
+                yield c, _cm_rows, (cs, ce)
+
+        def _row_chunk_factory():
             # Fixed block, NOT _score_rows: the block size sets the float64
             # summation order of the per-feature stats (see _PASS1_BLOCK_ROWS).
             it = ds.iter_chunks(modality=modality, layer=_read_layer,
@@ -1538,6 +1607,7 @@ def _score_streaming_multi(
                     yield c, i
 
             return _gen()
+        chunk_factory = _column_chunk_factory if _cm_layer is not None else _row_chunk_factory
         if verbosity > 0:
             print(f"  Pass 1: Computing per-feature stats (streaming)...")
         knn_idx = _precompute_stats_streaming(
@@ -1659,6 +1729,43 @@ def _score_streaming_multi(
             batch_size=_score_rows,
         )
     )
+    if _cm_layer is not None:
+        # Column-major pass 2: each column chunk contributes to every cell's
+        # query score and control mean at once -- (cells x cols) @ (cols x sets).
+        # The control mean per set is a weighted column sum, so the
+        # (cells x sets x controls) block is only needed for p-values.
+        _S = sparse.csr_matrix(
+            (np.full(n_sets * n_ctrl_set, 1.0 / n_ctrl_set),
+             (np.arange(n_sets * n_ctrl_set), np.repeat(np.arange(n_sets), n_ctrl_set))),
+            shape=(n_sets * n_ctrl_set, n_sets))
+        _W_ctrl = (big_ctrl_csr @ _S).tocsr()
+        _ctrl_full = None
+        if compute_pvalues:
+            need = _n_out * n_sets * n_ctrl_set * 8
+            if need > 2 * 1024 ** 3:
+                raise ValueError(
+                    f"score(compute_pvalues=True) on a column-major matrix needs a "
+                    f"{need / 1e9:.1f} GB (cells x sets x controls) block; use "
+                    f"compute_pvalues=False or a row-major layout for this matrix.")
+            _ctrl_full = np.zeros((_n_out, n_sets * n_ctrl_set), dtype=np.float64)
+        _keep_arr = None if _keep_rows is None else np.asarray(_keep_rows)
+        for cs, ce, chunk in _cm_layer.iter_columns():
+            if _chunk_norm is not None:
+                chunk = _chunk_norm(chunk.tocsr(), _cm_rows).tocsc()
+            if _keep_arr is not None:
+                chunk = chunk[_keep_arr]
+            q = chunk @ _W_query[cs:ce]
+            query_scores += q.toarray() if sparse.issparse(q) else np.asarray(q)
+            m = chunk @ _W_ctrl[cs:ce]
+            ctrl_means += m.toarray() if sparse.issparse(m) else np.asarray(m)
+            if _ctrl_full is not None:
+                f = chunk @ big_ctrl_csr[cs:ce]
+                _ctrl_full += f.toarray() if sparse.issparse(f) else np.asarray(f)
+        if _ctrl_full is not None:
+            chunk_3d = _ctrl_full.reshape(_n_out, n_sets, n_ctrl_set)
+            n_greater = np.sum(chunk_3d >= query_scores[:, :, None], axis=2)
+            pval_matrix[:] = (n_greater + 1) / (n_ctrl_set + 1)
+        _pass2_source = ()
     for chunk_csr, row_indices in _pass2_source:
         if _chunk_norm is not None and _cached_rows is None:
             chunk_csr = _chunk_norm(chunk_csr, np.asarray(row_indices))
@@ -1793,6 +1900,43 @@ def _write_single_set_result(adata, key_added, score_matrix, pval_matrix,
         adata.obs[f"{key_added}_pval"] = np.asarray(pval_matrix)[:, 0]
     if verbosity:
         print(f"Finished. The scores are saved in adata.obs['{key_added}'].")
+
+
+def _check_gene_weights(weights, set_name=None):
+    """Validate one gene set's weight vector, and return it as float64.
+
+    The score is divided by ``median(weights) * len(gene_set)``. That scaling
+    is what makes the result invariant to the *scale* of the weights -- the
+    control sets are built from the same weights, so multiplying every weight
+    by a constant cancels exactly -- but it also means a median of zero divides
+    every cell's score by zero. The result was an all-NaN column that no longer
+    looks like a score and never said why, and a marker table where more than
+    half the weights are zero is an easy thing to produce.
+
+    Raises rather than falling back to unweighted: silently ignoring the
+    weights the caller asked for would be a different answer wearing the same
+    name.
+    """
+    w = np.asarray(weights, dtype=float)
+    where = f" for gene set {set_name!r}" if set_name is not None else ""
+    if w.size == 0:
+        raise ValueError(f"gene_weights{where} is empty.")
+    if not np.all(np.isfinite(w)):
+        n_bad = int((~np.isfinite(w)).sum())
+        raise ValueError(
+            f"gene_weights{where} contains {n_bad} non-finite value(s) "
+            f"(NaN or inf); every weight must be a finite number.")
+    med = float(np.median(w))
+    if med <= 0:
+        n_pos = int((w > 0).sum())
+        raise ValueError(
+            f"gene_weights{where} has median {med:g}, so the score would be "
+            f"divided by zero or negated: only {n_pos} of {w.size} weights are "
+            f"positive. Scores are scaled by median(weights) * n_genes, which "
+            f"needs a positive median. Drop the zero-weighted genes from the "
+            f"set rather than weighting them zero."
+        )
+    return w
 
 
 def score(
@@ -1939,6 +2083,26 @@ def score(
 
     verbosity : int, optional
         Level of verbosity. Default is 0.
+    data : AnnData, CytomeDataset or str
+        The data. The preferred name for ``adata``.
+    compute_on_fly : bool, default True
+        Cytome only: normalise the raw layer while streaming rather than
+        requiring a materialised layer.
+    modality : str, default 'RNA'
+        Cytome only: the modality to score.
+    batch_size : int, default 1024
+        Cytome only: rows per streaming chunk.
+    cell_mask : ndarray, optional
+        Cytome only: boolean mask or sorted indices of the cells to score;
+        the result covers those cells only.
+    pvalue_to : {'cells', 'metadata', 'both'}, default 'both'
+        Cytome only: where p-values go -- a ``cells`` column, the full
+        per-cell table in ``ds.metadata[key_added]``, or both.
+
+    Other Parameters
+    ----------------
+    verbose
+        Deprecated alias for ``verbosity``.
 
     Returns
     -------
@@ -2189,7 +2353,8 @@ def score(
             if gene_weights is not None:
                 w = gene_weights[gs_idx]
                 valid_mask = [g in var_names_to_idx for g in genes]
-                weights_list.append(np.array([w_i for w_i, m in zip(w, valid_mask) if m], dtype=float))
+                weights_list.append(_check_gene_weights(
+                    [w_i for w_i, m in zip(w, valid_mask) if m], name))
             else:
                 weights_list.append(np.ones(len(valid_idx), dtype=float))
 
@@ -2344,6 +2509,7 @@ def score(
         # ================================================================
 
         # Ensure gene_weights is correctly initialized
+        _weights_were_supplied = gene_weights is not None
         if gene_weights is None:
             gene_weights = np.ones(len(gene_list), dtype=float)
         elif len(gene_weights) != len(gene_list):
@@ -2363,6 +2529,8 @@ def score(
 
         gene_list = filtered_genes
         gene_weights = np.array(filtered_weights, dtype=float)
+        if _weights_were_supplied:
+            gene_weights = _check_gene_weights(gene_weights)
 
         n_filtered_genes = len(filtered_out_genes)
         if verbosity > 0 and n_filtered_genes > 0:

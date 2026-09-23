@@ -99,6 +99,13 @@ def _scalar_gene_stats(data, layer, universe_mask_names, modality="RNA",
     matrix) *before* the stats, so a matched index can never point at a gene
     whose specificity score is NaN.
     """
+    from ..utils._cytome_compat import (is_cytome_input as _is_cyt,
+                                        require_row_major)
+    if _is_cyt(data):
+        require_row_major(
+            data, modality, layer or "counts", "runSCALAR's gene statistics",
+            "Ligand-receptor pairs are gene symbols, so this is normally an "
+            "RNA or GA modality, both of which are row-major.")
     from ..utils._cytome_compat import is_cytome_input, open_cytome
 
     if not is_cytome_input(data):
@@ -163,18 +170,24 @@ def _scalar_labels(data, groupby, modality="RNA"):
     """Per-cell group labels as an object array, from AnnData ``.obs`` or a
     cytome's ``cells`` table (ordered by ``cell_idx``, the order
     ``iter_chunks`` yields rows in)."""
-    from ..utils._cytome_compat import is_cytome_input, open_cytome
+    from ..utils._cytome_compat import (is_cytome_input, open_cytome,
+                                        require_cells_column)
 
     if not is_cytome_input(data):
         if groupby not in data.obs.columns:
-            raise KeyError(f"runSCALAR: groupby={groupby!r} is not a column "
-                           f"of adata.obs")
+            close = [c for c in data.obs.columns if c.lower() == str(groupby).lower()]
+            raise KeyError(
+                f"runSCALAR: groupby={groupby!r} is not a column of adata.obs."
+                + (f" Did you mean {close[0]!r}?" if close else "")
+                + f" Available: {sorted(data.obs.columns)}")
         return np.asarray(data.obs[groupby].astype(str).values, dtype=object)
+    # Checked before the name is interpolated into the SQL below: SQLite treats
+    # a double-quoted token that does not resolve to a column as a string
+    # literal, so a typo would come back as that literal for every cell -- one
+    # group, named after the typo, and every number downstream consistent with
+    # it.
+    require_cells_column(data, groupby, argument="runSCALAR: groupby")
     with open_cytome(data) as ds:
-        cols = [r[1] for r in ds._conn.execute("PRAGMA table_info(cells)")]
-        if groupby not in cols:
-            raise KeyError(f"runSCALAR: groupby={groupby!r} is not a column "
-                           f"of the cytome's cells table")
         rows = ds._conn.execute(
             f'SELECT "{groupby}" FROM cells ORDER BY cell_idx').fetchall()
     return np.asarray([str(r[0]) for r in rows], dtype=object)

@@ -101,10 +101,15 @@ def test_on_the_fly_matches_the_materialised_layer(cyt, tmp_path):
     piaso.tl.infog(cyt, n_top_genes=20, verbosity=0)                 # params only
     piaso.tl.infog(other, n_top_genes=20, save_layer=True, verbosity=0)
 
+    # Fixed rounds: this compares the transform, not the solver. Under the
+    # tolerance-driven default the two paths (Python reader for the
+    # on-the-fly layer, Rust engine for the stored one) may stop a round
+    # apart, and this fixture's trailing components are close enough in
+    # value for one round to rotate them.
     piaso.tl.runSVD(cyt, layer="infog", n_components=5, key_added="X_svd",
-                    random_state=0)
+                    random_state=0, method="power")
     piaso.tl.runSVD(other, layer="infog", n_components=5, key_added="X_svd",
-                    random_state=0)
+                    random_state=0, method="power")
 
     a, b = cytome.open(cyt), cytome.open(other)
     try:

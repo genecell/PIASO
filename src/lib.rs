@@ -1,5 +1,21 @@
 // --- Shared modules used by both PyO3 extension and piaso-atac CLI ---
 pub mod encoder;
+pub mod store;
+// The fragment chain: readers, the column window and the sinks the peak
+// caller and the quantifier are built from. Held with them: only a build
+// that enables one of those features compiles them, and publish.sh does not
+// ship their sources.
+#[cfg(any(feature = "picco", feature = "quantify"))]
+pub mod index_fragments;
+#[cfg(any(feature = "picco", feature = "quantify"))]
+pub mod bucket_sink;
+#[cfg(any(feature = "picco", feature = "quantify"))]
+pub mod column_window;
+#[cfg(any(feature = "picco", feature = "quantify"))]
+pub mod csc_sink;
+#[cfg(any(feature = "picco", feature = "quantify"))]
+pub mod csr_finalize;
+#[cfg(any(feature = "picco", feature = "quantify"))]
 pub mod cytome_reader;
 pub mod motif_scan;
 
@@ -455,6 +471,10 @@ fn score_complete<'py>(
 
 /// Run a Rust closure with GIL released, catching panics as PyRuntimeError.
 /// Converts serde_json::Value result to a native Python dict via pythonize.
+///
+/// Kept as the shape every new PyO3 entry point should take, even while the
+/// current ones inline it.
+#[allow(dead_code)]
 fn run_catching_panic<F>(py: Python<'_>, context: &str, f: F) -> PyResult<Py<PyAny>>
 where
     F: FnOnce() -> serde_json::Value + Send,
@@ -494,11 +514,17 @@ where
 
 
 /// Python module
+mod svd_pass;
+
+/// Build the chunk position index of a fragment store (see `index_fragments`).
+
 #[pymodule]
 fn _piaso(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(fused_matmul_reduce, m)?)?;
     m.add_function(wrap_pyfunction!(fused_matmul_reduce_f32, m)?)?;
     m.add_function(wrap_pyfunction!(score_complete, m)?)?;
     m.add_function(wrap_pyfunction!(motif_scan::scan_motifs_fwd, m)?)?;
-    Ok(())
+    m.add_function(wrap_pyfunction!(svd_pass::svd_pass, m)?)?;
+    m.add_function(wrap_pyfunction!(svd_pass::svd_layout, m)?)?;
+        Ok(())
 }

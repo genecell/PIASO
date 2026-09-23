@@ -110,12 +110,28 @@ def _ensure_tfidf_params(ds, modality, use_cached_stats=True, batch_size=2048):
     # for, so a payload built for ATAC peaks (idf ~n_peaks) must NOT be returned
     # for a 'tiles' request (idf ~n_tiles); the feature-count guard routes it to
     # recompute instead of broadcasting a wrong-length idf.
+    from ..tools._runTFIDF import _hydrate_tfidf_params
+
+    def _hydrated(stored):
+        """The cached payload with its arrays in place, or None if it cannot be
+        read back. Newer cytomes store `cell_depth` and `idf` as table columns
+        and keep only their names in metadata; the guards below are written
+        against the arrays, so hydrate before checking rather than let a
+        column-name payload pass every check vacuously."""
+        try:
+            out = _hydrate_tfidf_params(ds, stored, modality)
+        except Exception:
+            return None
+        return out if ("cell_depth" in out and "idf" in out) else None
+
     if use_cached_stats:
         new_key = f"{modality}_tfidf_params"
-        if (new_key in ds.metadata and _cached_stat_is_fresh(ds.metadata[new_key], ds)
-                and _tfidf_idf_matches_modality(ds.metadata[new_key], ds, modality)):
-            return ds.metadata[new_key]
+        cached = _hydrated(ds.metadata[new_key]) if new_key in ds.metadata else None
+        if (cached is not None and _cached_stat_is_fresh(cached, ds)
+                and _tfidf_idf_matches_modality(cached, ds, modality)):
+            return cached
         legacy = ds.metadata.get("tfidf_params")
+        legacy = _hydrated(legacy) if legacy is not None else None
         if (legacy is not None and _cached_stat_is_fresh(legacy, ds)
                 and _tfidf_idf_matches_modality(legacy, ds, modality)):
             import warnings as _warnings

@@ -479,14 +479,30 @@ def _qc_threshold_mask_cytome(
     if all(v is None for v in (min_counts, max_counts, min_features, max_features)):
         return None, []
     n_cells = ds.n_cells
-    counts = np.zeros(n_cells, dtype=np.float64)
-    n_feat = np.zeros(n_cells, dtype=np.int64)
-    # ds.iter_chunks yields (chunk_csr, cell_indices_array) tuples.
-    for chunk, cell_idx in ds.iter_chunks(
-        modality=modality, layer="counts", batch_size=batch_size,
-    ):
-        counts[cell_idx] = np.asarray(chunk.sum(axis=1)).ravel()
-        n_feat[cell_idx] = np.asarray((chunk != 0).sum(axis=1)).ravel()
+    # Three sources for per-cell totals, cheapest first: the importer's or
+    # quantifier's own columns (guarded), then a walk over columns when the
+    # matrix is stored column-major, then the row pass.
+    from ..utils._importer_stats import read_cell_stats
+    from ..utils._cytome_compat import column_major_layer
+    _cached = read_cell_stats(ds, modality, "counts")
+    if _cached is not None:
+        n_feat = _cached[0].astype(np.int64)
+        counts = _cached[1].astype(np.float64)
+    else:
+        counts = np.zeros(n_cells, dtype=np.float64)
+        n_feat = np.zeros(n_cells, dtype=np.int64)
+        _cm = column_major_layer(ds, modality, "counts")
+        if _cm is not None:
+            for _cs, _ce, chunk in _cm.iter_columns():
+                counts += np.asarray(chunk.sum(axis=1)).ravel()
+                n_feat += np.asarray((chunk != 0).sum(axis=1)).ravel()
+        else:
+            # ds.iter_chunks yields (chunk_csr, cell_indices_array) tuples.
+            for chunk, cell_idx in ds.iter_chunks(
+                modality=modality, layer="counts", batch_size=batch_size,
+            ):
+                counts[cell_idx] = np.asarray(chunk.sum(axis=1)).ravel()
+                n_feat[cell_idx] = np.asarray((chunk != 0).sum(axis=1)).ravel()
     keep = np.ones(n_cells, dtype=bool)
     descs: list[str] = []
     if min_counts is not None:

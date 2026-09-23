@@ -3,6 +3,7 @@ from ..settings import _resolve_layer_dtype
 from ._compat import resolve_data_arg as _resolve_data_arg, _UNSET
 
 ### run SVD
+import os
 import warnings
 from typing import Optional
 from sklearn.preprocessing import StandardScaler
@@ -209,11 +210,36 @@ def _runSVD_original(
         print(f'The cell embeddings were saved as `{key_added}` in adata.obsm.')
 
 
+def _engine_threads(n_threads):
+    """The threads the engine will use: the caller's number, or every core
+    this process is allowed (its CPU affinity -- on a cluster, the job's
+    allocation, not the node's)."""
+    if n_threads and int(n_threads) > 0:
+        return int(n_threads)
+    try:
+        return len(os.sched_getaffinity(0))
+    except (AttributeError, OSError):
+        return os.cpu_count() or 1
+
+
+def _cached_factory(factory):
+    """A chunk factory that reads the store once and replays from memory."""
+    cache = []
+
+    def cached():
+        if not cache:
+            for chunk, idx in factory():
+                cache.append((chunk, idx))
+        return iter(cache)
+    return cached
+
+
 # ============================================================================
 # Streaming randomized SVD (HMT algorithm)
 # ============================================================================
 def _streaming_rsvd(chunk_iter_factory, n_cells, n_features, n_components, n_iter,
-                    random_state, oversampling=10, verbosity=0, cache_chunks=False):
+                    random_state, oversampling=10, verbosity=0, cache_chunks=False,
+                    tol=None, method="power"):
     """
     Streaming randomized SVD using Halko-Martinsson-Tropp algorithm.
 
@@ -278,58 +304,13 @@ def _streaming_rsvd(chunk_iter_factory, n_cells, n_features, n_components, n_ite
         def chunk_iter_factory():
             return iter(cached)
 
-    # Step 1: Random projection Y = X @ Omega (1 pass)
-    Omega = rng.standard_normal((n_features, k)).astype(np.float64)
-    Y = np.zeros((n_cells, k), dtype=np.float64)
-    _log_pass("Y = X @ Omega")
-    for chunk, indices in chunk_iter_factory():
-        if sparse.issparse(chunk):
-            Y[indices] = chunk.dot(Omega)
-        else:
-            Y[indices] = chunk @ Omega
-
-    # Step 2: Power iteration (2 passes per iteration)
-    for i in range(n_iter):
-        Y, _ = np.linalg.qr(Y)
-
-        # Z = X^T @ Y (1 pass — accumulate)
-        Z = np.zeros((n_features, k), dtype=np.float64)
-        _log_pass(f"Z = X^T @ Y (power iter {i+1})")
-        for chunk, indices in chunk_iter_factory():
-            if sparse.issparse(chunk):
-                Z += chunk.T.dot(Y[indices])
-            else:
-                Z += chunk.T @ Y[indices]
-
-        # Y = X @ Z (1 pass — scatter)
-        Y = np.zeros((n_cells, k), dtype=np.float64)
-        _log_pass(f"Y = X @ Z (power iter {i+1})")
-        for chunk, indices in chunk_iter_factory():
-            if sparse.issparse(chunk):
-                Y[indices] = chunk.dot(Z)
-            else:
-                Y[indices] = chunk @ Z
-
-    # Step 3: Final QR
-    Q, _ = np.linalg.qr(Y)
-
-    # Step 4: B = Q^T @ X (1 pass — accumulate)
-    B = np.zeros((k, n_features), dtype=np.float64)
-    _log_pass("B = Q^T @ X")
-    for chunk, indices in chunk_iter_factory():
-        if sparse.issparse(chunk):
-            B += chunk.T.dot(Q[indices]).T
-        else:
-            B += Q[indices].T @ chunk
-
-    # Step 5: SVD of small B
-    U_B, S, Vt = np.linalg.svd(B, full_matrices=False)
-
-    # Step 6: Final embeddings
-    U = Q @ U_B[:, :n_components]
-    embeddings = U * S[:n_components]
-
-    return embeddings, S[:n_components], Vt[:n_components]
+    from ._rsvd_core import FactoryOps, rsvd_core
+    embeddings, S, Vt, _info = rsvd_core(
+        FactoryOps(chunk_iter_factory, n_cells, n_features),
+        n_components=n_components, n_iter=n_iter, random_state=random_state,
+        oversampling=oversampling, tol=tol, method=method, verbosity=verbosity,
+    )
+    return embeddings, S, Vt
 
 
 def _mask_to_indices(cell_mask, n_rows):
@@ -344,6 +325,38 @@ def _mask_to_indices(cell_mask, n_rows):
             arr = arr[:n_rows]
         return np.flatnonzero(arr).astype(np.int64)
     return np.sort(arr[arr < n_rows].astype(np.int64))
+
+
+def _assert_enough_features(n_features, n_components, oversampling, column):
+    """Refuse an SVD that cannot mean anything, before it costs passes.
+
+    Zero selected features factorises a ``cells x 0`` matrix: every pass runs,
+    nothing objects, and the embedding is noise. There is already a guard for
+    the opposite mistake -- ``as_bool_mask`` warns when EVERY entry is
+    selected, the signature of a text-typed boolean -- and none for this,
+    which is worse, because all-true at least computes something.
+    """
+    import warnings as _w
+
+    if n_features == 0:
+        raise ValueError(
+            f"runSVD: no features are selected, so there is nothing to "
+            f"factorise ({column!r} is all False). Either the selection "
+            f"really is empty -- check the thresholds you passed to "
+            f"selectPeaks / selectFeatures -- or the column was written but "
+            f"not flushed, in which case call ds.flush() before runSVD, "
+            f"because a cytome buffers a column write until then."
+        )
+    need = int(n_components) + int(oversampling)
+    if n_features < need:
+        _w.warn(
+            f"runSVD: {n_features} selected features is fewer than "
+            f"n_components + oversampling ({n_components} + {oversampling} = "
+            f"{need}), so the requested rank cannot be reached and the "
+            f"trailing components will be arbitrary. Select more features or "
+            f"lower n_components.",
+            UserWarning, stacklevel=3,
+        )
 
 
 def _get_svd_chunk_iterator(source, hvg_indices, batch_size, layer, measurement,
@@ -390,6 +403,10 @@ def _get_svd_chunk_iterator(source, hvg_indices, batch_size, layer, measurement,
                         yield chunk[:, hvg_indices], idx
                     else:
                         yield chunk, idx
+            # A materialised measurement is read as it is: the identity
+            # transform, which the Rust pass can take over.
+            factory.read_layer = measurement
+            factory.identity = True
             n_out = n_alloc if _keep is None else len(_keep)
             return n_out, n_features, factory, _keep is not None
         else:
@@ -432,6 +449,11 @@ def _get_svd_chunk_iterator(source, hvg_indices, batch_size, layer, measurement,
                         yield chunk[:, hvg_indices], idx
                     else:
                         yield chunk, idx
+            # What the factory does to a stored chunk, for the caller that
+            # can skip the factory: the Rust pass reads a layer as it is, so
+            # it can stand in whenever the per-chunk transform is the identity.
+            factory.read_layer = _read_layer
+            factory.identity = _chunk_norm is None
             n_out = n_alloc if _keep is None else len(_keep)
             return n_out, n_features, factory, _keep is not None
     else:
@@ -471,8 +493,13 @@ def _runSVD_streaming(
     infog_params: Optional[dict] = None,
     hvg_indices_override=None,
     compute_on_fly: bool = True,
+    tol: Optional[float] = None,
+    method: str = "auto",
+    n_threads: int = 0,
+    use_engine: bool = True,
     selected_feature_col_name: str = _DEFAULT_SELECTED_COL,
     auto_tfidf: bool = False,
+    _auto_tfidf_inferred: bool = False,
     cell_mask=None,
     return_svd: bool = False,
 ):
@@ -483,32 +510,59 @@ def _runSVD_streaming(
     if scale_data:
         raise NotImplementedError("scale_data=True not yet supported in streaming SVD mode.")
 
+    # None reaches here only from `method='auto'` with no explicit count; the
+    # other solvers need a number.
+    if n_iter is None and method != "auto":
+        n_iter = 7
+
     # Auto-compute TF-IDF stats if requested and not already provided.
     # Mirrors how the workflow used to do it externally in select_tfidf_svd.py.
     if (auto_tfidf and tfidf_params is None and is_cytome
             and modality in _LEGACY_FALLBACK_MODALITIES):
-        from ._runTFIDF import _load_or_compute_tfidf_stats
+        from ._runTFIDF import _load_or_compute_tfidf_stats, assert_raw_counts
         _ds_for_tfidf = _open_cytome(source) if isinstance(source, str) else source
-        if verbosity > 0:
-            print(f"auto_tfidf=True: loading or computing TF-IDF stats for "
-                  f"modality={modality!r}")
-        tfidf_params = _load_or_compute_tfidf_stats(
-            _ds_for_tfidf, modality=modality,
-            layer=measurement or "counts",
-            batch_size=batch_size, verbosity=verbosity,
-        )
-        # Build the col_mask from the resolved selected_feature_col_name
-        # so SVD only operates on the selected feature subset.
-        _entity_name, _col = _resolve_selected_col_cytome(
-            _ds_for_tfidf, modality, selected_feature_col_name,
-        )
-        from ..utils._bool_mask import as_bool_mask
-        _mask = as_bool_mask(
-            _read_var_entity_column(_ds_for_tfidf, _entity_name, _col),
-            name=f"{_entity_name}.{_col}",
-        )
-        tfidf_params = dict(tfidf_params)  # shallow copy so the cached dict isn't mutated
-        tfidf_params["col_mask"] = _mask
+        # One chunk, against the passes about to follow. Both the engine and
+        # the Python path apply log1p(v/depth*scale)*idf to whatever this
+        # layer holds, so an already-normalised layer silently normalises
+        # twice. Asked for explicitly, that is an error; switched on by the
+        # default, it only means this layer is not what the default assumed,
+        # and the SVD runs on the values as stored, as it did before.
+        try:
+            assert_raw_counts(_ds_for_tfidf, modality, measurement or "counts",
+                              what="auto_tfidf")
+            _apply_tfidf = True
+        except ValueError as _e:
+            if not _auto_tfidf_inferred:
+                raise
+            warnings.warn(
+                f"runSVD: TF-IDF is applied by default to {modality} counts, but "
+                f"{modality}_{measurement or 'counts'} does not look like raw "
+                f"counts ({_e}). Factorising the values as stored; pass "
+                f"auto_tfidf=False to silence this.", UserWarning, stacklevel=3)
+            _apply_tfidf = False
+        if _apply_tfidf:
+            if verbosity > 0:
+                print(f"auto_tfidf=True: loading or computing TF-IDF stats for "
+                      f"modality={modality!r}")
+            tfidf_params = _load_or_compute_tfidf_stats(
+                _ds_for_tfidf, modality=modality,
+                layer=measurement or "counts",
+                batch_size=batch_size, verbosity=verbosity,
+            )
+            tfidf_params = dict(tfidf_params)  # shallow copy so the cached dict isn't mutated
+            # The selected features become the column mask -- unless the
+            # caller asked for every feature.
+            if use_highly_variable:
+                _entity_name, _col = _resolve_selected_col_cytome(
+                    _ds_for_tfidf, modality, selected_feature_col_name,
+                )
+                from ..utils._bool_mask import as_bool_mask
+                tfidf_params["col_mask"] = as_bool_mask(
+                    _read_var_entity_column(_ds_for_tfidf, _entity_name, _col),
+                    name=f"{_entity_name}.{_col}",
+                )
+            else:
+                tfidf_params.pop("col_mask", None)
     elif auto_tfidf and not is_cytome:
         raise ValueError(
             "auto_tfidf=True is only supported on a cytome source "
@@ -624,17 +678,158 @@ def _runSVD_streaming(
         if verbosity > 0:
             print(f"  Fused TF-IDF+SVD: inline TF-IDF on {n_features} features")
 
-    if verbosity > 0:
-        total_passes = 3 + 2 * n_iter
-        print(f"Streaming SVD: {n_cells} cells x {n_features} features, "
-              f"{n_components} components, {n_iter} power iterations, {total_passes} passes")
+    # Every path lands here with its final feature count, so one guard covers
+    # the selected-column path, explicit hvg indices and the unfiltered case.
+    _assert_enough_features(n_features, n_components, oversampling,
+                            selected_feature_col_name)
 
-    embeddings, S, Vt = _streaming_rsvd(
-        chunk_factory, n_cells, n_features,
-        n_components=n_components, n_iter=n_iter,
-        random_state=random_state, oversampling=oversampling,
-        verbosity=verbosity, cache_chunks=cache_chunks,
-    )
+    if verbosity > 0:
+        # Say the shape here and let the solver say what it will do. Printing
+        # "{n_iter} power iterations, {3 + 2 * n_iter} passes" before the
+        # solver is resolved announced numbers that never happened whenever
+        # method='auto' chose Lanczos, where the tolerance decides the rounds
+        # and n_iter is only a ceiling.
+        print(f"Streaming SVD: {n_cells} cells x {n_features} features, "
+              f"{n_components} components")
+        if method == "power":
+            print(f"  Solver: power iteration"
+                  + (f" (tol={tol}, at most {n_iter} rounds = "
+                     f"{2 + 2 * n_iter} passes)" if tol is not None
+                     else f" ({n_iter} rounds = {2 + 2 * n_iter} passes)"))
+
+    # The Rust pass engine covers every cytome SVD whose per-chunk transform
+    # it can do itself: TF-IDF on the fly (the peak and tile matrices), or
+    # none at all -- raw counts, or a materialised layer such as INFOG read
+    # as it is, with the selected features as a column mask. Only a
+    # transform computed in Python per chunk (INFOG on the fly, explicit
+    # per-batch parameters) and AnnData keep the chunk-factory path.
+    _engine_ops = None
+    _identity = tfidf_params is None and bool(getattr(chunk_factory, "identity", False))
+    if use_engine and is_cytome and (
+            (tfidf_params is not None and hvg_indices is None) or _identity):
+        try:
+            from .. import _piaso as _ext
+            _has_engine = hasattr(_ext, "svd_pass")
+        except Exception:
+            _has_engine = False
+        if _has_engine:
+            from ._rsvd_core import EngineOps
+            _ds_e = _open_cytome(source) if isinstance(source, str) else source
+            if _identity:
+                _mname = f"{modality}_{chunk_factory.read_layer}"
+            else:
+                _mname = f"{modality}_{measurement or 'counts'}"
+            _nr, _nc = _ds_e._conn.execute(
+                "SELECT n_rows, n_cols FROM matrix_meta WHERE matrix_name = ?", (_mname,)
+            ).fetchone()
+            _path = str(getattr(_ds_e, "path", source))
+            _keep = None if cell_mask is None else _mask_to_indices(cell_mask, int(_nr))
+            if _identity:
+                _col_mask = None
+                if hvg_indices is not None:
+                    _col_mask = np.zeros(int(_nc), dtype=bool)
+                    _col_mask[np.asarray(hvg_indices, dtype=np.int64)] = True
+                _tf = None
+            else:
+                _col_mask = _tfidf_col_mask
+                _tf = {"cell_depth": tfidf_params["cell_depth"], "idf": tfidf_params["idf"],
+                       "scale_factor": tfidf_params.get("scale_factor", 1e4)}
+            # Everything this call writes before the passes (the TF-IDF
+            # statistics) is in the store by now, so the log can be
+            # checkpointed and the passes can read without file locks.
+            from ._rsvd_core import snapshot_store
+            _snap, _snap_reason = snapshot_store(_ds_e)
+            _engine_ops = EngineOps(
+                _path, _mname, int(_nr), int(_nc),
+                col_mask=_col_mask, row_keep=_keep, tfidf=_tf,
+                n_threads=n_threads, snapshot=_snap,
+            )
+            if verbosity > 0:
+                _lay = getattr(_engine_ops, "layout", "auto")
+                print(f"  SVD engine: Rust pass over {_mname} "
+                      f"({_engine_ops.n_rows} rows x {_engine_ops.n_cols} selected columns, "
+                      f"{'column' if _lay == 'csc' else 'row'}-major store, "
+                      f"{'TF-IDF on the fly' if _tf is not None else 'values as stored'})")
+                print("  SVD engine: reading a snapshot of the store, no file locks"
+                      if _snap else
+                      f"  SVD engine: reading with file locks -- {_snap_reason}")
+                print(f"  SVD engine: {_engine_threads(n_threads)} threads")
+                # A row-major-only peak or tile matrix pays ~8x on the
+                # transpose product: it scatters into a features x block buffer
+                # instead of a cells x block one. Say so once, with the fix.
+                if (_lay == "csr" and not getattr(_engine_ops, "has_csc", True)
+                        and _engine_ops.n_rows < _engine_ops.n_cols):
+                    print("  Note: this matrix is stored row-major only. With more "
+                          "features than cells the SVD is several times faster on a "
+                          "column-major store; re-quantify with "
+                          "quantifyPeakActivity(..., layout='csc') (the default for "
+                          "new stores) to get it.")
+            if cache_chunks:
+                # The engine reads, normalises, masks and multiplies in one
+                # fused sweep per pass, so there is no decoded chunk to keep.
+                # Saying nothing would let a caller believe the matrix is in
+                # memory while every pass goes back to disk -- which is the
+                # wrong trade on slow or networked storage, where the cached
+                # Python path can win despite the slower kernel.
+                warnings.warn(
+                    "runSVD(cache_chunks=True) belongs to the Python chunk "
+                    "reader; the Rust engine streams each pass from the store "
+                    "and ignores it. Nothing is lost on local disk, where the "
+                    "operating system keeps the store in memory between "
+                    "passes. Pass use_engine=False only if you need the "
+                    "in-memory cache (e.g. on slow networked storage with a "
+                    "tight memory limit), at the cost of a slower kernel.",
+                    UserWarning, stacklevel=3,
+                )
+    if _engine_ops is not None:
+        import time as _time
+        from ._rsvd_core import rsvd_core
+        _t_solver = _time.perf_counter()
+        embeddings, S, Vt, _svd_info = rsvd_core(
+            _engine_ops, n_components=n_components, n_iter=n_iter,
+            random_state=random_state, oversampling=oversampling,
+            tol=tol, method=method, verbosity=verbosity,
+        )
+        if verbosity > 0:
+            _wall = _time.perf_counter() - _t_solver
+            print(f"  Solver time: {_wall:.1f} s, of which {_engine_ops.seconds:.1f} s in "
+                  f"{_engine_ops.passes} passes over the store and "
+                  f"{max(_wall - _engine_ops.seconds, 0.0):.1f} s in numpy between them")
+        n_cells = _engine_ops.n_rows
+    else:
+        # Guarded HERE, not where the factory was built: the factory is a
+        # generator, so building it over a column-major matrix costs nothing
+        # and raises nothing, and the Rust engine above reads columns happily.
+        # Only this fallback actually iterates rows.
+        if is_cytome:
+            from ..utils._cytome_compat import require_row_major
+            require_row_major(
+                _open_cytome(source) if isinstance(source, str) else source,
+                modality, measurement or "counts",
+                "runSVD's Python chunk reader",
+                "Leave use_engine=True (the default) -- the Rust pass engine "
+                "reads either layout -- or re-import with --layout csr.")
+        if method in ("auto", "krylov"):
+            # The chunk reader is an operator like any other; the Lanczos
+            # solver takes it through the same core as the engine. Without
+            # this, method='auto' on the fallback reached the power loop
+            # with no iteration count and failed before the first pass.
+            from ._rsvd_core import rsvd_core, FactoryOps
+            _fac = _cached_factory(chunk_factory) if cache_chunks else chunk_factory
+            embeddings, S, Vt, _svd_info = rsvd_core(
+                FactoryOps(_fac, n_cells, n_features),
+                n_components=n_components, n_iter=n_iter,
+                random_state=random_state, oversampling=oversampling,
+                tol=tol, method=method, verbosity=verbosity,
+            )
+        else:
+            embeddings, S, Vt = _streaming_rsvd(
+                chunk_factory, n_cells, n_features,
+                n_components=n_components, n_iter=n_iter,
+                random_state=random_state, oversampling=oversampling,
+                verbosity=verbosity, cache_chunks=cache_chunks,
+                tol=tol, method=method,
+            )
 
     # Truncate to true cell count if defensive over-allocation was used
     if is_cytome and cell_mask is None:
@@ -683,7 +878,7 @@ def runSVD(
     n_components: int = 50,
     random_state: Optional[int] = 10,
     scale_data: bool = False,
-    n_iter: int = 7,
+    n_iter=_UNSET,
     key_added: str = 'X_svd',
     layer: Optional[str] = None,
     verbosity: int = 0,
@@ -698,7 +893,11 @@ def runSVD(
     infog_params: Optional[dict] = None,
     hvg_indices_override=None,
     selected_feature_col_name: str = _DEFAULT_SELECTED_COL,
-    auto_tfidf: bool = False,
+    tol: Optional[float] = None,
+    method: str = "auto",
+    n_threads: int = 0,
+    use_engine: bool = True,
+    auto_tfidf: Optional[bool] = None,
     cell_mask=None,
     return_svd: bool = False,
     compute_on_fly: bool = True,
@@ -717,7 +916,7 @@ def runSVD(
 
     Parameters
     ----------
-    source : AnnData, cytome.Dataset, or str
+    data : AnnData, cytome.Dataset, or str
         Input. An AnnData (in-memory), an open cytome ``Dataset``, or a path to
         a ``.cytome`` file (the latter two stream from disk).
     use_highly_variable : bool, default True
@@ -728,8 +927,12 @@ def runSVD(
         Random seed for the randomized SVD solver.
     scale_data : bool, default False
         Z-score the (selected) features before SVD.
-    n_iter : int, default 7
-        Power-iteration count for the randomized SVD.
+    n_iter : int, optional
+        The number of rounds. For ``'power'`` and ``'krylov'`` without
+        ``tol`` it is exact (7 when left unset); with ``tol``, and for ``'auto'``,
+        it is the ceiling and the tolerance decides when to stop below it
+        (``'auto'`` left unset uses its own ceiling of 30). An explicit
+        value is honoured by every solver.
     key_added : str, default 'X_svd'
         Name for the embedding (AnnData ``obsm[key_added]`` / cytome embedding;
         on a cytome it is stored as ``{modality}_{key_added without 'X_'}``).
@@ -738,9 +941,12 @@ def runSVD(
     verbosity : int, default 0
         Verbosity level.
     streaming : bool, default False
-        Force the chunked streaming path even for an in-memory AnnData.
+        Force the chunked streaming path for an in-memory AnnData. A cytome
+        always streams; this has no effect on one.
     batch_size : int, default 1024
-        Rows per chunk for the streaming path.
+        Rows per chunk for the Python chunk reader (AnnData, or a cytome with
+        ``use_engine=False``). The Rust engine reads the store's own chunks
+        and ignores it.
     measurement : str, optional
         Cytome measurement/layer to read (e.g. ``'counts'``, ``'infog'``,
         ``'tfidf'``). Defaults to the modality's standard layer.
@@ -751,8 +957,10 @@ def runSVD(
         Cytome modality (``'RNA'``, ``'ATAC'``, ``'GA'``, ``'tiles'``) — routes
         the var-entity / matrix lookups via the modality registry.
     cache_chunks : bool, default False
-        Cache all chunks in memory on the first SVD pass (trades ~2-4 GB RAM
-        for ~8x fewer disk passes).
+        Python chunk reader only: keep the decoded chunks in memory after the
+        first pass. The Rust engine, which a cytome uses by default, streams
+        every pass from the store and ignores this flag; on local disk the
+        operating system already keeps the store in memory between passes.
     tfidf_params : dict, optional
         Apply TF-IDF inline during chunk iteration. Keys: ``'cell_depth'``
         (ndarray), ``'idf'`` (ndarray), ``'scale_factor'`` (float); optional
@@ -763,12 +971,51 @@ def runSVD(
         ``ds.peaks`` / ``ds.GA_genes`` / ``ds.tiles``) marking the SVD features.
         For ATAC/tiles, the legacy ``'selected'`` column is auto-detected with a
         ``DeprecationWarning`` when the default is left untouched.
-    auto_tfidf : bool, default False
-        Cytome only. When True, ``tfidf_params`` is None, and modality is
-        ``'ATAC'``/``'tiles'``: load TF-IDF stats from
-        ``ds.metadata['{modality}_tfidf_params']`` (or compute + cache via one
-        streaming pass); ``col_mask`` derives from
-        ``selected_feature_col_name``.
+    infog_params : dict, optional
+        The INFOG counterpart of ``tfidf_params``: apply INFOG normalisation
+        inline during chunk iteration instead of materialising a layer.
+    hvg_indices_override : ndarray, optional
+        Explicit column indices to run SVD on, bypassing
+        ``selected_feature_col_name`` entirely. Used by callers that have
+        already selected features by another route.
+    auto_tfidf : bool, optional
+        Cytome only. Apply TF-IDF on the fly: load the statistics from
+        ``ds.metadata['{modality}_tfidf_params']`` (or compute and cache them
+        in one pass), with the column mask from ``selected_feature_col_name``.
+        Left unset it is on for ``modality='ATAC'`` or ``'tiles'`` reading raw
+        counts with no ``tfidf_params`` -- an SVD of raw peak or tile counts is
+        never the intended analysis -- and off otherwise. Pass ``False`` to
+        factorise raw counts anyway.
+    method : {'auto', 'power', 'krylov'}, default 'auto'
+        The randomized solver. ``'auto'`` stops when the leading singular
+        values have converged (``tol=1e-3``), using block Lanczos when its
+        basis fits in memory and power iteration otherwise. ``'power'`` is
+        subspace iteration and ``'krylov'`` block Lanczos regardless of
+        memory; **both run exactly** ``n_iter`` **rounds** unless ``tol`` is
+        set, which is the way to benchmark the effect of the round count.
+        A round is two passes over the store, plus one pass for the sketch
+        and one for the final projection: ``2 + 2 * n_iter`` in all. For
+        in-memory AnnData the solver is scikit-learn's and this only sets
+        the default ``n_iter``.
+    tol : float, optional
+        Stop when the leading singular values change by less than this in
+        relative terms, rather than always running ``n_iter`` rounds. Guarded
+        by Aitken extrapolation of the remaining change, so a slowly
+        converging run is not mistaken for a converged one. ``None`` (the
+        default) runs the full ``n_iter``. With a tolerance set, ``n_iter``
+        becomes the cap rather than the count.
+    n_threads : int, default 0
+        Threads for the Rust SVD pass engine. ``0`` uses every core this
+        process is allowed -- on a cluster, the cores the job was allocated
+        (e.g. Slurm ``--cpus-per-task``), not the node's. More threads than
+        allocated cores only makes them take turns.
+    use_engine : bool, default True
+        Use the Rust pass engine for cytome input, which reads the matrix and
+        applies TF-IDF in one fused pass. Set False to force the Python path,
+        which is the one to compare against when a result looks wrong.
+    compute_on_fly : bool, default True
+        Apply the normalisation inline while streaming rather than requiring a
+        materialised layer on disk.
     cell_mask : ndarray, optional
         Boolean mask / sorted indices to run SVD on a cell subset (streaming /
         cytome paths only; returns the embedding for the masked cells).
@@ -785,9 +1032,51 @@ def runSVD(
         embedding to the cytome and returns **None** (self-contained); returns
         the ``(emb, S, Vt)`` tuple when ``cell_mask`` is set or
         ``return_svd=True``.
+
+    Other Parameters
+    ----------------
+    source, adata
+        Deprecated aliases for ``data``, kept so existing notebooks keep
+        running; either emits a ``FutureWarning``. They show in the signature
+        as ``<unset>``, which means "not supplied" -- passing one along with
+        ``data`` is an error. Use ``data``.
+
+    Notes
+    -----
+    On a cytome the cost is passes over the matrix, so the solver choice is
+    the lever. Power iteration with ``n_iter=k`` costs ``2k + 3`` passes;
+    ``method='auto'`` (the default) stops on a tolerance instead and typically
+    converges in 8-12 rounds on ATAC peak matrices. The engine uses every
+    allocated core; ``PIASO_SVD_PROFILE=1`` in the environment prints, per
+    pass, how many threads ran and how the time split between reading the
+    store and computing.
+
+    Every pass re-reads the store. On a network file system that costs
+    minutes where a node-local disk costs seconds -- the same twenty-pass
+    SVD took 5 min 13 s from a network mount and 29 s from the node's own
+    disk -- so on a cluster copy the cytome to local scratch (``$TMPDIR``)
+    first and open the copy. The engine reads without file locks, which
+    removes the worst of it, but not the data transfer itself.
     """
     source = _resolve_data_arg(data, 'runSVD', source=source, adata=adata)
+    # `n_iter` means different things to the two solvers: a round count for
+    # power iteration, a ceiling for a tolerance-driven one. Left unset it is
+    # 7 rounds for power and "let the tolerance decide" for auto; given a
+    # value it is honoured by both. Before this, method='auto' silently
+    # replaced an explicit n_iter with 30.
+    if n_iter is _UNSET:
+        n_iter = None if method == "auto" else 7
     is_cytome = isinstance(source, str) or _is_cytome_dataset(source)
+    _tfidf_inferred = auto_tfidf is None
+    if auto_tfidf is None:
+        # On by default exactly where TF-IDF is the only sensible input: raw
+        # peak or tile counts on a cytome with no statistics supplied.
+        auto_tfidf = bool(
+            is_cytome and tfidf_params is None
+            and modality in _LEGACY_FALLBACK_MODALITIES
+            and (measurement or "counts") == "counts"
+            and layer in (None, "counts")
+        )
 
     if is_cytome or streaming:
         return _runSVD_streaming(
@@ -798,11 +1087,13 @@ def runSVD(
             key_added=key_added, layer=layer,
             measurement=measurement, modality=modality,
             verbosity=verbosity, cache_chunks=cache_chunks,
+            tol=tol, method=method, n_threads=n_threads, use_engine=use_engine,
             tfidf_params=tfidf_params,
             infog_params=infog_params,
             hvg_indices_override=hvg_indices_override,
             selected_feature_col_name=selected_feature_col_name,
             auto_tfidf=auto_tfidf,
+            _auto_tfidf_inferred=_tfidf_inferred,
             cell_mask=cell_mask,
             return_svd=return_svd,
             compute_on_fly=compute_on_fly,
@@ -823,7 +1114,7 @@ def runSVD(
         return _runSVD_original(
             source, use_highly_variable=use_highly_variable,
             n_components=n_components, random_state=random_state,
-            scale_data=scale_data, n_iter=n_iter,
+            scale_data=scale_data, n_iter=7 if n_iter is None else n_iter,
             key_added=key_added, layer=layer, verbosity=verbosity,
             selected_feature_col_name=selected_feature_col_name,
             modality=modality,
@@ -849,7 +1140,7 @@ def _runSVDLazy_original(
     n_iter: int = 7,
     infog_trim: bool = True,
     key_added: str = 'X_svd',
-    layer: Optional[str] = None,
+    layer: Optional[str] = 'infog',
     infog_layer: Optional[str] = None,
     allow_non_integer: bool = False,
 ):
@@ -888,10 +1179,15 @@ def _runSVDLazy_original(
         Used for the `trim` parameter in `piaso.tl.infog` function, effective only when `layer` set to `infog`.
     key_added : str, optional, default='X_svd'
         The key under which the resulting cell embeddings are stored in `adata.obsm`.
-    layer : str, optional, default=None
-        Specifies which layer of `adata` to use for the transformation. If None, `adata.X` is used.
+    layer : str, optional, default='infog'
+        ``'infog'`` (the default) normalises with INFOG first, reading the raw
+        counts from ``infog_layer`` (``None``: ``adata.X``), and selects genes
+        as INFOG does. Any other value names a layer to factorise as it is,
+        with the object's ``highly_variable`` column if it has one and every
+        gene otherwise; ``None`` means ``adata.X`` as it is.
     infog_layer : str, optional, default=None
-        Used for the `layer` parameter in `piaso.tl.infog` function, effective only when `layer` set to `infog`.
+        The layer holding raw counts for INFOG (``None``: ``adata.X``). Used
+        only when ``layer='infog'``.
 
     Returns
     -------
@@ -925,12 +1221,13 @@ def _runSVDLazy_original(
             allow_non_integer=allow_non_integer,
         )
 
-    else:
-        import scanpy as sc
-        sc.pp.highly_variable_genes(adata,
-                                n_top_genes=n_top_genes,
-                                batch_key=batch_key
-                               )
+    elif use_highly_variable and 'highly_variable' not in adata.var.columns:
+        # Another layer, no selection on the object: use every gene rather
+        # than reach for scanpy, which this package does not require.
+        if verbosity > 0:
+            print(f"infog_svd: layer={layer!r} and no 'highly_variable' column in var; "
+                  f"using every gene. Run infog or selectFeatures first to select.")
+        use_highly_variable = False
 
 
     ### Use the runSVD function
@@ -1070,7 +1367,7 @@ def _runSVDLazy_streaming(
     n_iter: int = 7,
     infog_trim: bool = True,
     key_added: str = 'X_svd',
-    layer: Optional[str] = None,
+    layer: Optional[str] = 'infog',
     infog_layer: Optional[str] = None,
     batch_size: int = 1024,
     allow_non_integer: bool = False,
@@ -1179,7 +1476,7 @@ def infog_svd(
     n_iter: int = 7,
     infog_trim: bool = True,
     key_added: str = 'X_svd',
-    layer: Optional[str] = None,
+    layer: Optional[str] = 'infog',
     infog_layer: Optional[str] = None,
     # NEW parameters:
     streaming: bool = False,
@@ -1204,6 +1501,48 @@ def infog_svd(
         True to run anyway -- appropriate for Smart-seq2 TPM/FPKM, imputed or
         already-corrected matrices. Ignored when ``layer``/``infog_layer`` is
         given, since naming a layer already answers the question.
+
+    Parameters
+    ----------
+    source : AnnData, CytomeDataset or str
+        The data: an AnnData, an open cytome, or a path to one.
+    copy : bool, default False
+        AnnData: return a copy with the embedding instead of editing in place.
+    n_components : int, default 50
+        SVD dimensions.
+    use_highly_variable : bool, default True
+        Restrict the SVD to the selected genes.
+    n_top_genes : int, default 3000
+        Genes INFOG selects.
+    verbosity : int, default 0
+        ``1`` reports each step.
+    batch_key : str, optional
+        Kept for API compatibility; the selection no longer depends on it.
+    random_state : int, default 1927
+        Seed for the randomised SVD.
+    scale_data : bool, default False
+        Scale features before the SVD (AnnData path only).
+    n_iter : int, default 7
+        Rounds of the randomised solver.
+    infog_trim : bool, default True
+        Passed to INFOG as ``trim``.
+    key_added : str, default 'X_svd'
+        Name of the embedding.
+    layer : str, default 'infog'
+        ``'infog'`` (the default) normalises with INFOG first, reading the raw
+        counts from ``infog_layer`` (``None``: ``adata.X``), and selects genes
+        as INFOG does. Any other value names a layer to factorise as it is,
+        with the object's ``highly_variable`` column if it has one and every
+        gene otherwise; ``None`` means ``adata.X`` as it is.
+    infog_layer : str, optional
+        The layer holding raw counts for INFOG (``None``: ``adata.X``). Used
+        only when ``layer='infog'``.
+    streaming : bool, default False
+        AnnData: use the chunked streaming path; a cytome always streams.
+    batch_size : int, default 1024
+        Rows per chunk on the streaming path.
+    allow_non_integer : bool, default False
+        Let INFOG accept a matrix that does not hold integer counts.
     """
     is_cytome = isinstance(source, str) or _is_cytome_dataset(source)
 

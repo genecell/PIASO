@@ -73,6 +73,11 @@ def leiden(
     knn_result : dict, optional
         Result dict from neighbors() with 'connectivities'. Used for the
         in-memory ndarray / cell_mask path to avoid re-reading from disk.
+    modality : str, default 'RNA'
+        Cytome only: the modality the graph and the labels belong to.
+    cell_mask : ndarray, optional
+        Cytome only: boolean mask or sorted indices of the cells the graph was
+        built on with the same mask in ``neighbors``.
 
     Returns
     -------

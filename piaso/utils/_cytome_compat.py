@@ -271,6 +271,83 @@ def has_cells_column(source, column: str) -> bool:
         return column in ds.cells
 
 
+def write_cells_column(ds, name: str, values, *, overwrite: bool = False,
+                       what: str = "column") -> str:
+    """Write a per-cell column without landing on somebody else's.
+
+    SQLite column names are case-insensitive, and cytome resolves a new
+    spelling to an existing column with only a warning. So a QC step that
+    writes ``nucleosome_signal`` into a cytome that already carries Signac's
+    ``Nucleosome_signal`` would silently replace it. Two rules:
+
+    * the **same spelling** overwrites, silently -- re-running a QC step
+      replaces its own column, which is what re-running means;
+    * a **different spelling** that resolves to an existing column is
+      refused unless ``overwrite=True``, naming both spellings.
+
+    Returns the name actually written.
+    """
+    import numpy as np
+    resolved = check_cells_column_free(ds, name, overwrite=overwrite, what=what)
+    ds.cells[name] = np.asarray(values)
+    # cytome buffers a new column until flush; flush now so the schema the
+    # next check reads already contains this one.
+    ds.flush()
+    return resolved
+
+
+def check_cells_column_free(ds, name: str, *, overwrite: bool = False,
+                            what: str = "column") -> str:
+    """The check behind :func:`write_cells_column`, without the write.
+
+    Returns the column the name will land on. Call it for every column a
+    function intends to write *before* writing the first, so a refusal
+    leaves the cytome untouched rather than half-written.
+    """
+    # The schema itself, not a cached column list: a column written a moment
+    # ago must already count.
+    existing = [r[1] for r in ds._conn.execute("PRAGMA table_info(cells)")]
+    same = [c for c in existing if c == name]
+    variants = [c for c in existing if c != name and c.lower() == str(name).lower()]
+    if variants and not same and not overwrite:
+        raise ValueError(
+            f"{what} {name!r} would overwrite the existing column {variants[0]!r}: "
+            f"SQLite column names are case-insensitive, so the two are one "
+            f"column. Pass overwrite=True to replace it, or choose another "
+            f"name (key_added=...).")
+    return variants[0] if (variants and not same) else name
+
+
+def require_cells_column(source, column: str, argument: str = "groupby") -> None:
+    """Raise unless ``column`` exists in ``ds.cells``.
+
+    This exists because of a SQLite compatibility misfeature, and it is worth
+    stating plainly: **a double-quoted token that does not resolve to a column
+    is treated as a string literal, not an error.** So
+
+        SELECT cell_idx, "Leiden" FROM cells        -- no Leiden column
+
+    returns the string ``'Leiden'`` for every row instead of failing. A typo in
+    a ``groupby`` then produces one group named after the typo, and everything
+    downstream is internally consistent -- a confident wrong answer rather than
+    a traceback. That is exactly how a COSG run reported ``1 groups`` and a
+    plausible marker table for a column that did not exist.
+
+    Any function that interpolates a user-supplied name into a quoted
+    identifier should call this first.
+    """
+    with open_cytome(source) as ds:
+        if column in ds.cells:
+            return
+        available = sorted(ds.cells.columns)
+    close = [c for c in available if c.lower() == str(column).lower()]
+    hint = f" Did you mean {close[0]!r}?" if close else ""
+    raise KeyError(
+        f"{argument}={column!r} is not a column of the cytome cells table."
+        f"{hint} Available: {available}"
+    )
+
+
 def get_metadata(source, key: str, default=None):
     """Fetch a value from ``ds.metadata`` with a default fallback."""
     with open_cytome(source) as ds:
@@ -299,3 +376,58 @@ def resolve_cytome_alias(cytome, old_value, old_name, func_name):
         if cytome is None:
             cytome = old_value
     return cytome
+
+
+def require_row_major(ds, modality: str, layer: str, what: str,
+                      alternative: str = "") -> None:
+    """Raise an actionable error when ``what`` needs rows and there are none.
+
+    For operations that genuinely require row chunks -- ones that write a
+    row-major layer, or transform cell by cell -- and for which assembling
+    rows from columns would mean reading the whole matrix once per row block.
+    The generic refusal from ``iter_rows`` names the layout but not the way
+    out; this names both, and fires before any work is done rather than
+    partway through a stream.
+    """
+    if column_major_layer(ds, modality, layer) is None:
+        return
+    tail = f" {alternative}" if alternative else ""
+    raise ValueError(
+        f"{what} needs row chunks, and '{modality}_{layer}' is stored "
+        f"column-major (the fragment importer and the peak quantifier write "
+        f"peaks and tiles that way by default), so it has none. Building rows "
+        f"from columns would read the whole matrix once per row block.{tail}"
+    )
+
+
+def column_major_layer(ds, modality: str, layer: str):
+    """The layer as a ``MeasurementLayer`` when it is stored column-major, else ``None``.
+
+    A matrix written with ``--layout csc`` has CSC chunks and no row chunks;
+    ``iter_chunks`` refuses it, and a consumer that knows the layout walks it
+    by columns instead.
+    """
+    # Takes a path or an open Dataset: callers hold one or the other, and a
+    # helper that only accepted a Dataset turned every guarded call site into
+    # an AttributeError on the string path.
+    conn, opened = resolve_cytome_conn(ds)
+    try:
+        row = conn.execute(
+            "SELECT COALESCE(n_chunks, 0), COALESCE(has_csc, 0) FROM matrix_meta "
+            "WHERE matrix_name = ?", (f"{modality}_{layer}",),
+        ).fetchone()
+        if row is None or row[0] != 0 or not row[1]:
+            return None
+    except Exception:
+        return None
+    finally:
+        if opened:
+            conn.close()
+    from cytome.core.measurement import MeasurementLayer
+    if opened:
+        # A path caller gets a layer on its own connection: the one used for
+        # the probe above is closed, and a MeasurementLayer needs a live one.
+        import sqlite3
+        live = sqlite3.connect(f"file:{resolve_cytome_path(ds)}?mode=ro", uri=True)
+        return MeasurementLayer(live, f"{modality}_{layer}")
+    return MeasurementLayer(ds._conn, f"{modality}_{layer}")

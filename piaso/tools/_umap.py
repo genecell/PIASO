@@ -14,6 +14,22 @@ from ._neighbors import (
 )
 
 
+def _umap_version() -> str:
+    try:
+        from importlib.metadata import version
+        return version("umap-learn")
+    except Exception:                                   # pragma: no cover
+        return "unknown"
+
+
+def _sklearn_version() -> str:
+    try:
+        from importlib.metadata import version
+        return version("scikit-learn")
+    except Exception:                                   # pragma: no cover
+        return "unknown"
+
+
 def umap(
     data,
     use_rep=None,
@@ -71,6 +87,9 @@ def umap(
         un-prefixed graph). Honoured on **both** the AnnData and cytome paths;
         naming a graph that was never computed raises rather than quietly
         falling back to the default one.
+    modality : str, default 'RNA'
+        Cytome only: the modality the graph was stored under, and the one the
+        embedding is written under.
 
     Returns
     -------
@@ -215,7 +234,25 @@ def umap(
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", message="n_jobs value.*overridden.*random_state")
         warnings.filterwarnings("ignore", message="precomputed_knn.*transform")
-        embedding = reducer.fit_transform(X)
+        try:
+            embedding = reducer.fit_transform(X)
+        except TypeError as exc:
+            # umap-learn < 0.5.8 calls sklearn's check_array with
+            # `force_all_finite`, renamed in scikit-learn 1.6 and REMOVED in
+            # 1.8. The combination raises from three frames inside sklearn
+            # with no mention of umap, which reads like a PIASO bug. It is an
+            # upstream one, fixed upstream, so say which package to move.
+            if "force_all_finite" not in str(exc):
+                raise
+            raise ImportError(
+                "piaso.tl.umap needs umap-learn >= 0.5.8. The installed "
+                f"umap-learn ({_umap_version()}) calls scikit-learn's "
+                "check_array(force_all_finite=...), which scikit-learn "
+                f"{_sklearn_version()} removed.\n"
+                "    pip install -U 'umap-learn>=0.5.8'\n"
+                "Nothing else needs to change; this is an upstream "
+                "incompatibility between those two packages."
+            ) from exc
 
     # Store results
     if _is_cytome_dataset(data):

@@ -82,3 +82,17 @@ def test_key_added_is_honoured(query_reference):
         key_added="my_pred")
     assert "my_pred" in q.obs.columns
     assert "CellTypes_gdr" not in q.obs.columns
+
+
+def test_reference_labels_survive_when_the_query_lacks_the_column(query_reference):
+    """anndata.concat keeps only the obs columns shared by every object, so a
+    reference-only label column vanished from the combined object and the
+    classifier failed with KeyError on it. The labels live in the shared
+    `gdr_by` column; predicting from a query without `CellTypes` must work."""
+    import piaso
+    q, r = query_reference
+    q = q.copy(); del q.obs["CellTypes"]
+    piaso.tl.predictCellTypeByGDR(q, r, layer="log1p", reference_groupby="CellTypes",
+                                  query_groupby="Leiden", key_added="pred_no_col")
+    assert "pred_no_col" in q.obs.columns
+    assert set(q.obs["pred_no_col"].astype(str)) <= set(r.obs["CellTypes"].astype(str))

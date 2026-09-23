@@ -151,6 +151,13 @@ def _normalize_log1p_cytome(data, target_sum, key_added, save_layer,
     """Cytome path: streaming normalize and optionally persist."""
     from cytome.core.measurement import MeasurementLayer
 
+    from ..utils._cytome_compat import require_row_major
+    require_row_major(
+        data, modality, layer, "normalize_log1p",
+        "Normalise on the fly instead -- the readers that take a "
+        "`cytome_layer='log1p'` apply it while streaming -- or re-import "
+        "with --layout csr.")
+
     # Resolve matrix dimensions via the MeasurementLayer API
     matrix_name = f"{modality}_{layer}"
     try:

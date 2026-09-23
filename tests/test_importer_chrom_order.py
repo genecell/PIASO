@@ -91,12 +91,14 @@ def _import_pair(binary, a, b, wl, out, extra=()):
 
 
 def _chunks(cytome):
-    """(chrom, chunk_idx, n_fragments, min_start) for every chunk, in write order."""
+    """(chrom, chunk_idx, n_fragments, min_start) for every chunk, by
+    (chrom, chunk_idx). Write order is no longer meaningful: chromosomes are
+    merged in parallel and land in the table as they finish."""
     con = sqlite3.connect(str(cytome))
     try:
         return con.execute(
             "SELECT chrom, chunk_idx, n_fragments, min_start FROM fragment_chunks "
-            "ORDER BY rowid").fetchall()
+            "ORDER BY chrom, chunk_idx").fetchall()
     finally:
         con.close()
 
@@ -123,11 +125,7 @@ def test_karyotypic_two_file_merge_completes(tmp_path):
     assert "UNIQUE constraint failed" not in r.stderr
 
     rows = _chunks(out)
-    written = [c for c, _, _, _ in rows]
-    # every chromosome appears as one contiguous run — i.e. never re-opened
-    runs = [c for i, c in enumerate(written) if i == 0 or written[i - 1] != c]
-    assert len(runs) == len(set(runs)), f"a chromosome was re-opened: {runs}"
-    assert set(runs) == set(KARYOTYPIC)
+    assert {c for c, _, _, _ in rows} == set(KARYOTYPIC)
     # and per chromosome the counter is 0..n-1 with ascending min_start
     for chrom in KARYOTYPIC:
         sub = [(i, m) for c, i, _, m in rows if c == chrom]
@@ -146,10 +144,6 @@ def test_lexicographic_still_works(tmp_path):
     assert r.returncode == 0, f"import failed:\n{r.stderr[-3000:]}"
     rows = _chunks(out)
     assert sum(n for _, _, n, _ in rows) == 2 * len(LEXICOGRAPHIC) * N_PER_CHROM
-    # chromosomes are visited in the files' own (lexicographic) order
-    runs = [c for i, c in enumerate(r_[0] for r_ in rows)
-            if i == 0 or rows[i - 1][0] != rows[i][0]]
-    assert runs == LEXICOGRAPHIC
 
 
 # ── 2. output invariance ──────────────────────────────────────────────────────
@@ -171,18 +165,22 @@ def test_lexicographic_output_byte_identical_to_prefix_binary(tmp_path):
     assert _blobs(old_out) == _blobs(new_out), "fragment_chunks differ from the pre-fix build"
 
 
-# ── 3. the guard ──────────────────────────────────────────────────────────────
+# ── 3. files that disagree on chromosome order ────────────────────────────────
 
-def test_inconsistent_orders_hit_the_guard(tmp_path):
-    """Files that disagree get a named cause, not a SQLite constraint error."""
+def test_inconsistent_orders_merge_anyway(tmp_path):
+    """Each chromosome is located in each file by its own offset and merged
+    on its own, so the files no longer have to agree on chromosome order:
+    a karyotypic file and a lexicographic one import like any other pair."""
     a, b, wl = _fixture(tmp_path, KARYOTYPIC, LEXICOGRAPHIC)
     out = tmp_path / "mixed.cytome"
     r = _import_pair(IMPORTER, a, b, wl, out)
-    assert r.returncode != 0, "an unmergeable pair imported silently"
-    msg = r.stderr + r.stdout
-    assert "disagree on chromosome order" in msg, msg[-3000:]
-    assert "resort_fragments.sh" in msg
-    assert "UNIQUE constraint failed" not in msg
+    assert r.returncode == 0, f"import failed:\n{r.stderr[-3000:]}"
+    rows = _chunks(out)
+    assert sum(n for _, _, n, _ in rows) == 2 * len(KARYOTYPIC) * N_PER_CHROM
+    for chrom in KARYOTYPIC:
+        sub = [(i, m) for c, i, _, m in rows if c == chrom]
+        assert [i for i, _ in sub] == list(range(len(sub)))
+        assert [m for _, m in sub] == sorted(m for _, m in sub)
 
 
 # ── 4 + 5. the other two silent failures ──────────────────────────────────────

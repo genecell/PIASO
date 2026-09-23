@@ -48,37 +48,59 @@ def _leiden_local_cytome_streaming_svd(
     key_added: str,
     modality: str = "ATAC",
     measurement: str = "counts",
+    select: bool = True,
     max_nnz_percentile: float = 20.0,
     n_components: int = 30,
-    n_iter: int = 7,
+    svd_method: str = "auto",
+    n_iter=None,
+    tol=None,
     n_neighbors: int = 15,
     batch_size: int = 1024,
     random_state: int = 10,
     min_cells: int = 20,
     verbose: bool = True,
 ):
-    """Streaming, RAM-bounded `leiden_local` for an ATAC/tiles cytome.
+    """Streaming, RAM-bounded `leiden_local` on a cytome, one group at a time.
 
-    For each coarse group, **subset the cytome** to that group's cells (the
-    O1 streaming subset — peak RAM ≈ one chunk, never the whole matrix), then
-    run the cytome-native chain **in that group's own low-dim space**:
-    ``selectPeaks(max_cumulative_nnz_percentile) → TF-IDF → randomized SVD →
-    neighbors → leiden`` (all streaming). Sub-labels are prefixed ``<group>-<k>``
-    and stitched into ``ds.cells[key_added]``. No full-AnnData materialisation,
-    so this scales to large ATAC cytomes (where `to_anndata` would OOM).
+    Each coarse group is **subset to its own cytome** carrying only the
+    matrix being clustered (peak RAM about one chunk, never the whole
+    matrix), and re-embedded in its own space:
+
+    - ATAC / tiles with ``select``: ``selectPeaks`` by cumulative non-zeros
+      -> TF-IDF -> randomized SVD -> neighbours -> Leiden (``dr_method='X_svd'``).
+    - RNA / GA with ``select``: the store's ``highly_variable`` column if it
+      has one, every feature otherwise; values as stored (``cytome_layer``).
+    - any modality without ``select``: every feature with at least one
+      count, values as stored (``dr_method='X_svd_full'``); ``runSVD``'s own
+      defaults apply, so ATAC and tiles counts still get TF-IDF.
+
+    Sub-labels are ``<group>-<k>`` in ``ds.cells[key_added]``. A group with
+    fewer than ``min_cells`` cells, or one whose chain fails, is kept as
+    one sub-cluster ``<group>-0`` (the failure with a ``RuntimeWarning``).
     """
     import os
     import tempfile
     import warnings
-    from ..preprocessing._selectPeaks import selectPeaks
     from ._runTFIDF import compute_tfidf_stats
+    try:
+        from ..preprocessing._selectPeaks import selectPeaks
+    except ImportError:
+        # Per-group peak selection is part of the peak chain, which not every
+        # build carries. Without it each group is embedded on the selection
+        # the store already holds (`highly_variable`), or on every feature.
+        selectPeaks = None
 
+    peak_like = modality in ("ATAC", "tiles")
+    matrix = f"{modality}_{measurement}"
+    if select and peak_like and selectPeaks is None and verbose:
+        print("  [leiden_local] per-group peak selection is not available in this build; "
+              "each group uses its stored 'highly_variable' selection, or every feature")
     coarse = np.asarray(ds.cells[groupby]).astype("U")
     all_bc = np.asarray(ds.cells["barcode"], dtype=object)
     if groups is None:
         groups = np.unique(coarse)
-    # object dtype — a fixed-width "<U1" (from a single-char coarse label) would
-    # silently TRUNCATE the prefixed sub-labels ("A-3" → "A").
+    # object dtype -- a fixed-width "<U1" (from a single-char coarse label)
+    # would silently TRUNCATE the prefixed sub-labels ("A-3" -> "A").
     result = coarse.astype(object)
 
     tmpdir = tempfile.mkdtemp(prefix="leiden_local_")
@@ -88,65 +110,75 @@ def _leiden_local_cytome_streaming_svd(
             n_g = int(gmask.sum())
             if n_g == 0:
                 continue
-            # Too few cells to re-embed → keep the whole coarse group as one
-            # sub-cluster (can't run SVD/Leiden meaningfully).
             if n_g < max(min_cells, 3):
                 result[gmask] = [f"{g}-0"] * n_g
                 if verbose:
-                    print(f"  [leiden_local] group {g}: {n_g} cells (<{min_cells}) → single sub-cluster")
+                    print(f"  [leiden_local] group {g}: {n_g} cells (<{min_cells}) -> single sub-cluster")
                 continue
 
             sub_path = os.path.join(tmpdir, f"g{gi}.cytome")
-            sub = ds.subset(gmask, output=sub_path,
+            sub = ds.subset(gmask, output=sub_path, matrices=[matrix],
                             include_fragments=False, include_embeddings=False)
             try:
-                # 1) per-group peak selection (20% cumulative-nnz, like the pipeline)
-                selectPeaks(sub, streaming=True,
-                            max_cumulative_nnz_percentile=max_nnz_percentile,
-                            measurement=measurement, modality=modality,
-                            key_added="highly_variable", verbose=False)
-                feat_tbl = "peaks" if modality == "ATAC" else modality
-                selected = np.asarray(_read_selected_mask(sub, feat_tbl)).astype(bool)
-                n_sel = int(selected.sum())
-                # adaptive n_components: < n_cells and < n_selected
-                nc = int(min(n_components, n_g - 1, max(n_sel - 1, 1)))
-                if nc < 2 or n_sel < 2:
-                    result[gmask] = [f"{g}-0"] * n_g
-                    if verbose:
-                        print(f"  [leiden_local] group {g}: n_sel={n_sel}, nc={nc} → single sub-cluster")
-                    continue
+                svd_kw = dict(modality=modality, measurement=measurement, streaming=True,
+                              key_added="X_svd", method=svd_method, n_iter=n_iter, tol=tol,
+                              random_state=random_state, batch_size=batch_size, verbosity=0)
+                if select and peak_like and selectPeaks is not None:
+                    # 1) per-group peak selection (20% cumulative-nnz, as the pipeline)
+                    selectPeaks(sub, streaming=True,
+                                max_cumulative_nnz_percentile=max_nnz_percentile,
+                                measurement=measurement, modality=modality,
+                                key_added="highly_variable", verbose=False)
+                    selected = np.asarray(_read_selected_mask(sub, modality), dtype=bool)
+                    n_sel = int(selected.sum())
+                    nc = int(min(n_components, n_g - 1, max(n_sel - 1, 1)))
+                    if nc < 2 or n_sel < 2:
+                        result[gmask] = [f"{g}-0"] * n_g
+                        if verbose:
+                            print(f"  [leiden_local] group {g}: n_sel={n_sel}, nc={nc} -> single sub-cluster")
+                        continue
+                    # 2) TF-IDF statistics + 3) streaming SVD on the selected peaks
+                    tfidf_stats = compute_tfidf_stats(sub, measurement=measurement, modality=modality)
+                    tfidf_stats["col_mask"] = selected
+                    runSVD(sub, tfidf_params=tfidf_stats, n_components=nc, **svd_kw)
+                else:
+                    use_hv = False
+                    if select:
+                        try:
+                            hv = np.asarray(_read_selected_mask(sub, modality), dtype=bool)
+                            use_hv = bool(hv.any())
+                        except Exception:
+                            use_hv = False
+                    n_feat = int(sub._conn.execute(
+                        "SELECT n_cols FROM matrix_meta WHERE matrix_name=?", (matrix,)).fetchone()[0])
+                    n_sel = int(hv.sum()) if use_hv else n_feat
+                    nc = int(min(n_components, n_g - 1, max(n_sel - 1, 1)))
+                    if nc < 2:
+                        result[gmask] = [f"{g}-0"] * n_g
+                        continue
+                    runSVD(sub, use_highly_variable=use_hv, n_components=nc, **svd_kw)
 
-                # 2) TF-IDF stats + 3) streaming SVD on selected peaks
-                tfidf_stats = compute_tfidf_stats(sub, measurement=measurement, modality=modality)
-                tfidf_stats["col_mask"] = selected
-                runSVD(sub, modality=modality, measurement=measurement, streaming=True,
-                       tfidf_params=tfidf_stats, key_added="X_svd",
-                       n_components=nc, n_iter=n_iter, random_state=random_state,
-                       batch_size=batch_size, verbosity=0)
-
-                # 4) neighbors + 5) leiden in the group's own space
-                _piaso_neighbors(sub, use_rep="X_svd",
+                # 4) neighbours + 5) Leiden in the group's own space. modality is
+                # passed on: the embedding was stored under it.
+                _piaso_neighbors(sub, use_rep="X_svd", modality=modality,
                                  n_neighbors=min(n_neighbors, n_g - 1),
                                  random_state=random_state, key_added="neighbors")
                 # Private, case-collision-proof key: the subset inherits the
-                # parent's cell columns, and cortex RNA annotations carry a
-                # 'Leiden_local' column. SQLite columns are CASE-INSENSITIVE, so
-                # writing 'leiden_local' would silently land in the existing
-                # 'Leiden_local' and the exact-case read-back would KeyError
-                # (→ every group collapsed to a single sub-cluster on mc/hc_adol).
+                # parent's cell columns, and SQLite columns are case-insensitive,
+                # so writing 'leiden_local' beside an existing 'Leiden_local'
+                # would land in it.
                 _sub_key = "_piaso_ll_subleiden"
                 _piaso_leiden(sub, resolution=resolution, key_added=_sub_key,
                               random_state=random_state, n_iterations=10,
                               adjacency_key="connectivities")
-
                 sub_labels = np.asarray(sub.cells[_sub_key]).astype("U")
                 sub_bc = np.asarray(sub.cells["barcode"], dtype=object)
                 lab_map = {b: f"{g}-{lab}" for b, lab in zip(sub_bc, sub_labels)}
                 result[gmask] = [lab_map[b] for b in all_bc[gmask]]
                 if verbose:
-                    print(f"  [leiden_local] group {g}: {n_g} cells, {n_sel} peaks → "
+                    print(f"  [leiden_local] group {g}: {n_g} cells, {n_sel} features -> "
                           f"{len(set(sub_labels))} sub-clusters")
-            except Exception as exc:  # robust: one bad group shouldn't kill the run
+            except Exception as exc:  # one bad group must not kill the run
                 warnings.warn(
                     f"leiden_local: group {g} failed ({type(exc).__name__}: {exc}); "
                     f"keeping it as a single sub-cluster.", RuntimeWarning, stacklevel=2)
@@ -171,352 +203,263 @@ def _leiden_local_cytome_streaming_svd(
     ds.flush()
     return None
 
+def _read_selected_mask(ds, modality_or_table):
+    """The boolean 'highly_variable' column of a modality's feature table.
 
-def _read_selected_mask(ds, feat_tbl):
-    """Read the boolean 'highly_variable' column from a feature entity table."""
-    ent = getattr(ds, feat_tbl)
-    return np.asarray(ent["highly_variable"])
+    Takes a modality ('ATAC', 'RNA', 'GA', 'tiles') or the raw table name.
+    Resolved through ``ds.features(modality)`` rather than
+    ``getattr(ds, table)``: for tiles and gene activity the attribute returns
+    a ``Modality``, which has no ``__getitem__`` over columns, so the old form
+    raised or read the wrong thing for every modality but ATAC and RNA.
+    """
+    from ..utils._bool_mask import as_bool_mask
+
+    name = str(modality_or_table)
+    _TABLE_TO_MODALITY = {"peaks": "ATAC", "genes": "RNA",
+                          "GA_genes": "GA", "tiles": "tiles"}
+    modality = _TABLE_TO_MODALITY.get(name, name)
+    def _coerce(values, label):
+        # No `dtype=object`: `as_bool_mask` reads the array's dtype to decide
+        # how the column was stored, so boxing a perfectly good INTEGER column
+        # as object sends it down the text branch and warns that it is text.
+        # Let numpy infer, and only fall back to object for genuinely mixed
+        # values.
+        try:
+            arr = np.asarray(values)
+        except Exception:
+            arr = np.asarray(list(values), dtype=object)
+        return as_bool_mask(arr, name=label)
+
+    try:
+        ent = ds.features(modality)
+    except Exception:
+        # A table name no registry knows; fall back to reading it directly.
+        rows = ds._conn.execute(
+            f"SELECT highly_variable FROM {name} ORDER BY ROWID").fetchall()
+        return _coerce([r[0] for r in rows], f"{name}.highly_variable")
+    return _coerce(ent["highly_variable"], f"{modality}.highly_variable")
+
+
+_DR_METHODS = ('X_svd', 'X_svd_full', 'X_pca', 'X_gdr', 'X_pca_harmony', 'X_svd_full_harmony')
+
+
+def _embed_group(adata_i, dr_method, n_components, batch_key, gdr_resolution,
+                 svd_method, n_iter, svd_tol, random_state, verbosity, said):
+    """Embed one group's AnnData by ``dr_method``; return the ``obsm`` key."""
+    if dr_method == 'X_svd':
+        hv = 'highly_variable' in adata_i.var.columns and bool(np.asarray(adata_i.var['highly_variable']).any())
+        if not hv and verbosity > 0 and not said.get('all_features'):
+            print("  [leiden_local] no 'highly_variable' column in var: using every feature "
+                  "(dr_method='X_svd'); run selectFeatures/infog first to select.")
+            said['all_features'] = True
+        runSVD(adata_i, use_highly_variable=hv, n_components=n_components, random_state=random_state,
+               scale_data=False, method=svd_method, n_iter=n_iter, tol=svd_tol, key_added='X_svd')
+        return 'X_svd'
+    if dr_method in ('X_svd_full', 'X_svd_full_harmony'):
+        runSVD(adata_i, use_highly_variable=False, n_components=n_components, random_state=random_state,
+               scale_data=False, method=svd_method, n_iter=n_iter, tol=svd_tol, key_added='X_svd_full')
+        if dr_method == 'X_svd_full':
+            return 'X_svd_full'
+        _piaso_harmony(adata_i, batch_key=batch_key, use_rep='X_svd_full', key_added='X_svd_full_harmony')
+        return 'X_svd_full_harmony'
+    # the INFOG-first family
+    infog_svd(adata_i, n_components=n_components)
+    if dr_method == 'X_pca':
+        return 'X_pca'
+    if dr_method == 'X_gdr':
+        knn = _piaso_neighbors(adata_i, use_rep='X_pca', n_neighbors=15, random_state=random_state)
+        _piaso_leiden(adata_i, resolution=gdr_resolution, key_added='leiden_tmp', knn_result=knn,
+                      random_state=random_state)
+        runGDR(adata_i, batch_key=None, groupby='leiden_tmp')
+        return 'X_gdr'
+    _piaso_harmony(adata_i, batch_key=batch_key, use_rep='X_pca', key_added='X_pca_harmony')
+    return 'X_pca_harmony'
 
 
 def leiden_local(
     adata,
-    clustering_type: str='each',
-    groupby: str='Leiden',
+    clustering_type: str = 'each',
+    groupby: str = 'Leiden',
     groups: Optional[Sequence[str]] = None,
     resolution: float = 0.25,
     batch_key: Optional[Sequence[str]] = None,
-    key_added: str =  'Leiden_local',
-    dr_method: str = 'X_pca',
-    gdr_resolution: float=1.0,
+    key_added: str = 'Leiden_local',
+    dr_method: str = 'X_svd',
+    gdr_resolution: float = 1.0,
     copy: bool = False,
     modality: Optional[str] = None,
     cytome_layer: str = "counts",
     max_nnz_percentile: float = 20.0,
     n_components: int = 30,
-    n_iter: int = 7,
+    svd_method: str = "auto",
+    n_iter: Optional[int] = None,
+    svd_tol: Optional[float] = None,
     n_neighbors: int = 15,
     batch_size: int = 1024,
     random_state: int = 10,
+    min_cells: int = 20,
+    verbosity: int = 1,
 ):
-    """
-    Perform Leiden clustering locally, i.e., on selected group(s), on an **AnnData object
-    or a cytome.Dataset** (or a cytome path string).
-    This function enables flexible clustering within specified groups, supports batch effect handling, and stores results back in the object.
+    """Leiden clustering within each group of a coarse clustering.
 
-    Both inputs are supported:
-
-    - **AnnData**: in-memory clustering; labels are written to ``adata.obs[key_added]``.
-    - **cytome.Dataset / path str**: labels are written to ``ds.cells[key_added]``. With
-      ``dr_method='X_svd'`` a **RAM-bounded streaming** path is used — each coarse group is
-      subset to its own cytome and clustered in its own low-dim space (per-group
-      selectPeaks → TF-IDF → randomized SVD → neighbors → Leiden), so it scales to large
-      ATAC/tiles cytomes where materialising a full AnnData would OOM. This is the path the
-      snakemake peak-calling workflow uses (``picco_preliminary_method: leiden_local``).
+    Every group is re-embedded in its own low-dimensional space and
+    clustered there, so structure the whole-dataset embedding merged is
+    recovered. Works on an AnnData in memory and on a cytome (open
+    ``Dataset`` or path) streaming, per group, in bounded memory.
 
     Parameters
     ----------
-    adata : AnnData, cytome.Dataset, or str
-        AnnData object, an open ``cytome.Dataset``, or a path to a ``.cytome`` file.
-    clustering_type : str, optional (default: 'each')
-        Specifies the clustering approach:
-        - 'each': Perform clustering independently within each group.
-        - 'all': Perform clustering across all selected groups.
-    groupby : str, optional (default: 'Leiden')
-        The key in `adata.obs` specifying the cell labels to be used for selecting groups.
-    groups : Sequence[str], optional (default: None)
-        A list of specific group(s) to be clustered. If None, all groups in the `groupby` category will be used.
-    resolution : float, optional (default: 0.25)
-        Resolution parameter for the Leiden algorithm, controlling clustering granularity. 
-        Higher values result in more clusters.
-    batch_key : Sequence[str], optional (default: None)
-        Key in `adata.obs` specifying batch labels. If provided, it handles batch effects during clustering. If None, batch effects are ignored.
-    key_added : str, optional (default: 'Leiden_local')
-        The name of the key under which the local Leiden clustering results will be stored in `adata.obs`.
-    dr_method : str, optional (default: 'X_pca')
-        Dimensionality reduction method to be used for local clustering.
-        Allowed values are: 'X_pca', 'X_gdr', 'X_pca_harmony', 'X_svd_full', 'X_svd_full_harmony'.
-    gdr_resolution : float, optional (default: 1.0)
-        Resolution parameter for the GDR dimensionality reduction method if 'dr_method' is set to 'X_gdr'.
-    copy : bool, optional (default: False)
-        If False, the operation is performed in-place. If True, a copy of the `adata` object is returned with the clustering results added.
-        
+    adata : AnnData, cytome.Dataset or str
+        The data; a cytome may be given as a path.
+    clustering_type : {'each', 'all'}, default 'each'
+        ``'each'`` clusters every selected group on its own; ``'all'``
+        pools the selected groups and clusters them together (sub-labels
+        prefixed ``M-``). A cytome supports ``'each'`` only.
+    groupby : str, default 'Leiden'
+        The coarse labels: an ``obs`` column, or a ``cells`` column on a
+        cytome.
+    groups : sequence of str, optional
+        Which groups to cluster; all of them when ``None``.
+    resolution : float, default 0.25
+        Leiden resolution inside each group; higher gives more clusters.
+    batch_key : str, optional
+        Batch column for the Harmony variants of ``dr_method``.
+    key_added : str, default 'Leiden_local'
+        Where the labels go: ``obs[key_added]`` or ``cells[key_added]``,
+        as ``<group>-<k>``.
+    dr_method : str, default 'X_svd'
+        How each group is embedded:
+
+        - ``'X_svd'``: ``runSVD`` on the group's **selected** features. On
+          an ATAC or tiles cytome the selection is made per group by
+          cumulative non-zeros (``max_nnz_percentile``) with TF-IDF; on an
+          RNA or GA cytome and on an AnnData it is the ``highly_variable``
+          column, or every feature if there is none (said once). An ATAC
+          AnnData should be TF-IDF-normalised first (``run_TFIDF``).
+        - ``'X_svd_full'``: ``runSVD`` on **every** feature with at least
+          one count, values as stored.
+        - ``'X_pca'``: INFOG normalisation and selection, then SVD.
+        - ``'X_gdr'``, ``'X_pca_harmony'``, ``'X_svd_full_harmony'``: as
+          their names say; Harmony needs ``batch_key``.
+
+        On a cytome, ``'X_svd'`` and ``'X_svd_full'`` stream per group;
+        the other methods convert the store to an AnnData first.
+    gdr_resolution : float, default 1.0
+        Leiden resolution of the temporary clustering GDR is built on
+        (``dr_method='X_gdr'``).
+    copy : bool, default False
+        AnnData only: return a modified copy instead of editing in place.
+    modality : str, optional
+        Cytome only: which modality to cluster (``'ATAC'``, ``'tiles'``,
+        ``'RNA'``, ``'GA'``). Defaults to ``'ATAC'`` on the streaming path
+        and ``'RNA'`` for the AnnData conversion.
+    cytome_layer : str, default 'counts'
+        Cytome only: the layer to read. For RNA that is usually a
+        materialised ``'infog'``.
+    max_nnz_percentile : float, default 20.0
+        ATAC/tiles streaming only: the cumulative-non-zero percentile that
+        selects a group's peaks.
+    n_components : int, default 30
+        SVD dimensions per group, capped at one less than the group's cell
+        count and than its selected feature count (and, for the AnnData
+        path, at the square root of the cell count, as before).
+    svd_method : {'auto', 'power', 'krylov'}, default 'auto'
+        The per-group solver; see ``runSVD``.
+    n_iter : int, optional
+        Rounds for ``'power'``/``'krylov'``, a ceiling for ``'auto'``; see
+        ``runSVD``.
+    svd_tol : float, optional
+        Convergence tolerance passed to ``runSVD``.
+    n_neighbors : int, default 15
+        Neighbours for the per-group graph (capped below the group size).
+    batch_size : int, default 1024
+        Rows per chunk for the Python reader, where it is used.
+    random_state : int, default 10
+        Seed for the SVD, the graph and Leiden.
+    min_cells : int, default 20
+        Cytome streaming only: a group smaller than this is kept as one
+        sub-cluster ``<group>-0`` rather than re-embedded.
+    verbosity : int, default 1
+        ``1`` reports each group's outcome.
+
     Returns
     -------
     AnnData or None
-        - If `copy=True`: Returns a new AnnData object with clustering results added to `adata.obs[key_added]`.
-        - If `copy=False`: Modifies the input `adata` object in-place by adding clustering results to `adata.obs[key_added]`.
+        The copy when ``copy=True``; otherwise ``None`` after writing the
+        labels in place.
 
-    Example
-    -------
-    >>> # Example usage
-    >>> leiden_local(
-    ...     adata,
-    ...     clustering_type='each',
-    ...     groupby='Leiden',
-    ...     groups=['0', '1'],
-    ...     resolution=0.2,
-    ...     batch_key=None,
-    ...     key_added='Leiden_local',
-    ...     dr_method='X_pca',
-    ...     copy=False
-    ... )
+    Notes
+    -----
+    On the cytome streaming path a group whose chain fails is kept as one
+    sub-cluster ``<group>-0`` with a ``RuntimeWarning`` naming the error,
+    so one bad group does not lose the run; a result full of ``-0`` labels
+    is the sign to read the warnings.
     """
-    
-    # --- Streaming cytome path (dr_method='X_svd', ATAC/tiles) ---
-    # selectPeaks(max_nnz_percentile) → TF-IDF → rSVD → neighbors → leiden,
-    # per coarse group, on a streaming per-group subset cytome (no full-AnnData
-    # materialisation — scales to large ATAC where to_anndata would OOM). Only
-    # 'each' makes sense here (per-group own low-dim space).
-    if dr_method == 'X_svd' and (isinstance(adata, str) or _is_cytome(adata)):
+    if clustering_type not in {'each', 'all'}:
+        raise ValueError(f"Invalid value for clustering_type: '{clustering_type}'. "
+                         "Allowed values are 'each' or 'all'.")
+    if dr_method not in _DR_METHODS:
+        raise ValueError(f"Invalid value for dr_method: '{dr_method}'. Allowed values are: "
+                         + ", ".join(repr(m) for m in _DR_METHODS) + ".")
+    verbose = verbosity > 0
+
+    # --- Cytome, streaming per group ---
+    if dr_method in ('X_svd', 'X_svd_full') and (isinstance(adata, str) or _is_cytome(adata)):
         if clustering_type != 'each':
-            raise ValueError("dr_method='X_svd' (streaming cytome) supports "
-                             "clustering_type='each' only.")
+            raise ValueError("On a cytome, leiden_local supports clustering_type='each' only.")
         _ds = _open_cytome(adata) if isinstance(adata, str) else adata
         return _leiden_local_cytome_streaming_svd(
-            _ds, groupby=groupby, groups=groups, resolution=resolution,
-            key_added=key_added,
-            modality=modality if modality is not None else "ATAC",
-            measurement=cytome_layer,
-            max_nnz_percentile=max_nnz_percentile, n_components=n_components,
-            n_iter=n_iter, n_neighbors=n_neighbors, batch_size=batch_size,
-            random_state=random_state,
+            _ds, groupby=groupby, groups=groups, resolution=resolution, key_added=key_added,
+            modality=modality if modality is not None else "ATAC", measurement=cytome_layer,
+            select=(dr_method == 'X_svd'), max_nnz_percentile=max_nnz_percentile,
+            n_components=n_components, svd_method=svd_method, n_iter=n_iter, tol=svd_tol,
+            n_neighbors=n_neighbors, batch_size=batch_size, random_state=random_state,
+            min_cells=min_cells, verbose=verbose,
         )
 
-    # --- Cytome dispatch (other dr_methods): convert to AnnData, run, write back ---
+    # --- Cytome, other methods: convert, run, write back ---
     _cytome_ds = None
     if isinstance(adata, str) or _is_cytome(adata):
         _cytome_ds = _open_cytome(adata) if isinstance(adata, str) else adata
-        _modality_for_dispatch = modality if modality is not None else "RNA"
-        adata = _cytome_ds.to_anndata(
-            modality=_modality_for_dispatch, layer=cytome_layer,
-        )
+        adata = _cytome_ds.to_anndata(modality=modality if modality is not None else "RNA",
+                                      layer=cytome_layer)
 
-    # Validate clustering_type
-    if clustering_type not in {'each', 'all'}:
-        raise ValueError(
-            f"Invalid value for clustering_type: '{clustering_type}'. "
-            "Allowed values are 'each' or 'all'."
-        )
-
-    # Validate dimensionality reduction approaches
-    if dr_method not in {'X_pca', 'X_gdr', 'X_pca_harmony', 'X_svd_full', 'X_svd_full_harmony'}:
-        raise ValueError(
-            f"Invalid value for dr_method: '{dr_method}'. "
-            "Allowed values are: 'X_pca', 'X_gdr', 'X_pca_harmony', 'X_svd_full', "
-            "'X_svd_full_harmony', or 'X_svd' (streaming cytome ATAC/tiles only)."
-        )
-    
-    
     adata = adata.copy() if copy else adata
-    
     existing_groups = adata.obs[groupby].astype('U').copy()
-    
     if groups is None:
-        groups=np.unique(adata.obs[groupby])
-    
-    if clustering_type=='each':
-        
-        for group in groups:
-            
-            group_idx=adata.obs[groupby].isin([group])
-            adata_i=adata[group_idx].copy()
-            ## Run DR
-            adata_i = adata_i[:, np.asarray(adata_i.X.getnnz(axis=0)).ravel() >= 1].copy()
-            sqrt_ncells=int(np.sqrt(adata_i.shape[0]))
-            n_components = 30 if sqrt_ncells > 30 else sqrt_ncells
-            if dr_method=='X_pca':
-                infog_svd(adata_i, n_components = n_components)
-                use_rep='X_pca'
-                
-            elif dr_method=='X_svd_full':
-                runSVD(
-                    adata_i, 
-                    use_highly_variable=False, 
-                    n_components=n_components, 
-                    random_state = 10, 
-                    scale_data = False,
-                    key_added = 'X_svd_full'
-                )
-                use_rep='X_svd_full'
-                
-            elif dr_method=='X_gdr':
-                infog_svd(adata_i, n_components = n_components)
-                _knn_result_i = _piaso_neighbors(adata_i, use_rep='X_pca', n_neighbors=15, random_state=10)
-                _piaso_leiden(adata_i, resolution=gdr_resolution, key_added='leiden_tmp', knn_result=_knn_result_i, random_state=10)
-                
-                runGDR(adata_i,
-                            batch_key=None,
-                            groupby='leiden_tmp'
-                )
-                use_rep='X_gdr'
-                
-            elif dr_method=='X_pca_harmony':
-                infog_svd(adata_i, n_components = n_components)
-                _piaso_harmony(adata_i, batch_key=batch_key, use_rep='X_pca', key_added='X_pca_harmony')
-                use_rep='X_pca_harmony'
-                
-            elif dr_method=='X_svd_full_harmony':
-                runSVD(
-                    adata_i, 
-                    use_highly_variable=False, 
-                    n_components=n_components, 
-                    random_state = 10, 
-                    scale_data = False,
-                    key_added = 'X_svd_full'
-                )
-                _piaso_harmony(adata_i, batch_key=batch_key, use_rep='X_svd_full', key_added='X_svd_full_harmony')
-                use_rep='X_svd_full_harmony'
-            
-                
-                
-            _knn_result_i = _piaso_neighbors(adata_i, use_rep=use_rep, n_neighbors=15, random_state=10)
-            
-            _piaso_leiden(adata_i, resolution=resolution, key_added='leiden_local', knn_result=_knn_result_i, random_state=10)
-            ## Add prefix
-            max_len = len(max(adata_i.obs['leiden_local'], key=len)) 
-            ### Make sure the numbers having the same length
-            local_leiden=list(map(lambda x: group + '-'+ x.zfill(max_len), adata_i.obs['leiden_local']))
-            ## Rename the files
-            existing_groups[group_idx]=local_leiden
-            
-    elif clustering_type=='all':
-        
-        if len(groups)>1:
-        
-            # print('')
-            group_idx=adata.obs[groupby].isin(groups)
-            adata_i=adata[group_idx].copy()
-            ## Run DR
-            adata_i = adata_i[:, np.asarray(adata_i.X.getnnz(axis=0)).ravel() >= 1].copy()
-            sqrt_ncells=int(np.sqrt(adata_i.shape[0]))
-            n_components = 30 if sqrt_ncells > 30 else sqrt_ncells
-            
-            if dr_method=='X_pca':
-                infog_svd(adata_i, n_components = n_components)
-                use_rep='X_pca'
-            
-            elif dr_method=='X_svd_full':
-                runSVD(
-                    adata_i, 
-                    use_highly_variable=False, 
-                    n_components=n_components, 
-                    random_state = 10, 
-                    scale_data = False,
-                    key_added = 'X_svd_full'
-                )
-                use_rep='X_svd_full'
-                
-            elif dr_method=='X_gdr':
-                infog_svd(adata_i, n_components = n_components)
-                _knn_result_i = _piaso_neighbors(adata_i, use_rep='X_pca', n_neighbors=15, random_state=10)
-                _piaso_leiden(adata_i, resolution=gdr_resolution, key_added='leiden_tmp', knn_result=_knn_result_i, random_state=10)
-                
-                runGDR(adata_i,
-                            batch_key=None,
-                            groupby='leiden_tmp'
-                )
-                use_rep='X_gdr'
-                
-            elif dr_method=='X_pca_harmony':
-                infog_svd(adata_i, n_components = n_components)
-                _piaso_harmony(adata_i, batch_key=batch_key, use_rep='X_pca', key_added='X_pca_harmony')
-                use_rep='X_pca_harmony'
-                
-            elif dr_method=='X_svd_full_harmony':
-                runSVD(
-                    adata_i, 
-                    use_highly_variable=False, 
-                    n_components=n_components, 
-                    random_state = 10, 
-                    scale_data = False,
-                    key_added = 'X_svd_full'
-                )
-                _piaso_harmony(adata_i, batch_key=batch_key, use_rep='X_svd_full', key_added='X_svd_full_harmony')
-                use_rep='X_svd_full_harmony'
-            
-            _knn_result_i = _piaso_neighbors(adata_i, use_rep=use_rep, n_neighbors=15, random_state=10)
-                
-            _piaso_leiden(adata_i, resolution=resolution, key_added='leiden_local', knn_result=_knn_result_i, random_state=10)
-            ## Add prefix
-            max_len = len(max(adata_i.obs['leiden_local'], key=len)) 
-            ### Make sure the numbers having the same length
-            local_leiden=list(map(lambda x: 'M' + '-'+ x.zfill(max_len), adata_i.obs['leiden_local']))
-            ## Rename the files
-            existing_groups[group_idx]=local_leiden
-        else:
-            ### Only provide one element
-            group=groups[0]
-            group_idx=adata.obs[groupby].isin([group])
-            adata_i=adata[group_idx].copy()
-            ## Run DR
-            adata_i = adata_i[:, np.asarray(adata_i.X.getnnz(axis=0)).ravel() >= 1].copy()
-            sqrt_ncells=int(np.sqrt(adata_i.shape[0]))
-            n_components = 30 if sqrt_ncells > 30 else sqrt_ncells
-            
-            if dr_method=='X_pca':
-                infog_svd(adata_i, n_components = n_components)
-                use_rep='X_pca'
-                
-            elif dr_method=='X_svd_full':
-                runSVD(
-                    adata_i, 
-                    use_highly_variable=False, 
-                    n_components=n_components, 
-                    random_state = 10, 
-                    scale_data = False,
-                    key_added = 'X_svd_full'
-                )
-                use_rep='X_svd_full'
-                
-            elif dr_method=='X_gdr':
-                infog_svd(adata_i, n_components = n_components)
-                _knn_result_i = _piaso_neighbors(adata_i, use_rep='X_pca', n_neighbors=15, random_state=10)
-                _piaso_leiden(adata_i, resolution=gdr_resolution, key_added='leiden_tmp', knn_result=_knn_result_i, random_state=10)
-                
-                runGDR(adata_i,
-                            batch_key=None,
-                            groupby='leiden_tmp'
-                )
-                use_rep='X_gdr'
-                
-            elif dr_method=='X_pca_harmony':
-                infog_svd(adata_i, n_components = n_components)
-                _piaso_harmony(adata_i, batch_key=batch_key, use_rep='X_pca', key_added='X_pca_harmony')
-                use_rep='X_pca_harmony'
-                
-            elif dr_method=='X_svd_full_harmony':
-                runSVD(
-                    adata_i, 
-                    use_highly_variable=False, 
-                    n_components=n_components, 
-                    random_state = 10, 
-                    scale_data = False,
-                    key_added = 'X_svd_full'
-                )
-                _piaso_harmony(adata_i, batch_key=batch_key, use_rep='X_svd_full', key_added='X_svd_full_harmony')
-                use_rep='X_svd_full_harmony'
-                
-            _knn_result_i = _piaso_neighbors(adata_i, use_rep=use_rep, n_neighbors=15, random_state=10)
-            
-            _piaso_leiden(adata_i, resolution=resolution, key_added='leiden_local', knn_result=_knn_result_i, random_state=10)
-            ## Add prefix
-            max_len = len(max(adata_i.obs['leiden_local'], key=len)) 
-            ### Make sure the numbers having the same length
-            local_leiden=list(map(lambda x: group + '-'+ x.zfill(max_len), adata_i.obs['leiden_local']))
-            ## Rename the files
-            existing_groups[group_idx]=local_leiden
-            
-        
-        
-    adata.obs[key_added]=existing_groups
-    adata.obs[key_added]=adata.obs[key_added].astype('category')
+        groups = np.unique(adata.obs[groupby])
+    said: dict = {}
 
-    # --- Write results back to cytome ---
+    def _cluster(group_idx, prefix):
+        adata_i = adata[group_idx].copy()
+        adata_i = adata_i[:, np.asarray(adata_i.X.getnnz(axis=0)).ravel() >= 1].copy()
+        sqrt_ncells = int(np.sqrt(adata_i.shape[0]))
+        nc = n_components if sqrt_ncells > n_components else sqrt_ncells
+        use_rep = _embed_group(adata_i, dr_method, nc, batch_key, gdr_resolution,
+                               svd_method, n_iter, svd_tol, random_state, verbosity, said)
+        knn = _piaso_neighbors(adata_i, use_rep=use_rep, n_neighbors=n_neighbors, random_state=random_state)
+        _piaso_leiden(adata_i, resolution=resolution, key_added='leiden_local', knn_result=knn,
+                      random_state=random_state)
+        labels = adata_i.obs['leiden_local'].astype(str)
+        width = max(len(x) for x in labels)          # equal-width numbers
+        existing_groups[group_idx] = [f"{prefix}-{x.zfill(width)}" for x in labels]
+        if verbose:
+            print(f"  [leiden_local] {prefix}: {adata_i.n_obs} cells -> {labels.nunique()} sub-clusters")
+
+    if clustering_type == 'each':
+        for group in groups:
+            _cluster(adata.obs[groupby].isin([group]), str(group))
+    else:
+        _cluster(adata.obs[groupby].isin(groups), 'M' if len(groups) > 1 else str(groups[0]))
+
+    adata.obs[key_added] = existing_groups
+    adata.obs[key_added] = adata.obs[key_added].astype('category')
+
     if _cytome_ds is not None:
         _cytome_ds.cells[key_added] = adata.obs[key_added].values.astype(str)
         _cytome_ds.flush()
         return None
-
     return adata if copy else None
+
     
 

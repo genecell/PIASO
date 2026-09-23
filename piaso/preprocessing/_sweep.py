@@ -76,6 +76,7 @@ def sweep_intersect(
     starts,
     ends,
     peaks_sorted: list,
+    counting: str = "overlaps",
 ) -> Iterator[Tuple[int, int]]:
     """
     Generator sweep-line intersection.  Yields hits one at a time — O(1)
@@ -109,9 +110,32 @@ def sweep_intersect(
     n_peaks = len(peaks_sorted)
     if n_peaks == 0:
         return
+    if counting not in ("overlaps", "insertions"):
+        raise ValueError(f"counting must be 'overlaps' or 'insertions', got {counting!r}")
 
     n_frags = len(starts)
     active_start = 0
+
+    if counting == "insertions":
+        # The two Tn5 cut sites, each a point: a peak holds a point p when
+        # peak_start <= p < peak_end. One hit per cut site per peak.
+        for i in range(n_frags):
+            frag_start = int(starts[i])
+            frag_end = int(ends[i])
+            cell_idx = int(cell_indices[i])
+            cut_b = max(frag_end - 1, frag_start)
+            while (active_start < n_peaks
+                   and peaks_sorted[active_start][1] <= frag_start):
+                active_start += 1
+            for p in range(active_start, n_peaks):
+                peak_start, peak_end, peak_global_idx = peaks_sorted[p]
+                if peak_start > cut_b:
+                    break
+                if peak_start <= frag_start < peak_end:
+                    yield cell_idx, peak_global_idx
+                if peak_start <= cut_b < peak_end:
+                    yield cell_idx, peak_global_idx
+        return
 
     for i in range(n_frags):
         frag_start = int(starts[i])

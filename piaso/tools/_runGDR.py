@@ -124,9 +124,9 @@ def runGDR(
     groupby : str, optional
         Key in `adata.obs` to specify which cell group information to use. Defaults to None. If none, de novo clustering will be performed.
     n_gene : int, optional
-        Number of genes, parameter used in COSG. Defaults to 30.
+        Number of marker genes per group from COSG. Defaults to 20.
     mu : float, optional
-        Gene expression specificity parameter, used in COSG. Defaults to 1.0.
+        Gene expression specificity parameter, used in COSG. Defaults to 10.0.
     layer : str, optional
         Layer in ``adata.layers`` used for COSG marker identification. Defaults to
         ``'infog'`` — PIASO's recommended normalization for marker calling. Run
@@ -223,6 +223,22 @@ def runGDR(
     cytome_marker_gene_key : str, default 'runGDR_marker_genes'
         Cytome path only. Metadata key under which the marker-gene table is
         stored when ``write_to_cytome=True``.
+    data : AnnData, CytomeDataset or str
+        The data. The preferred name for ``adata``.
+    save_reference : bool, default True
+        Record the marker sets and block structure in ``uns['gdr_reference']``
+        so ``projectGDR`` can map new cells into this space.
+    max_batch_cache_bytes : int, default 512 MB
+        Cytome only: budget for holding one batch's chunks in memory between
+        stage 3's two passes, total across the workers.
+    expressed_pct : float, default 0.1
+        COSG's expression fraction below which a gene is not a marker.
+    stage1_workers : int, optional
+        Cytome only: workers for the per-batch marker stage; ``None`` uses
+        ``max_workers``.
+    stage3_workers : int, optional
+        Cytome only: workers for the scoring stage; ``None`` uses
+        ``max_workers``.
 
     Returns
     -------
@@ -945,6 +961,7 @@ from tqdm import tqdm
 def calculateScoreParallel(
     adata,
     gene_set: Union[dict, list, pd.DataFrame],
+    gene_weights=None,
     score_method: Literal["scanpy", "piaso"] = "piaso",
     random_seed: int = 1927,
     score_layer: Optional[str] = None,
@@ -983,6 +1000,10 @@ def calculateScoreParallel(
               Gene sets will be named "GeneSet_0", "GeneSet_1", etc.
             - pandas.DataFrame: Each column represents a gene set, with column names
               as gene set names and gene names as values.
+    gene_weights : list of array-like, optional
+        One weight vector per gene set, in the same order as ``gene_set``.
+        Passed straight to :func:`piaso.tl.score`. Only valid with
+        ``score_method='piaso'``.
     score_method : {'scanpy', 'piaso'}, default 'piaso'
         The method used for gene set scoring.
         - 'scanpy': Uses Scanpy's built-in gene set scoring method.
@@ -1002,7 +1023,26 @@ def calculateScoreParallel(
         Level of verbosity for progress reporting.
         - 0: Silent (no progress bar)
         - >0: Show progress bar during parallel computation
-
+    precomputed_knn : optional
+        Reuse a control-gene neighbour structure from an earlier call instead
+        of rebuilding it.
+    modality : str, default 'RNA'
+        Cytome only: the modality to score.
+    cytome_layer : str, default 'counts'
+        Cytome only: the layer to read.
+    batch_size : int, default 1024
+        Cytome only: rows per streaming chunk.
+    cell_mask : ndarray, optional
+        Cytome only: boolean mask or sorted indices of the cells to score.
+    score_chunk_size : int, optional
+        Cytome only: rows handed to the scoring kernel per call; ``None``
+        derives it from ``max_score_chunk_bytes``.
+    max_score_chunk_bytes : int, default 256 MB
+        Cytome only: memory budget behind ``score_chunk_size``, total across
+        the concurrent workers.
+    max_score_batch_cache_bytes : int, default 512 MB
+        Cytome only: budget for holding a batch's chunks between the two
+        streaming passes so the second does not re-read them.
 
     Returns
     -------
@@ -1059,7 +1099,7 @@ def calculateScoreParallel(
         # deprecated cytome_layer= which would warn on every internal call).
         _score_layer = cytome_layer if _is_cytome_dataset(adata) else score_layer
         score_matrix, gene_set_names, pval_matrix = _score(
-            adata, gene_list=gene_set,
+            adata, gene_list=gene_set, gene_weights=gene_weights,
             compute_pvalues=return_pvals,
             layer=_score_layer, random_seed=random_seed,
             n_ctrl_set=100, max_workers=max_workers if max_workers is not None else 1,
@@ -1078,6 +1118,11 @@ def calculateScoreParallel(
         return score_matrix, gene_set_names
 
     # --- Original multi-process path (used for scanpy method) ---
+    if gene_weights is not None:
+        raise ValueError(
+            "gene_weights is only supported by score_method='piaso'. Scanpy's "
+            "score_genes has no per-gene weight, so accepting them here would "
+            "mean ignoring them.")
     # Scanpy method requires AnnData
     from ._normalization import _is_cytome_dataset
     if _is_cytome_dataset(adata):

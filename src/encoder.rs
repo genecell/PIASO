@@ -15,9 +15,31 @@ pub fn lz4_decompress(data: &[u8]) -> Vec<u8> {
 pub fn decompress_blob(data: &[u8], compression: &str) -> Vec<u8> {
     match compression {
         "lz4" => lz4_decompress(data),
+        "zlib" => zlib_decompress(data),
+        // "zstd" is also cytome's legacy default label, and older stores
+        // carry zlib (and some lz4) blobs under it. Mirror the Python
+        // reader: trust the magic bytes, not the label. Real zstd frames
+        // start 28 b5 2f fd; zlib streams 78 01/5e/9c/da; anything else is
+        // lz4 with its size prefix.
+        "zstd" => {
+            if data.len() >= 4 && data[..4] == [0x28, 0xb5, 0x2f, 0xfd] {
+                zstd::decode_all(data).expect("zstd decompression failed")
+            } else if data.len() >= 2 && data[0] == 0x78 && matches!(data[1], 0x01 | 0x5e | 0x9c | 0xda) {
+                zlib_decompress(data)
+            } else {
+                lz4_decompress(data)
+            }
+        }
         "none" | "" => data.to_vec(),
-        _ => panic!("Unsupported compression: {} (piaso-atac supports lz4 only)", compression),
+        _ => panic!("Unsupported compression: {} (supported: lz4, zstd, zlib, none)", compression),
     }
+}
+
+fn zlib_decompress(data: &[u8]) -> Vec<u8> {
+    use std::io::Read;
+    let mut out = Vec::new();
+    flate2::read::ZlibDecoder::new(data).read_to_end(&mut out).expect("zlib decompression failed");
+    out
 }
 
 /// Interpret raw bytes as i32 slice (little-endian, zero-copy on LE platforms).

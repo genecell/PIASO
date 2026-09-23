@@ -15,10 +15,10 @@ Usage
     # Query marker genes
     df = piaso.tl.queryPIASOmarkerDB(gene="Foxp2", species="Mouse")
     
-    # Get both DataFrame and marker dict
-    df, marker_dict = piaso.tl.queryPIASOmarkerDB(
+    # Get the marker dict, in the form predictCellTypeByMarker takes
+    marker_dict = piaso.tl.queryPIASOmarkerDB(
         study="AllenWholeMouseBrain_isocortex",
-        species="Mouse", 
+        species="Mouse",
         as_dict=True
     )
     
@@ -59,6 +59,47 @@ except ImportError:
 # =============================================================================
 # Exceptions (Internal Use Only - Not Exported)
 # =============================================================================
+
+
+# ``as_dict=True`` used to return ``(DataFrame, dict)``. Almost every use of it
+# wanted the dict -- it is what feeds predictCellTypeByMarker -- and paid for it
+# by unpacking a two-element tuple whose first element was then thrown away. It
+# now returns the dict alone. ``as_dict='both'`` is the old behaviour, kept for
+# one release so existing code has somewhere to go.
+_AS_DICT_BOTH = "both"
+_as_dict_change_announced = False
+
+
+def _resolve_as_dict(as_dict):
+    """Return ``(want_dict, want_frame)`` for an ``as_dict`` argument."""
+    global _as_dict_change_announced
+    if as_dict is False or as_dict is None:
+        return False, True
+    if as_dict is True:
+        if not _as_dict_change_announced:
+            _as_dict_change_announced = True
+            warnings.warn(
+                "as_dict=True now returns the marker dictionary alone; it used "
+                "to return (DataFrame, dict). Unpacking the result into two "
+                "names will fail, or -- with exactly two cell types -- quietly "
+                "give you two cell-type names. Use as_dict='both' for the old "
+                "pair (deprecated, removed next release), or drop the unpacking.",
+                FutureWarning, stacklevel=3,
+            )
+        return True, False
+    if isinstance(as_dict, str) and as_dict.lower() == _AS_DICT_BOTH:
+        warnings.warn(
+            "as_dict='both' is deprecated and will be removed in the next "
+            "release. Call twice, or take the dict with as_dict=True and build "
+            "the frame from your own query.",
+            DeprecationWarning, stacklevel=3,
+        )
+        return True, True
+    raise ValueError(
+        f"as_dict={as_dict!r} is not valid: pass True for the marker "
+        f"dictionary, False for the DataFrame, or 'both' for the deprecated "
+        f"(DataFrame, dict) pair.")
+
 
 class PIASOmarkerDBError(Exception):
     """Base exception for PIASOmarkerDB errors."""
@@ -127,8 +168,8 @@ class PIASOmarkerDB:
     >>> df = client.getMarkers(gene="Foxp2")
     >>> 
     >>> # Get as dict
-    >>> df, marker_dict = client.getMarkers(
-    ...     study="AllenWholeMouseBrain_isocortex", 
+    >>> marker_dict = client.getMarkers(
+    ...     study="AllenWholeMouseBrain_isocortex",
     ...     as_dict=True
     ... )
     >>> 
@@ -280,7 +321,7 @@ class PIASOmarkerDB:
         max_score: float = None,
         limit: int = None,
         offset: int = 0,
-        as_dict: bool = False,
+        as_dict: Union[bool, str] = False,
     ) -> Union['pd.DataFrame', Tuple['pd.DataFrame', Dict[str, List[str]]]]:
         """
         Query markers with flexible filters.
@@ -307,23 +348,28 @@ class PIASOmarkerDB:
             Maximum number of results. Default: None (no limit).
         offset : int, optional
             Number of results to skip (for pagination). Default: 0.
-        as_dict : bool, optional
-            If True, also return marker dictionary {cell_type: [genes]}.
-            Default: False.
-        
+        as_dict : bool or {'both'}, optional
+            ``True`` returns the marker dictionary ``{cell_type: [genes]}``
+            alone — the form that feeds ``predictCellTypeByMarker``. ``False``
+            (the default) returns the DataFrame. ``'both'`` returns the old
+            ``(DataFrame, dict)`` pair and is deprecated.
+
         Returns
         -------
         pd.DataFrame
-            Query results (if as_dict=False)
-        
+            Query results (as_dict=False).
+
+        dict
+            ``{cell_type: [genes]}`` (as_dict=True).
+
         tuple (pd.DataFrame, dict)
-            Query results and marker dictionary (if as_dict=True)
-        
+            Deprecated; as_dict='both'.
+
         Examples
         --------
         >>> df = client.getMarkers(gene="Foxp2", species="Mouse")
-        >>> df, marker_dict = client.getMarkers(
-        ...     study="AllenWholeMouseBrain_isocortex", 
+        >>> marker_dict = client.getMarkers(
+        ...     study="AllenWholeMouseBrain_isocortex",
         ...     as_dict=True
         ... )
         """
@@ -382,18 +428,18 @@ class PIASOmarkerDB:
             )
         
         df = pd.DataFrame(data)
-        
-        if as_dict:
+
+        want_dict, want_frame = _resolve_as_dict(as_dict)
+        if want_dict:
             marker_dict = self._to_marker_dict(df)
-            return df, marker_dict
-        else:
-            return df
+            return (df, marker_dict) if want_frame else marker_dict
+        return df
     
     def getAllMarkers(
         self,
         batch_size: int = 10000,
         verbose: bool = False,
-        as_dict: bool = False,
+        as_dict: Union[bool, str] = False,
         **kwargs
     ) -> Union['pd.DataFrame', Tuple['pd.DataFrame', Dict[str, List[str]]]]:
         """
@@ -405,15 +451,16 @@ class PIASOmarkerDB:
             Number of records per request. Default: 10000.
         verbose : bool, optional
             Print progress information. Default: False.
-        as_dict : bool, optional
-            If True, also return marker dictionary. Default: False.
+        as_dict : bool or {'both'}, optional
+            ``True`` returns the marker dictionary alone, ``False`` the
+            DataFrame, ``'both'`` the deprecated pair. See ``getMarkers``.
         **kwargs
             Same filter parameters as getMarkers().
-        
+
         Returns
         -------
-        pd.DataFrame or tuple
-            All matching markers (and optionally marker dict).
+        pd.DataFrame, dict, or tuple
+            All matching markers, in the form ``as_dict`` asks for.
         """
         all_data = []
         offset = 0
@@ -454,12 +501,12 @@ class PIASOmarkerDB:
         if verbose:
             print(f"Total: {len(df)} markers")
         
-        if as_dict:
+        want_dict, want_frame = _resolve_as_dict(as_dict)
+        if want_dict:
             marker_dict = self._to_marker_dict(df)
-            return df, marker_dict
-        else:
-            return df
-    
+            return (df, marker_dict) if want_frame else marker_dict
+        return df
+
     def listStudies(
         self,
         species: str = None,
@@ -1186,7 +1233,7 @@ def queryPIASOmarkerDB(
     min_score: float = None,
     max_score: float = None,
     limit: int = None,
-    as_dict: bool = False,
+    as_dict: Union[bool, str] = False,
     list_studies: bool = False,
     list_cell_types: bool = False,
     list_genes: bool = False,
@@ -1216,9 +1263,11 @@ def queryPIASOmarkerDB(
         Maximum specificity score (>= 0).
     limit : int, optional
         Maximum results to return. Default: None (no limit).
-    as_dict : bool, optional
-        If True, also return {cell_type: [genes]} dictionary.
-        Returns tuple (DataFrame, dict). Default: False.
+    as_dict : bool or {'both'}, optional
+        ``True`` returns the ``{cell_type: [genes]}`` dictionary alone — the
+        form ``predictCellTypeByMarker`` takes. ``False`` (the default) returns
+        the DataFrame. ``'both'`` returns the old ``(DataFrame, dict)`` pair
+        and is deprecated; it will be removed in the next release.
     list_studies : bool, optional
         If True, return list of available study names instead of markers.
         Default: False.
@@ -1234,9 +1283,12 @@ def queryPIASOmarkerDB(
     pd.DataFrame
         Marker query results (default).
     
+    dict
+        If as_dict=True: ``{cell_type: [genes]}``.
+
     tuple (pd.DataFrame, dict)
-        If as_dict=True: (DataFrame, {cell_type: [genes]}).
-    
+        If as_dict='both' (deprecated).
+
     list of str
         If list_studies=True, list_cell_types=True, or list_genes=True.
     
@@ -1248,15 +1300,15 @@ def queryPIASOmarkerDB(
     >>> df = piaso.tl.queryPIASOmarkerDB(gene="Foxp2", species="Mouse")
     >>> df = piaso.tl.queryPIASOmarkerDB(gene=["Foxp2", "Syt6", "Tle4"])
     
-    Get both DataFrame and marker dictionary:
-    
-    >>> df, marker_dict = piaso.tl.queryPIASOmarkerDB(
+    Get the marker dictionary, ready for predictCellTypeByMarker:
+
+    >>> marker_dict = piaso.tl.queryPIASOmarkerDB(
     ...     study="AllenWholeMouseBrain_isocortex",
     ...     species="Mouse",
     ...     as_dict=True
     ... )
-    >>> print(f"DataFrame shape: {df.shape}")
     >>> print(f"Cell types in dict: {len(marker_dict)}")
+    >>> piaso.tl.predictCellTypeByMarker(adata, marker_gene_set=marker_dict)
     
     List available studies:
     

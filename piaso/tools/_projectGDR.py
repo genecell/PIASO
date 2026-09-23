@@ -184,6 +184,11 @@ def _infog_apply_cytome(ds, stats, *, modality="RNA", counts_layer="counts",
 
     Returns ``(key_added, gene_recovery)``.
     """
+    from ..utils._cytome_compat import require_row_major
+    require_row_major(
+        ds, modality, counts_layer, "projectGDR's frozen-INFOG layer",
+        "INFOG on a peak or tile matrix is unusual; if that is what you "
+        "meant, re-import with --layout csr.")
     ref_names = stats.get("var_names")
     q_names = np.asarray(_var_names(ds, modality)).astype(str)
     per_gene_ref = _infog_per_gene(stats)

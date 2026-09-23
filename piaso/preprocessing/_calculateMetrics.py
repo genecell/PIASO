@@ -198,15 +198,37 @@ def _calculateCellMetrics_cytome(source, modality, measurement, batch_size, verb
         masks = _resolve_feature_masks(names, prefix_vars, feature_set_vars)
     key_sum = {k: np.zeros(n_cells, dtype=np.float64) for k in masks}
 
-    # Accumulate per-cell sum and nnz from the count-matrix chunks
-    cell_sum = np.zeros(n_cells, dtype=np.float64)
-    cell_nnz = np.zeros(n_cells, dtype=np.int64)
-
+    # Per-cell sum and nnz. When the matrix was written by the importer, both
+    # are already columns on the cells table (guarded; see _importer_stats),
+    # and only the optional feature-subset sums need the matrix at all.
     matrix_name = f"{modality}_{measurement}"
     n_chunks = 0
-    for chunk, indices in ds.iter_chunks(
-        modality=modality, layer=measurement, batch_size=batch_size
-    ):
+    from ..utils._importer_stats import read_cell_stats
+    from ..utils._cytome_compat import column_major_layer
+    _cached = read_cell_stats(ds, modality, measurement) if not masks else None
+    _cm = column_major_layer(ds, modality, measurement)
+    if _cached is not None:
+        cell_nnz = _cached[0].astype(np.int64)
+        cell_sum = _cached[1].astype(np.float64)
+        _chunks = ()
+    elif _cm is not None:
+        # Column-major store: one walk over the columns gives every per-cell
+        # total and every masked subset total at once.
+        cell_sum = np.zeros(n_cells, dtype=np.float64)
+        cell_nnz = np.zeros(n_cells, dtype=np.int64)
+        for _cs, _ce, chunk in _cm.iter_columns():
+            cell_sum += np.ravel(chunk.sum(axis=1))
+            cell_nnz += np.ravel((chunk != 0).sum(axis=1))
+            for k, m in masks.items():
+                _mm = m[_cs:_ce]
+                if _mm.any():
+                    key_sum[k] += np.ravel(chunk[:, _mm].sum(axis=1))
+        _chunks = ()
+    else:
+        cell_sum = np.zeros(n_cells, dtype=np.float64)
+        cell_nnz = np.zeros(n_cells, dtype=np.int64)
+        _chunks = ds.iter_chunks(modality=modality, layer=measurement, batch_size=batch_size)
+    for chunk, indices in _chunks:
         sparse = scipy.sparse.issparse(chunk)
         if sparse:
             cell_sum[indices] = np.ravel(chunk.sum(axis=1))
@@ -495,26 +517,49 @@ def _calculateGroupMetrics_cytome(source, groupby, modalities, detection_pct,
         expressing = None
         cell_sum = np.zeros(n_cells, dtype=np.float64)
         cell_nnz = np.zeros(n_cells, dtype=np.int64)
-        for chunk, idxs in ds.iter_chunks(
-            modality=mod, layer=measurement, batch_size=batch_size
-        ):
-            if scipy.sparse.issparse(chunk):
-                mask = chunk > expression_cutoff      # sparse bool
-                cell_sum[idxs] = np.ravel(chunk.sum(axis=1))
-                cell_nnz[idxs] = np.ravel(mask.sum(axis=1))
-                mask = mask.tocsr()
-            else:
+
+        # This function auto-detects the modalities present, so it reaches
+        # ATAC with no user opt-in -- and the importer writes ATAC and tiles
+        # column-major. A (group x feature) count decomposes over columns just
+        # as it does over rows, so each layout gets the walk it supports.
+        from ..utils._cytome_compat import column_major_layer
+        _cm = column_major_layer(ds, mod, measurement)
+
+        if _cm is not None:
+            rows_by_group = [np.flatnonzero(group_ids == g) for g in range(n_groups)]
+            for cs, ce, chunk in _cm.iter_columns():
+                chunk = chunk.tocsc()
                 mask = chunk > expression_cutoff
-                cell_sum[idxs] = chunk.sum(axis=1)
-                cell_nnz[idxs] = mask.sum(axis=1)
-            if expressing is None:
-                expressing = np.zeros((n_groups, mask.shape[1]), dtype=np.int64)
-            gids = group_ids[idxs]
-            for g in np.unique(gids):
-                if g < 0:
-                    continue
-                rows = np.where(gids == g)[0]
-                expressing[g] += np.asarray(mask[rows].sum(axis=0)).ravel()
+                cell_sum += np.asarray(chunk.sum(axis=1), dtype=np.float64).ravel()
+                cell_nnz += np.asarray(mask.sum(axis=1), dtype=np.int64).ravel()
+                if expressing is None:
+                    expressing = np.zeros((n_groups, _cm.shape[1]), dtype=np.int64)
+                for g, rows in enumerate(rows_by_group):
+                    if rows.size == 0:
+                        continue
+                    expressing[g, cs:ce] += np.asarray(
+                        mask[rows].sum(axis=0), dtype=np.int64).ravel()
+        else:
+            for chunk, idxs in ds.iter_chunks(
+                modality=mod, layer=measurement, batch_size=batch_size
+            ):
+                if scipy.sparse.issparse(chunk):
+                    mask = chunk > expression_cutoff      # sparse bool
+                    cell_sum[idxs] = np.ravel(chunk.sum(axis=1))
+                    cell_nnz[idxs] = np.ravel(mask.sum(axis=1))
+                    mask = mask.tocsr()
+                else:
+                    mask = chunk > expression_cutoff
+                    cell_sum[idxs] = chunk.sum(axis=1)
+                    cell_nnz[idxs] = mask.sum(axis=1)
+                if expressing is None:
+                    expressing = np.zeros((n_groups, mask.shape[1]), dtype=np.int64)
+                gids = group_ids[idxs]
+                for g in np.unique(gids):
+                    if g < 0:
+                        continue
+                    rows = np.where(gids == g)[0]
+                    expressing[g] += np.asarray(mask[rows].sum(axis=0)).ravel()
 
         sum_col, nnz_col = _CELL_METRIC_NAMES.get(_canon_modality(mod),
                                                   _CELL_METRIC_NAMES["RNA"])
@@ -710,18 +755,17 @@ def _calculateFeatureMetrics_cytome(source, modality, measurement, batch_size, v
     n_features = int(meta[0])
     col_nnz = np.zeros(n_features, dtype=np.int64)
 
-    n_chunks = 0
-    for chunk, indices in ds.iter_chunks(
-        modality=modality, layer=measurement, batch_size=batch_size
-    ):
-        if scipy.sparse.issparse(chunk):
-            col_nnz += np.ravel((chunk != 0).sum(axis=0))
-        else:
-            col_nnz += (chunk != 0).sum(axis=0)
-        n_chunks += 1
+    # Per-feature non-zero counts are column marginals, so `matrix_sums`
+    # reads whichever direction the matrix is stored in. This function
+    # defaults to modality='ATAC', which the importer writes column-major, so
+    # the row-only form crashed on a plain `calculateFeatureMetrics(ds)`.
+    from cytome import matrix_sums
+
+    _cs, _cn, _fs, col_nnz = matrix_sums(
+        ds, modality, measurement, batch_size=batch_size)
 
     if verbose:
-        print(f"[calculateFeatureMetrics] Streamed {n_chunks} chunks, "
+        print(f"[calculateFeatureMetrics] Streamed "
               f"{n_features} features in {feature_table}")
         print(f"  n_cells per feature: median={np.median(col_nnz):.0f}, "
               f"mean={np.mean(col_nnz):.1f}, max={np.max(col_nnz)}")

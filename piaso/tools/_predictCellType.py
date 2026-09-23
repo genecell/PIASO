@@ -87,6 +87,10 @@ def predictCellTypeByGDR(
 
     verbosity : int, optional (default: 0)
         The level of logging output. Higher values produce more detailed logs for debugging and monitoring progress.
+    modality : str, optional
+        Cytome only: the modality of the query to read; ``None`` is ``'RNA'``.
+    cytome_layer : str, default 'counts'
+        Cytome only: the layer to read from the query.
 
     Returns
     -------
@@ -201,9 +205,13 @@ def predictCellTypeByGDR(
                   # decision_function_shape='ovo'
                  )
 
-    from sklearn import preprocessing
-    clf.fit(adata_combine[adata_combine.obs['batch']=='0'].obsm['X_gdr_harmony'],
-            adata_combine[adata_combine.obs['batch']=='0'].obs[reference_groupby])
+    # The labels come from `gdr_by`, the column both objects carry, not
+    # from `reference_groupby`: anndata.concat keeps only the obs columns
+    # shared by every object, so a reference-only column such as
+    # 'CellTypes' is gone from adata_combine when the query lacks it.
+    _ref = adata_combine.obs['batch'] == '0'
+    clf.fit(adata_combine[_ref].obsm['X_gdr_harmony'],
+            adata_combine.obs.loc[_ref, 'gdr_by'].astype(str).values)
     
     _key = key_added if key_added is not None else 'CellTypes_gdr'
     _pred = clf.predict(adata_combine[adata_combine.obs['batch']=='1'].obsm['X_gdr_harmony'])
@@ -614,9 +622,95 @@ from concurrent.futures import ProcessPoolExecutor
 from functools import partial
 from tqdm import tqdm
 
+def _parse_marker_sets(marker_gene_set):
+    """``marker_gene_set`` as an ordered ``{name: [genes]}``.
+
+    Mirrors how :func:`piaso.tl.score` parses the same argument, including
+    dropping a DataFrame column that is entirely NaN, so that a positional
+    weight list lines up with the sets score() actually builds.
+    """
+    if isinstance(marker_gene_set, pd.DataFrame):
+        parsed = {}
+        for col in marker_gene_set.columns:
+            genes = marker_gene_set[col].dropna().tolist()
+            if genes:
+                parsed[col] = genes
+        return parsed
+    if isinstance(marker_gene_set, dict):
+        return dict(marker_gene_set)
+    return {f"GeneSet_{i}": gs for i, gs in enumerate(marker_gene_set)}
+
+
+def _resolve_marker_weights(marker_gene_set, marker_gene_weights):
+    """Order the per-cell-type weights to match the marker sets.
+
+    Returns the list-of-arrays :func:`piaso.tl.score` expects, or None.
+
+    Note that the weights are **not** normalised, per cell type or globally.
+    They do not need to be: score() divides by
+    ``median(weights) * len(gene_set)`` and builds its control sets from the
+    same weights, so multiplying a cell type's weights by any constant cancels
+    exactly -- verified to 1e-15 across a 1000x rescale. Normalising would only
+    add a step that changes nothing, and would hide the one case that does
+    matter, a median of zero, which score() rejects outright.
+    """
+    if marker_gene_weights is None:
+        return None
+
+    parsed = _parse_marker_sets(marker_gene_set)
+
+    if isinstance(marker_gene_weights, pd.DataFrame):
+        # Align by the *gene* column's non-NaN rows, not by dropping NaNs
+        # from the weights: a marker frame padded with NaN in the middle of a
+        # column would otherwise misalign with a weight frame that was not.
+        weights = {}
+        for col in marker_gene_weights.columns:
+            w = marker_gene_weights[col]
+            if (isinstance(marker_gene_set, pd.DataFrame)
+                    and col in marker_gene_set.columns
+                    and len(w) == len(marker_gene_set[col])):
+                mask = marker_gene_set[col].notna().to_numpy()
+                weights[col] = w.to_numpy()[mask].tolist()
+            else:
+                weights[col] = w.dropna().tolist()
+    elif isinstance(marker_gene_weights, dict):
+        weights = dict(marker_gene_weights)
+    else:
+        seq = list(marker_gene_weights)
+        if len(seq) != len(parsed):
+            raise ValueError(
+                f"marker_gene_weights has {len(seq)} entries but there are "
+                f"{len(parsed)} marker sets. Pass a dict keyed by cell type to "
+                f"avoid depending on order.")
+        weights = dict(zip(parsed.keys(), seq))
+
+    missing = [name for name in parsed if name not in weights]
+    if missing:
+        raise ValueError(
+            f"marker_gene_weights is missing {len(missing)} of the "
+            f"{len(parsed)} marker sets: {missing[:5]}"
+            f"{' ...' if len(missing) > 5 else ''}. Weight every set or none.")
+    extra = [name for name in weights if name not in parsed]
+    if extra:
+        raise ValueError(
+            f"marker_gene_weights names {len(extra)} set(s) that are not in "
+            f"marker_gene_set: {extra[:5]}{' ...' if len(extra) > 5 else ''}.")
+
+    ordered = []
+    for name, genes in parsed.items():
+        w = np.asarray(weights[name], dtype=float)
+        if w.shape[0] != len(genes):
+            raise ValueError(
+                f"marker_gene_weights[{name!r}] has {w.shape[0]} weights for "
+                f"{len(genes)} genes; they must line up one to one, in order.")
+        ordered.append(w)
+    return ordered
+
+
 def predictCellTypeByMarker(
     adata,
     marker_gene_set: Union[List, Dict, pd.DataFrame],
+    marker_gene_weights: Optional[Union[List, Dict, pd.DataFrame]] = None,
     score_method: Literal["scanpy", "piaso"] = "piaso",
     score_layer: Optional[str] = "infog",
     use_score: bool = True,
@@ -650,6 +744,19 @@ def predictCellTypeByMarker(
         AnnData object containing single-cell data
     marker_gene_set : list, dict, or pandas.DataFrame
         Collection of marker genes for different cell types (pre-filtered/prepared)
+    marker_gene_weights : list, dict, or pandas.DataFrame, optional
+        Per-gene weights, one vector per cell type, aligned with
+        ``marker_gene_set`` gene for gene. A dict keyed by cell type is the
+        safest form; a DataFrame is read column by column; a plain sequence is
+        taken in the order the sets appear. Requires ``score_method='piaso'``.
+
+        Use this to let a strong, specific marker count for more than a weak
+        one -- COSG scores make a natural weight. The weights are used as given:
+        there is no per-cell-type normalisation, because the score is divided by
+        ``median(weights) * n_genes`` and its control sets carry the same
+        weights, so rescaling one cell type's weights cannot change which cell
+        type wins. What matters is the weights' shape within a set, not their
+        size. A set whose median weight is zero is rejected rather than scored.
     score_method : {'scanpy', 'piaso'}, default='piaso'
         Method to use for scoring marker genes
     score_layer : str or None, default='infog'
@@ -685,6 +792,11 @@ def predictCellTypeByMarker(
     n_jobs : int, default=-1
         Number of jobs for parallel processing during smoothing
         
+    modality : str, optional
+        Cytome only: the modality of the query to read; ``None`` is ``'RNA'``.
+    cytome_layer : str, default 'counts'
+        Cytome only: the layer to read from the query.
+
     Returns
     -------
     If inplace=False:
@@ -745,10 +857,12 @@ def predictCellTypeByMarker(
     # Calculate gene set scores
     # Use cytome dataset directly for scoring if available (it has full matrix access)
     _score_input = _cytome_ds if _cytome_ds is not None else adata
+    _marker_weights = _resolve_marker_weights(marker_gene_set, marker_gene_weights)
     if score_method == 'piaso':
         marker_results = calculateScoreParallel(
             _score_input,
             gene_set=marker_gene_set,
+            gene_weights=_marker_weights,
             score_method=score_method,
             score_layer=score_layer,
             max_workers=max_workers,
@@ -768,6 +882,7 @@ def predictCellTypeByMarker(
         marker_results = calculateScoreParallel(
             _score_input,
             gene_set=marker_gene_set,
+            gene_weights=_marker_weights,
             score_method=score_method,
             score_layer=score_layer,
             max_workers=max_workers,

@@ -96,3 +96,8 @@ from .external import runHarmony
 
 from .._grn_shim import inferRegulon, regulonActivity, regulonSpecificity
 from ._normalize_resolve import ensure_infog_params, ensure_tfidf_params
+try:
+    from ._fragmentLength import fragmentLengthHistogram, fragmentLengthStats, nucleosomeSignal
+except ImportError:      # pragma: no cover - the public-package path
+    from .._internal_shim import forward_many as _forward_many
+    globals().update(_forward_many("piaso.tools._fragmentLength", ['fragmentLengthHistogram', 'fragmentLengthStats', 'nucleosomeSignal'], "tl"))

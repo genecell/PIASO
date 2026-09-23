@@ -40,6 +40,11 @@ from ._plotDendrogram import plot_dendrogram, plotDendrogram
 from ._plotScatter import scatter, plotScatter
 from ._plotGroupMetrics import plotGroupMetrics, plot_group_metrics
 try:
+    from ._plotFragmentLength import fragmentLength, plotFragmentLength
+except ImportError:      # pragma: no cover - the public-package path
+    from .._internal_shim import forward_many as _forward_many
+    globals().update(_forward_many("piaso.plotting._plotFragmentLength", ['fragmentLength', 'plotFragmentLength'], "pl"))
+try:
     from ._plotCospecificity import (
         plot_cospecificity_map,
         plot_specificity_hotspot_manhattan,

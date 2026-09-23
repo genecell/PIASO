@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "piaso-tools"
-version = "1.2.4"
+version = "1.2.5"
 description = "Precise Integrative Analysis of Single-cell Omics."
 requires-python = ">=3.9"
 license = {text = "BSD-3-Clause"}
@@ -55,7 +55,12 @@ dependencies = [
     "lz4",
     "zstandard",
     "h5py",
-    "umap-learn>=0.5",
+    # >=0.5.8, not >=0.5: earlier versions call scikit-learn's
+    # check_array(force_all_finite=...), which scikit-learn renamed in 1.6 and
+    # removed in 1.8, so umap-learn 0.5.6 + scikit-learn >=1.8 raises a
+    # TypeError from inside sklearn with no mention of umap. Fixed upstream in
+    # 0.5.8; a floor is the right tool because the fix exists and is available.
+    "umap-learn>=0.5.8",
     "igraph>=0.10",
     # >=1.1.0, not 1.0.3: runGDR's cytome path calls cosg.run_cosg_cytome,
     # which does not exist before 1.1.0. The import is lazy, so a stale cosg
@@ -75,7 +80,7 @@ dependencies = [
     # the plotting fallback describe 0.3.0's layout, so an install that pairs
     # this release with an older cytome would be advised about names its files
     # do not use.
-    "cytome>=0.3.2,<1.0",
+    "cytome>=0.3.3,<1.0",
 ]
 
 # https://docs.pypi.org/project_metadata/#project-urls

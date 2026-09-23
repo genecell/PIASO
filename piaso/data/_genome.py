@@ -66,6 +66,40 @@ GENOME_FILES = {
         "tss_bed": "mm10_transcript_tss.bed",
         "gtf": "gencode.vM25.basic.annotation.gtf.gz",
     },
+    # Rhesus macaque and common marmoset, derived from the cellranger-arc
+    # references the data is mapped against rather than from NCBI directly,
+    # so the chromosome names here are the ones the fragments carry. Built
+    # with `piaso.data.makeGenomeFiles`. No cCRE file: SCREEN publishes
+    # candidate cis-regulatory elements for human and mouse only.
+    "Mmul_10": {
+        "gene_boundary": "Mmul_10_genes.bed",
+        "promoter": "Mmul_10_promoterSet.bed",
+        "chrom_sizes": "Mmul_10.chrom.sizes",
+        "tss_bed": "Mmul_10_transcript_tss.bed",
+    },
+    "mCalJac1": {
+        "gene_boundary": "mCalJac1_genes.bed",
+        "promoter": "mCalJac1_promoterSet.bed",
+        "chrom_sizes": "mCalJac1.chrom.sizes",
+        "tss_bed": "mCalJac1_transcript_tss.bed",
+    },
+}
+
+#: What each genome's assembly actually contains, for checks that would
+#: otherwise report a confident zero. The marmoset assembly mCalJa1.2.pat.X
+#: has no mitochondrial contig at all, so a mitochondrial fraction there is
+#: absence of evidence rather than clean cells.
+GENOME_FEATURES = {
+    "hg38": {"has_chrM": True, "species": "Homo sapiens"},
+    "mm10": {"has_chrM": True, "species": "Mus musculus"},
+    "Mmul_10": {"has_chrM": True, "species": "Macaca mulatta",
+                "assembly": "GCF_003339765.1",
+                "note": "chrM added by hand when the reference was built."},
+    "mCalJac1": {"has_chrM": False, "species": "Callithrix jacchus",
+                 "assembly": "GCF_011100555.1",
+                 "note": "The assembly has NO mitochondrial contig, so any "
+                         "mitochondrial-fraction QC returns zero for every "
+                         "cell. That is the assembly, not the cells."},
 }
 
 # Nested GTF source table: {genome → source → release → spec}.
@@ -505,7 +539,11 @@ def fetch_genome(
     }
     # GTF spec (resolved via source/release table)
     gtf_spec = None
-    if download_gtf:
+    # A genome with no GTF source in the registry (the primates, anything
+    # added with makeGenomeFiles) needs no GTF: the four files above are
+    # everything PIASO reads. Say nothing about a GTF for it, rather than
+    # warn about a download nobody asked for.
+    if download_gtf and genome in GTF_SOURCES:
         try:
             gtf_spec = _resolve_gtf_spec(genome, source, release)
         except ValueError as e:
@@ -546,10 +584,13 @@ def fetch_genome(
         # Download per-file from the PIASO-data master branch on GitHub
         import urllib.request
 
-        print(
-            f"Downloading {genome} reference data "
-            f"(GTF: {source}{f' release {release}' if release else ''})..."
-        )
+        if gtf_spec is not None:
+            print(
+                f"Downloading {genome} reference data "
+                f"(GTF: {source}{f' release {release}' if release else ''})..."
+            )
+        else:
+            print(f"Downloading {genome} reference data...")
         failed = []
         for key, filename in file_specs.items():
             url = f"{PIASO_DATA_RAW_URL}/{genome}/{filename}"

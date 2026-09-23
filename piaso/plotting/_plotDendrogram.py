@@ -228,6 +228,18 @@ def plot_dendrogram(
         Output options.
     return_linkage : bool
         Also return the linkage matrix ``Z``.
+    modality : str, optional
+        Cytome only: which modality the data was stored under (``'RNA'``,
+        ``'ATAC'``, ``'tiles'``, ``'GA'``). ``None`` takes the store's first
+        modality.
+    cytome_layer : str, default 'counts'
+        Cytome only: the layer to read the values from.
+    compute_on_fly : bool, default True
+        Cytome only: normalise the raw layer while streaming (INFOG for RNA,
+        TF-IDF for ATAC) instead of requiring a materialised layer.
+    use_cached_stats : bool, default True
+        Cytome only: reuse normalisation statistics already stored in the
+        cytome's metadata rather than recomputing them.
 
     Returns
     -------
@@ -342,5 +354,6 @@ def plot_dendrogram(
 
 @wraps(plot_dendrogram)
 def plotDendrogram(*args, **kwargs):
-    """Alias for :func:`plot_dendrogram`."""
+    """Alias for :func:`plot_dendrogram`.
+    """
     return plot_dendrogram(*args, **kwargs)

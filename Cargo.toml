@@ -17,6 +17,18 @@ exclude = ["docs/**", "web/**", "benchmarks/**", "notebooks/**", "*.ipynb"]
 name = "_piaso"
 crate-type = ["cdylib", "rlib"]
 
+# Unpublished method kernels are OFF by default, so a wheel built from this
+# crate exports only the score and motif-scan functions. A compiled extension
+# cannot be partially shipped -- withholding the .rs files from a public repo
+# would NOT withhold the capability from the wheel, because the registered
+# symbols are callable machine code. Build internally with:
+#     maturin develop --features internal
+# The public tree (publish.sh) drops the picco and quantify features with the
+# sources they gate; the cfg checks that name them stay in lib.rs. Tell rustc
+# those values are expected so the public build is warning-free.
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("picco", "quantify", "internal"))'] }
+
 [dependencies]
 pyo3 = { version = "0.29", features = ["extension-module", "generate-import-lib"] }
 numpy = "0.29"
@@ -24,6 +36,8 @@ rayon = "1.10"
 # piaso-atac + quantify dependencies
 rusqlite = { version = "0.31", features = ["bundled"] }
 lz4_flex = "0.11"
+zstd = "0.13"
+flate2 = "1"
 clap = { version = "4", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -32,3 +46,5 @@ libc = "0.2"
 pythonize = "0.29"
 # cytome-import-fragments dependency (pure-Rust bgzf reader)
 noodles-bgzf = "0.46"
+noodles-tabix = "0.67.0"
+noodles-csi = "0.61.0"

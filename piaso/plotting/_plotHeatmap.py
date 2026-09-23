@@ -299,6 +299,19 @@ def heatmap(
         Show colored sidebar for groups when ``cell_level=True``.
     show, save, ax, return_fig
         Output options.
+    
+    modality : str, optional
+        Cytome only: which modality the data was stored under (``'RNA'``,
+        ``'ATAC'``, ``'tiles'``, ``'GA'``). ``None`` takes the store's first
+        modality.
+    cytome_layer : str, default 'counts'
+        Cytome only: the layer to read the values from.
+    compute_on_fly : bool, default True
+        Cytome only: normalise the raw layer while streaming (INFOG for RNA,
+        TF-IDF for ATAC) instead of requiring a materialised layer.
+    use_cached_stats : bool, default True
+        Cytome only: reuse normalisation statistics already stored in the
+        cytome's metadata rather than recomputing them.
     """
     # --- Resolve dict / DataFrame features ---
     features, _auto_labels, _auto_positions = _resolve_features(features)
@@ -514,5 +527,6 @@ def _heatmap_cell_level(data, features, groupby, layer, use_raw,
 
 @wraps(heatmap)
 def plotHeatmap(*args, **kwargs):
-    """Alias for :func:`heatmap`."""
+    """Alias for :func:`heatmap`.
+    """
     return heatmap(*args, **kwargs)

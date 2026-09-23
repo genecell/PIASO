@@ -7,8 +7,25 @@ the old ``adata=`` keyword keeps working as a deprecated alias.
 """
 import warnings
 
+class _Unset:
+    """Sentinel for "this argument was not supplied", distinct from ``None``.
+
+    A bare ``object()`` renders in a signature as
+    ``<object object at 0x7fdc85a168d0>``, which tells a reader nothing and
+    looks like a bug. This renders as ``<unset>``.
+    """
+
+    __slots__ = ()
+
+    def __repr__(self):
+        return "<unset>"
+
+    def __bool__(self):
+        return False
+
+
 # Sentinel distinguishing "argument not supplied" from an explicit ``None``.
-_UNSET = object()
+_UNSET = _Unset()
 
 
 def resolve_data_arg(data, func_name, **aliases):

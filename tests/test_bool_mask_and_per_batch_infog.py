@@ -42,12 +42,35 @@ def test_every_spelling_coerces(stored, expected):
 
 
 def test_text_column_would_have_selected_everything():
-    """The exact failure: '0' is truthy, so astype(bool) selects all."""
-    col = np.asarray(["1", "0", "0", "0"])
-    assert col.astype(bool).sum() == 4          # the bug
+    """The exact failure: '0' is truthy, so astype(bool) selects all.
+
+    Which array you get back decides whether it bites, and that is the reason
+    the helper exists rather than a cast at the call site. An **object** array
+    of strings -- what a sqlite read of a TEXT column gives -- goes through
+    Python truthiness, and every non-empty string is true. A fixed-width `<U`
+    array depends on the numpy version: before 2.5 it parsed '1'/'0' as
+    integers and came out right for those two spellings only ('True'/'False'
+    raised); from 2.5 it goes through truthiness like the object array and
+    selects everything. Neither is a mask. The helper is right on both.
+    """
+    obj = np.asarray(["1", "0", "0", "0"], dtype=object)
+    assert obj.astype(bool).sum() == 4          # the bug
+
+    fixed = np.asarray(["1", "0", "0", "0"])
+    assert fixed.astype(bool).sum() in (1, 4)   # numpy < 2.5 / >= 2.5
+    try:
+        raw = np.asarray(["True", "False"]).astype(bool)
+    except ValueError:                          # numpy < 2.5
+        pass
+    else:                                       # numpy >= 2.5: truthiness
+        assert raw.tolist() == [True, True]
+
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        assert as_bool_mask(col, name="t").sum() == 1   # the fix
+        for col in (obj, fixed):
+            assert as_bool_mask(col, name="t").sum() == 1      # the fix
+        assert as_bool_mask(np.asarray(["True", "False"]),
+                            name="t").tolist() == [True, False]
 
 
 def test_text_column_warns():

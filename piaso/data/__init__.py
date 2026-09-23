@@ -69,3 +69,5 @@ loadChEMBLTargets = load_chembl_targets
 fetchLRDatabase = fetch_lr_database
 loadLRDatabase = load_lr_database
 fetchSCREEN = fetch_screen
+
+from ._mkgenome import makeGenomeFiles
