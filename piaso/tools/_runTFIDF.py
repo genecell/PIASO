@@ -98,6 +98,9 @@ def run_TFIDF(
         (and optionally ``adata.X`` when ``inplace=True``). Cytome: materialises
         ``{modality}_{output_layer}``.
     """
+    # A store that cannot be written fails here, not after the work.
+    from ..utils._cytome_compat import require_writable as _require_writable
+    _require_writable(data, "piaso.tl.run_TFIDF")
     source = _resolve_data_arg(data, 'run_TFIDF', source=source, adata=adata)
     is_cytome = _is_cytome_source(source)
     if is_cytome or streaming:
@@ -465,7 +468,8 @@ def _load_or_compute_tfidf_stats(
     return compute_tfidf_stats(
         ds, measurement=layer, batch_size=batch_size,
         scale_factor=scale_factor, modality=modality,
-        write_to_metadata=True,
+        # a store opened read-only cannot keep the cache
+        write_to_metadata=not getattr(ds, "read_only", False),
     )
 
 

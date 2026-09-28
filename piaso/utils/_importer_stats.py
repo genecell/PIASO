@@ -51,7 +51,7 @@ def _singular(entity: str) -> str:
 def _entity_for(ds, modality: str) -> Optional[Tuple[str, str]]:
     """(entity table, its primary key column) for a modality, or None."""
     try:
-        from cytome.utils.modality import modality_feature_table_info
+        from cytome import modality_feature_table_info
         table, idx_col, _ = modality_feature_table_info(ds, modality)
         return table, idx_col
     except Exception:

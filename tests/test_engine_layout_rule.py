@@ -75,6 +75,11 @@ def _add_column_chunks(ds, X, matrix_name, chunk_cols=None):
 
 def _layout(ds, matrix):
     from piaso._piaso import svd_layout
+    from piaso.tools._rsvd_core import snapshot_store
+    # svd_layout reads a snapshot by default (it runs in the process that holds
+    # the store open): checkpoint first, as runSVD does.
+    ok, why = snapshot_store(ds)
+    assert ok, why
     return svd_layout(str(ds.path), matrix)
 
 
@@ -572,11 +577,14 @@ def test_snapshot_reader_opens_an_awkward_path(tmp_path):
     ds.close()
 
 
-def test_runSVD_falls_back_to_locking_readers_when_the_log_cannot_be_emptied(tmp_path, capsys):
-    """A second connection holding a read transaction keeps the checkpoint
-    from completing; runSVD must say it is reading with locks, and the
-    result must be the same."""
+def test_runSVD_does_not_need_an_empty_log(tmp_path, capsys):
+    """A second connection holding a read transaction pins frames in the
+    log. The engine used to need the log empty (a lock-free snapshot) and
+    fell back to a locking read otherwise; it now reads through the
+    dataset's own connection, so the pinned log changes nothing: no
+    warning, the same result."""
     import sqlite3
+    import warnings
     import piaso
 
     rng = np.random.default_rng(84)
@@ -584,22 +592,19 @@ def test_runSVD_falls_back_to_locking_readers_when_the_log_cannot_be_emptied(tmp
     ds = _store(tmp_path / "fb.cytome", X)
     ds.peaks["highly_variable"] = np.ones(150, dtype=bool); ds.flush()
     common = dict(modality="ATAC", measurement="counts", n_components=3, random_state=0, verbosity=1)
-    piaso.tl.runSVD(ds, key_added="X_snap", **common)
-    assert "reading a snapshot of the store" in capsys.readouterr().out
-    # A reader whose snapshot predates a write pins that write's frames in
-    # the log: they cannot be checkpointed until it ends. (A reader that
-    # starts after the write does not -- every frame can still be copied
-    # into the main file, and the snapshot is then legitimately safe.)
+    piaso.tl.runSVD(ds, key_added="X_free", **common)
     ds._conn.execute("PRAGMA wal_autocheckpoint=0")
     holder = sqlite3.connect(str(ds.path)); holder.execute("BEGIN"); holder.execute("SELECT count(*) FROM peaks").fetchone()
     ds.peaks["dummy_note"] = np.arange(150); ds.flush()
     try:
-        piaso.tl.runSVD(ds, key_added="X_lock", **common)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", RuntimeWarning)
+            piaso.tl.runSVD(ds, key_added="X_pinned", **common)
         out = capsys.readouterr().out
-        assert "reading with file locks" in out, out
+        assert "file locks" not in out, out
     finally:
         holder.rollback(); holder.close()
     from piaso.tools._embedding_names import storage_name
-    a = np.asarray(ds.embeddings[storage_name("X_snap", "ATAC")]); b = np.asarray(ds.embeddings[storage_name("X_lock", "ATAC")])
-    np.testing.assert_allclose(a, b, rtol=1e-6, atol=1e-6)
+    a = np.asarray(ds.embeddings[storage_name("X_free", "ATAC")]); b = np.asarray(ds.embeddings[storage_name("X_pinned", "ATAC")])
+    assert np.array_equal(a, b)
     ds.close()

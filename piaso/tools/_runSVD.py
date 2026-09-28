@@ -704,6 +704,7 @@ def _runSVD_streaming(
     # transform computed in Python per chunk (INFOG on the fly, explicit
     # per-batch parameters) and AnnData keep the chunk-factory path.
     _engine_ops = None
+    _legacy_release = None
     _identity = tfidf_params is None and bool(getattr(chunk_factory, "identity", False))
     if use_engine and is_cytome and (
             (tfidf_params is not None and hvg_indices is None) or _identity):
@@ -734,26 +735,52 @@ def _runSVD_streaming(
                 _col_mask = _tfidf_col_mask
                 _tf = {"cell_depth": tfidf_params["cell_depth"], "idf": tfidf_params["idf"],
                        "scale_factor": tfidf_params.get("scale_factor", 1e4)}
-            # Everything this call writes before the passes (the TF-IDF
-            # statistics) is in the store by now, so the log can be
-            # checkpointed and the passes can read without file locks.
-            from ._rsvd_core import snapshot_store
-            _snap, _snap_reason = snapshot_store(_ds_e)
-            _engine_ops = EngineOps(
-                _path, _mname, int(_nr), int(_nc),
-                col_mask=_col_mask, row_keep=_keep, tfidf=_tf,
-                n_threads=n_threads, snapshot=_snap,
-            )
+            # The engine never opens the store this process holds: a second
+            # SQLite in the process cannot see this connection's locks and
+            # drops them when it closes the file. The dataset reads the
+            # stored chunks through its own SQLite and hands them over as
+            # compressed bytes; the engine decompresses and multiplies them.
+            # Reading through a connection that stays open takes no lock on
+            # the store file, so a network mount keeps its cache between
+            # passes without a checkpoint.
+            _legacy_release = None
+            if hasattr(_ds_e, "chunk_source"):
+                _source = _ds_e.chunk_source(_mname, n_readers=4, cache=bool(cache_chunks))
+                _engine_ops = EngineOps(
+                    _path, _mname, int(_nr), int(_nc),
+                    col_mask=_col_mask, row_keep=_keep, tfidf=_tf,
+                    n_threads=n_threads, source=_source,
+                )
+            else:
+                # cytome < 0.3.4 cannot hand chunks over. The engine opens
+                # the store itself: without file locks after a checkpoint
+                # (a second SQLite must never take locks on a store this
+                # process holds), or, if the log cannot be emptied, with the
+                # dataset closed for the solve.
+                from ._rsvd_core import snapshot_store
+                warnings.warn(
+                    "runSVD: this cytome cannot hand the SVD engine its chunks "
+                    "(needs cytome >= 0.3.4), so the engine opens the store itself, "
+                    "which releases this process's lock on it. Upgrade cytome.",
+                    RuntimeWarning, stacklevel=3)
+                _snap, _why = snapshot_store(_ds_e)
+                if not _snap:
+                    from ..utils._cytome_compat import released_store
+                    _legacy_release = released_store(_ds_e)
+                    _legacy_release.__enter__()
+                _engine_ops = EngineOps(
+                    _path, _mname, int(_nr), int(_nc),
+                    col_mask=_col_mask, row_keep=_keep, tfidf=_tf,
+                    n_threads=n_threads, snapshot=_snap,
+                )
             if verbosity > 0:
                 _lay = getattr(_engine_ops, "layout", "auto")
                 print(f"  SVD engine: Rust pass over {_mname} "
                       f"({_engine_ops.n_rows} rows x {_engine_ops.n_cols} selected columns, "
                       f"{'column' if _lay == 'csc' else 'row'}-major store, "
                       f"{'TF-IDF on the fly' if _tf is not None else 'values as stored'})")
-                print("  SVD engine: reading a snapshot of the store, no file locks"
-                      if _snap else
-                      f"  SVD engine: reading with file locks -- {_snap_reason}")
-                print(f"  SVD engine: {_engine_threads(n_threads)} threads")
+                print(f"  SVD engine: {_engine_threads(n_threads)} threads"
+                      + (", chunks kept in memory after the first pass" if cache_chunks else ""))
                 # A row-major-only peak or tile matrix pays ~8x on the
                 # transpose product: it scatters into a features x block buffer
                 # instead of a cells x block one. Say so once, with the fix.
@@ -764,32 +791,30 @@ def _runSVD_streaming(
                           "column-major store; re-quantify with "
                           "quantifyPeakActivity(..., layout='csc') (the default for "
                           "new stores) to get it.")
-            if cache_chunks:
-                # The engine reads, normalises, masks and multiplies in one
-                # fused sweep per pass, so there is no decoded chunk to keep.
-                # Saying nothing would let a caller believe the matrix is in
-                # memory while every pass goes back to disk -- which is the
-                # wrong trade on slow or networked storage, where the cached
-                # Python path can win despite the slower kernel.
-                warnings.warn(
-                    "runSVD(cache_chunks=True) belongs to the Python chunk "
-                    "reader; the Rust engine streams each pass from the store "
-                    "and ignores it. Nothing is lost on local disk, where the "
-                    "operating system keeps the store in memory between "
-                    "passes. Pass use_engine=False only if you need the "
-                    "in-memory cache (e.g. on slow networked storage with a "
-                    "tight memory limit), at the cost of a slower kernel.",
-                    UserWarning, stacklevel=3,
-                )
     if _engine_ops is not None:
         import time as _time
         from ._rsvd_core import rsvd_core
         _t_solver = _time.perf_counter()
-        embeddings, S, Vt, _svd_info = rsvd_core(
-            _engine_ops, n_components=n_components, n_iter=n_iter,
-            random_state=random_state, oversampling=oversampling,
-            tol=tol, method=method, verbosity=verbosity,
-        )
+        try:
+            embeddings, S, Vt, _svd_info = rsvd_core(
+                _engine_ops, n_components=n_components, n_iter=n_iter,
+                random_state=random_state, oversampling=oversampling,
+                tol=tol, method=method, verbosity=verbosity,
+            )
+        finally:
+            if _legacy_release is not None:
+                _legacy_release.__exit__(None, None, None)
+            _src = getattr(_engine_ops, "source", None)
+            if _src is not None:
+                if verbosity > 0 and cache_chunks:
+                    if _src.cache_declined:
+                        print(f"  SVD engine: chunk cache declined, it would have held "
+                              f"{_src.cache_declined[0] / 1e9:.1f} GB against a budget of "
+                              f"{_src.cache_declined[1] / 1e9:.1f} GB")
+                    else:
+                        print(f"  SVD engine: {_src.cached_bytes / 1e9:.2f} GB of compressed chunks "
+                              f"kept in memory; {_src.bytes_read / 1e9:.2f} GB read from the store")
+                _src.close()
         if verbosity > 0:
             _wall = _time.perf_counter() - _t_solver
             print(f"  Solver time: {_wall:.1f} s, of which {_engine_ops.seconds:.1f} s in "
@@ -957,10 +982,15 @@ def runSVD(
         Cytome modality (``'RNA'``, ``'ATAC'``, ``'GA'``, ``'tiles'``) — routes
         the var-entity / matrix lookups via the modality registry.
     cache_chunks : bool, default False
-        Python chunk reader only: keep the decoded chunks in memory after the
-        first pass. The Rust engine, which a cytome uses by default, streams
-        every pass from the store and ignores this flag; on local disk the
-        operating system already keeps the store in memory between passes.
+        Keep the matrix in memory after the first pass, so later passes do
+        not read the store. The Rust engine (the default for a cytome) keeps
+        the chunks compressed, as stored -- about the size of the matrix on
+        disk -- and declines, with a warning, if that would exceed half the
+        memory available to the process (a cluster job's limit included).
+        The Python chunk reader keeps them decoded, several times larger.
+        On local disk the operating system already caches the store between
+        passes, so this mainly helps on a network mount without the option
+        of copying the store to local scratch.
     tfidf_params : dict, optional
         Apply TF-IDF inline during chunk iteration. Keys: ``'cell_depth'``
         (ndarray), ``'idf'`` (ndarray), ``'scale_factor'`` (float); optional
@@ -1058,6 +1088,9 @@ def runSVD(
     first and open the copy. The engine reads without file locks, which
     removes the worst of it, but not the data transfer itself.
     """
+    # A store that cannot be written fails here, not after the work.
+    from ..utils._cytome_compat import require_writable as _require_writable
+    _require_writable(data, "piaso.tl.runSVD")
     source = _resolve_data_arg(data, 'runSVD', source=source, adata=adata)
     # `n_iter` means different things to the two solvers: a round count for
     # power iteration, a ceiling for a tolerance-driven one. Left unset it is

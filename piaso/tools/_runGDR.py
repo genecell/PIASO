@@ -1504,7 +1504,7 @@ import sys
 import logging
 
 def _runCOSGParallel_single_batch(
-    batch_key, shared_data, batch_i, groupby, n_svd_dims, n_svd_iter, n_highly_variable_genes, verbosity, resolution, mu, n_gene, use_highly_variable, layer, random_seed, expressed_pct=0.1, allow_non_integer=False):
+    batch_key, shared_data, batch_i, groupby, n_svd_dims, n_svd_iter, n_highly_variable_genes, verbosity, resolution, mu, n_gene, use_highly_variable, layer, random_seed, expressed_pct=0.1, allow_non_integer=False, n_threads=0):
     """
     Process a single batch using shared memory and perform clustering and marker gene identification.
 
@@ -1636,7 +1636,10 @@ def _runCOSGParallel_single_batch(
 
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore", category=FutureWarning)
-                _piaso_leiden(adata, resolution=resolution, key_added='gdr_local', random_state=random_seed)
+                # This worker's share of the cores: every batch clusters at the
+                # same time, each in a process of its own.
+                _piaso_leiden(adata, resolution=resolution, key_added='gdr_local', random_state=random_seed,
+                              n_threads=n_threads)
             groupby_i = 'gdr_local'
 
         else:
@@ -1819,6 +1822,7 @@ def runCOSGParallel(
                         n_svd_dims, n_svd_iter, n_highly_variable_genes, verbosity, resolution,
                         mu, n_gene, use_highly_variable, layer, random_seed,
                         expressed_pct, allow_non_integer,
+                        max(1, (os.cpu_count() or 1) // max(1, min(int(max_workers or 1), len(batch_list)))),
                     )
                 )
             # Collect results into a list first
@@ -1972,6 +1976,10 @@ def _runGDRParallel_cytome(
     4. L2 normalize → X_gdr
     5. Persist (default) via ds.add_embedding + ds.metadata, or return tuple
     """
+    # A store that cannot be written fails here, not after the work.
+    from ..utils._cytome_compat import require_writable as _require_writable
+    if write_to_cytome:
+        _require_writable(ds, "piaso.tl.runGDR")
     from cytome.core.measurement import MeasurementLayer
     from ._normalization import _open_cytome
 
@@ -2441,6 +2449,9 @@ def _runGDR_multibatch_cytome(
                     key_added='gdr_local_TMP_GDR_BATCH',
                     n_iterations=10,
                     cell_mask=np.ones(svd_emb.shape[0], dtype=bool),
+                    # this batch's share of the budget: the batches cluster
+                    # side by side, and the labels do not depend on it
+                    n_threads=max(1, int(max_workers or 1) // _n_workers),
                 )
             finally:
                 if _n_workers > 1:

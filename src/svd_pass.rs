@@ -50,6 +50,7 @@
 use numpy::{IntoPyArray, PyArray2, PyReadonlyArray1, PyReadonlyArray2};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
+use pyo3::pybacked::PyBackedBytes;
 use rayon::prelude::*;
 use rusqlite::Connection;
 
@@ -166,6 +167,22 @@ struct LayoutChoice {
 /// than features (every peak and tile matrix) and row-major otherwise (a
 /// gene matrix). Measured before blocking, the wrong choice was 8x on the
 /// transpose product.
+fn choose_layout(n_rows: i64, n_cols: i64, has_csr: bool, has_csc: bool, want: &str, matrix: &str)
+    -> PyResult<Layout> {
+    Ok(match want {
+        "csr" => Layout::Csr,
+        "csc" => Layout::Csc,
+        "auto" => match (has_csr, has_csc) {
+            (true, true) => if n_rows <= n_cols { Layout::Csc } else { Layout::Csr },
+            (true, false) => Layout::Csr,
+            (false, true) => Layout::Csc,
+            (false, false) => return Err(PyValueError::new_err(
+                format!("matrix {} has no chunks in either layout", matrix))),
+        },
+        other => return Err(PyValueError::new_err(format!("layout must be auto, csr or csc, got {:?}", other))),
+    })
+}
+
 fn resolve_layout(conn: &Connection, matrix: &str, want: &str) -> PyResult<LayoutChoice> {
     let (n_rows, n_cols, dtype, n_chunks, has_csc): (i64, i64, String, i64, i64) = conn
         .query_row(
@@ -177,19 +194,20 @@ fn resolve_layout(conn: &Connection, matrix: &str, want: &str) -> PyResult<Layou
         .map_err(|e| PyValueError::new_err(format!("matrix {}: {}", matrix, e)))?;
     let has_csr = n_chunks > 0;
     let has_csc = has_csc != 0;
-    let layout = match want {
-        "csr" => Layout::Csr,
-        "csc" => Layout::Csc,
-        "auto" => match (has_csr, has_csc) {
-            (true, true) => if n_rows <= n_cols { Layout::Csc } else { Layout::Csr },
-            (true, false) => Layout::Csr,
-            (false, true) => Layout::Csc,
-            (false, false) => return Err(PyValueError::new_err(
-                format!("matrix {} has no chunks in either layout", matrix))),
-        },
-        other => return Err(PyValueError::new_err(format!("layout must be auto, csr or csc, got {:?}", other))),
-    };
+    let layout = choose_layout(n_rows, n_cols, has_csr, has_csc, want, matrix)?;
     Ok(LayoutChoice { layout, has_csr, has_csc, n_rows, n_cols, dtype })
+}
+
+fn layout_name(l: Layout) -> &'static str { if l == Layout::Csr { "csr" } else { "csc" } }
+
+/// The layout a pass takes for a matrix of this shape with these chunks on
+/// disk -- the rule of ``svd_layout`` without opening a store. Returns
+/// ``"csr"`` or ``"csc"``.
+#[pyfunction]
+#[pyo3(signature = (n_rows, n_cols, has_row_chunks, has_column_chunks, want="auto"))]
+pub fn svd_layout_rule(n_rows: i64, n_cols: i64, has_row_chunks: bool, has_column_chunks: bool,
+                       want: &str) -> PyResult<String> {
+    Ok(layout_name(choose_layout(n_rows, n_cols, has_row_chunks, has_column_chunks, want, "")?).to_string())
 }
 
 /// Which layout a pass over `matrix_name` would take, and what is on disk.
@@ -198,9 +216,15 @@ fn resolve_layout(conn: &Connection, matrix: &str, want: &str) -> PyResult<Layou
 /// with ``layout`` one of ``"csr"`` / ``"csc"``. Lets the caller say at
 /// verbosity 1 which layout is in use, and tell a user with a row-major-only
 /// peak matrix that a column-major store would be faster.
+///
+/// ``snapshot`` (default true) opens the store immutably: this runs inside the
+/// Python process that holds the store open, where a locking open by this
+/// library would reset the WAL index the Python connection has mapped. Call
+/// it after the log has been checkpointed.
 #[pyfunction]
-pub fn svd_layout(cytome_path: &str, matrix_name: &str) -> PyResult<(String, bool, bool, i64, i64)> {
-    let conn = open_ro(cytome_path, false)?;
+#[pyo3(signature = (cytome_path, matrix_name, snapshot=true))]
+pub fn svd_layout(cytome_path: &str, matrix_name: &str, snapshot: bool) -> PyResult<(String, bool, bool, i64, i64)> {
+    let conn = open_ro(cytome_path, snapshot)?;
     let c = resolve_layout(&conn, matrix_name, "auto")?;
     Ok((
         if c.layout == Layout::Csr { "csr".to_string() } else { "csc".to_string() },
@@ -293,30 +317,88 @@ fn read_chunk(conn: &Connection, matrix: &str, meta: &ChunkMeta, dtype: &str, la
                         WHERE matrix_name = ?1 AND chunk_idx = ?2",
     };
     let mut stmt = conn.prepare_cached(sql).map_err(|e| e.to_string())?;
-    let r: Result<(Result<Data, String>, Vec<i32>, Vec<i32>), String> = prof.time(&prof.fetch_ns, || stmt.query_row(
+    prof.time(&prof.fetch_ns, || stmt.query_row(
         rusqlite::params![matrix, meta.idx],
         |r| {
             let comp: String = r.get(3)?;
-            let d = r.get_ref(0)?.as_blob()?;
-            let widen = |v: Vec<f32>| Ok(Data::F32(v));
-            let data = match dtype {
-                "float32" => widen(decode_into::<f32>(d, &comp)),
-                "float64" => Ok(Data::F64(decode_into::<f64>(d, &comp))),
-                "int32" => widen(decode_into::<i32>(d, &comp).into_iter().map(|v| v as f32).collect()),
-                "int64" => widen(decode_into::<i64>(d, &comp).into_iter().map(|v| v as f32).collect()),
-                "int16" => widen(decode_into::<i16>(d, &comp).into_iter().map(|v| v as f32).collect()),
-                "uint16" => widen(decode_into::<u16>(d, &comp).into_iter().map(|v| v as f32).collect()),
-                "uint32" => widen(decode_into::<u32>(d, &comp).into_iter().map(|v| v as f32).collect()),
-                "int8" => widen(decode_into::<i8>(d, &comp).into_iter().map(|v| v as f32).collect()),
-                "uint8" => widen(decode_into::<u8>(d, &comp).into_iter().map(|v| v as f32).collect()),
-                other => Err(format!("unsupported matrix dtype {:?}", other)),
-            };
-            let ind = decode_into::<i32>(r.get_ref(1)?.as_blob()?, &comp);
-            let ptr = decode_into::<i32>(r.get_ref(2)?.as_blob()?, &comp);
-            Ok((data, ind, ptr))
-        }).map_err(|e| format!("chunk {}: {}", meta.idx, e)));
-    let (data, indices, indptr) = r?;
+            Ok(decode_chunk(r.get_ref(0)?.as_blob()?, r.get_ref(1)?.as_blob()?,
+                            r.get_ref(2)?.as_blob()?, &comp, dtype, meta))
+        }).map_err(|e| format!("chunk {}: {}", meta.idx, e)))?
+}
+
+/// Decode one chunk's three blobs. Stored integers become float32 and
+/// float64 stays float64, as in `_normalize_chunk_tfidf`. The same code for
+/// blobs read here and blobs handed over by a chunk source, so the two give
+/// the same chunk to the bit.
+fn decode_chunk(d: &[u8], ind: &[u8], ptr: &[u8], comp: &str, dtype: &str, meta: &ChunkMeta)
+    -> Result<Chunk, String> {
+    let widen = |v: Vec<f32>| Ok(Data::F32(v));
+    let data = match dtype {
+        "float32" => widen(decode_into::<f32>(d, comp)),
+        "float64" => Ok(Data::F64(decode_into::<f64>(d, comp))),
+        "int32" => widen(decode_into::<i32>(d, comp).into_iter().map(|v| v as f32).collect()),
+        "int64" => widen(decode_into::<i64>(d, comp).into_iter().map(|v| v as f32).collect()),
+        "int16" => widen(decode_into::<i16>(d, comp).into_iter().map(|v| v as f32).collect()),
+        "uint16" => widen(decode_into::<u16>(d, comp).into_iter().map(|v| v as f32).collect()),
+        "uint32" => widen(decode_into::<u32>(d, comp).into_iter().map(|v| v as f32).collect()),
+        "int8" => widen(decode_into::<i8>(d, comp).into_iter().map(|v| v as f32).collect()),
+        "uint8" => widen(decode_into::<u8>(d, comp).into_iter().map(|v| v as f32).collect()),
+        other => Err(format!("unsupported matrix dtype {:?}", other)),
+    };
+    let indices = decode_into::<i32>(ind, comp);
+    let indptr = decode_into::<i32>(ptr, comp);
     Ok(Chunk { start: meta.start, data: data?, indices, indptr })
+}
+
+/// A chunk's blobs as a chunk source handed them over: data, indices,
+/// indptr, compression. The bytes stay in the Python objects; no copy.
+type Blobs = (PyBackedBytes, PyBackedBytes, PyBackedBytes, String);
+
+/// Ask the source for a batch of chunks, naming the next batch so it can be
+/// read while this one is computed. Runs on the calling thread, with the
+/// GIL: a Python SQLite connection belongs to the thread that made it.
+fn fetch_blobs(src: &Bound<'_, PyAny>, layout: Layout, metas: &[ChunkMeta], next: Option<&[ChunkMeta]>,
+               prof: &Profile) -> PyResult<Vec<Blobs>> {
+    let idx: Vec<i64> = metas.iter().map(|m| m.idx).collect();
+    let nxt: Option<Vec<i64>> = next.map(|n| n.iter().map(|m| m.idx).collect());
+    let got = prof.time(&prof.fetch_ns, || src.call_method1("fetch", (layout_name(layout), idx, nxt)))?;
+    let v: Vec<Blobs> = got.extract()?;
+    if v.len() != metas.len() {
+        return Err(PyValueError::new_err(format!(
+            "chunk source returned {} chunks for {} asked", v.len(), metas.len())));
+    }
+    Ok(v)
+}
+
+/// Where a pass gets its chunks.
+enum Reader<'py> {
+    /// The engine opens the store: the command-line tools, and a store no
+    /// connection of this process holds.
+    Store { path: String, snapshot: bool },
+    /// A Python object hands over the stored blobs (cytome's `ChunkSource`).
+    /// For a store this process holds open: a second SQLite in the process
+    /// cannot see its locks and drops them when it closes the file.
+    Source(Bound<'py, PyAny>),
+}
+
+/// Consecutive runs of chunks of at most `budget` entries, and at least
+/// `min_len` chunks so a batch keeps every thread busy.
+fn split_batches(chunks: &[ChunkMeta], budget: usize, min_len: usize) -> Vec<&[ChunkMeta]> {
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < chunks.len() {
+        let mut j = i;
+        let mut n = 0usize;
+        while j < chunks.len() {
+            let more = chunks[j].nnz.max(0) as usize;
+            if j > i && j - i >= min_len && n + more > budget { break; }
+            n += more;
+            j += 1;
+        }
+        out.push(&chunks[i..j]);
+        i = j;
+    }
+    out
 }
 
 /// The TF-IDF transform of one stored value, in the precision numpy used.
@@ -486,6 +568,92 @@ pub fn svd_pass<'py>(
     layout: &str,
     snapshot: bool,
 ) -> PyResult<Bound<'py, PyArray2<f64>>> {
+    let conn = open_ro(cytome_path, snapshot)?;
+    let (chunks, dtype, n_rows, n_cols, layout) = chunk_list(&conn, matrix_name, layout)?;
+    drop(conn);
+    pass_impl(py, Reader::Store { path: cytome_path.to_string(), snapshot }, matrix_name,
+              chunks, dtype, n_rows, n_cols, layout, mode, dense, col_remap, n_selected, row_map,
+              n_out_rows, cell_depth, idf, scale, n_threads, block_rows, batch_bytes)
+}
+
+/// `svd_pass` over chunks a Python object hands over, for a store this
+/// process holds open.
+///
+/// ``source`` answers three calls (cytome's ``ChunkSource`` does):
+/// ``meta()`` -> ``(n_rows, n_cols, dtype, has_row_chunks, has_column_chunks)``;
+/// ``chunks(layout)`` -> ``(chunk_idx, start, end, n_nonzero)`` int64 arrays in
+/// chunk order; ``fetch(layout, idx, next_idx)`` -> the blobs of ``idx`` in
+/// that order as ``(data, indices, indptr, compression)`` tuples of ``bytes``
+/// and ``str``, ``next_idx`` being the batch that will be asked for next.
+///
+/// Everything else is ``svd_pass``: the same decoding, the same order of
+/// additions, so the result is identical to the bit. The engine never opens
+/// the file, so no second SQLite in this process touches it.
+#[pyfunction]
+#[pyo3(signature = (source, mode, dense, col_remap, n_selected,
+                    row_map=None, n_out_rows=None, cell_depth=None, idf=None,
+                    scale=1e4, n_threads=0, block_rows=0, batch_bytes=0, layout="auto"))]
+#[allow(clippy::too_many_arguments)]
+pub fn svd_pass_source<'py>(
+    py: Python<'py>,
+    source: Bound<'py, PyAny>,
+    mode: &str,
+    dense: PyReadonlyArray2<'py, f64>,
+    col_remap: PyReadonlyArray1<'py, i32>,
+    n_selected: usize,
+    row_map: Option<PyReadonlyArray1<'py, i32>>,
+    n_out_rows: Option<usize>,
+    cell_depth: Option<PyReadonlyArray1<'py, f64>>,
+    idf: Option<PyReadonlyArray1<'py, f32>>,
+    scale: f64,
+    n_threads: usize,
+    block_rows: usize,
+    batch_bytes: usize,
+    layout: &str,
+) -> PyResult<Bound<'py, PyArray2<f64>>> {
+    let (n_rows, n_cols, dtype, has_csr, has_csc): (i64, i64, String, bool, bool) =
+        source.call_method0("meta")?.extract()?;
+    let name: String = source.getattr("matrix_name").and_then(|v| v.extract()).unwrap_or_default();
+    let lay = choose_layout(n_rows, n_cols, has_csr, has_csc, layout, &name)?;
+    let (a, b, c, d): (PyReadonlyArray1<'py, i64>, PyReadonlyArray1<'py, i64>,
+                       PyReadonlyArray1<'py, i64>, PyReadonlyArray1<'py, i64>) =
+        source.call_method1("chunks", (layout_name(lay),))?.extract()?;
+    let (a, b, c, d) = (a.as_slice()?, b.as_slice()?, c.as_slice()?, d.as_slice()?);
+    let chunks: Vec<ChunkMeta> = (0..a.len())
+        .map(|i| ChunkMeta { idx: a[i], start: b[i], end: c[i], nnz: d[i] })
+        .collect();
+    if chunks.is_empty() {
+        return Err(PyValueError::new_err(format!("matrix {} has no {} chunks", name,
+            if lay == Layout::Csr { "row" } else { "column" })));
+    }
+    pass_impl(py, Reader::Source(source), &name, chunks, dtype, n_rows, n_cols, lay, mode, dense,
+              col_remap, n_selected, row_map, n_out_rows, cell_depth, idf, scale, n_threads,
+              block_rows, batch_bytes)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn pass_impl<'py>(
+    py: Python<'py>,
+    reader: Reader<'py>,
+    matrix_name: &str,
+    mut chunks: Vec<ChunkMeta>,
+    dtype: String,
+    n_rows: i64,
+    n_cols: i64,
+    layout: Layout,
+    mode: &str,
+    dense: PyReadonlyArray2<'py, f64>,
+    col_remap: PyReadonlyArray1<'py, i32>,
+    n_selected: usize,
+    row_map: Option<PyReadonlyArray1<'py, i32>>,
+    n_out_rows: Option<usize>,
+    cell_depth: Option<PyReadonlyArray1<'py, f64>>,
+    idf: Option<PyReadonlyArray1<'py, f32>>,
+    scale: f64,
+    n_threads: usize,
+    block_rows: usize,
+    batch_bytes: usize,
+) -> PyResult<Bound<'py, PyArray2<f64>>> {
     let dense = dense.as_array();
     let dense = dense.as_standard_layout();
     let dense_s = dense.as_slice().ok_or_else(|| PyValueError::new_err("dense must be contiguous"))?;
@@ -494,10 +662,6 @@ pub fn svd_pass<'py>(
     let row_map_owned = row_map.map(|m| m.as_slice().map(|s| s.to_vec())).transpose()?;
     let depth_owned = cell_depth.map(|d| d.as_slice().map(|s| s.to_vec())).transpose()?;
     let idf_owned = idf.map(|d| d.as_slice().map(|s| s.to_vec())).transpose()?;
-
-    let conn = open_ro(cytome_path, snapshot)?;
-    let (mut chunks, dtype, n_rows, n_cols, layout) = chunk_list(&conn, matrix_name, layout)?;
-    drop(conn);
     if remap.len() != n_cols as usize {
         return Err(PyValueError::new_err(format!(
             "col_remap has {} entries, matrix has {} columns", remap.len(), n_cols)));
@@ -538,12 +702,18 @@ pub fn svd_pass<'py>(
     // a row chunk the reverse. `n_blocked` is the full stored extent of the
     // blocked dimension; kept-ness is applied in the multiply.
     let n_blocked = match layout { Layout::Csc => n_rows, Layout::Csr => n_cols } as usize;
-    let threads = if n_threads == 0 { rayon::current_num_threads() } else { n_threads };
+    let threads = crate::threads::count(n_threads);
     let pool = rayon::ThreadPoolBuilder::new().num_threads(threads).build()
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
     let brows = self::block_rows(n_blocked, k, threads, block_rows);
     let n_blocks = n_blocked.div_ceil(brows).max(1);
-    let path = cytome_path.to_string();
+    // What may cross into the worker threads: the store's path, never the
+    // Python source (only the calling thread may call it).
+    let (store, source) = match reader {
+        Reader::Store { path, snapshot } => (Some((path, snapshot)), None),
+        Reader::Source(src) => (None, Some(src)),
+    };
+    let store = &store;
     let matrix = matrix_name.to_string();
     let prof = Profile::new();
     // Never read or bucket what is not selected. A chunk's outer index (a
@@ -589,8 +759,24 @@ pub fn svd_pass<'py>(
         let mj = mj as usize;
         Some(match layout { Layout::Csc => (mj, mr, r, j), Layout::Csr => (mr, mj, r, j) })
     };
+    // A worker's own connection when the engine reads the store; nothing
+    // when the chunks are handed over.
+    let open_worker = || store.as_ref().map(|(p, snap)| open_ro(p, *snap).map_err(|e| e.to_string()));
+    // One chunk, from the handed-over blobs or from the worker's connection.
+    let get_chunk = |blobs: Option<&Blobs>, conn: &Option<Result<Connection, String>>, meta: &ChunkMeta|
+        -> Result<Chunk, String> {
+        match (blobs, conn) {
+            (Some(b), _) => prof.time(&prof.read_ns, || decode_chunk(&b.0, &b.1, &b.2, &b.3, &dtype, meta)),
+            (None, Some(c)) => {
+                let c = c.as_ref().map_err(|e| e.clone())?;
+                prof.time(&prof.read_ns, || read_chunk(c, &matrix, meta, &dtype, layout, &prof))
+            }
+            (None, None) => Err("no chunk reader".to_string()),
+        }
+    };
+    let entry_budget = (if batch_bytes > 0 { batch_bytes } else { BATCH_BYTES }) / ENTRY_BYTES;
 
-    let result: Result<(), String> = if owned {
+    if owned {
         // Each chunk's output rows are contiguous and disjoint, in chunk
         // order, so the output splits into one slice per chunk.
         let a_prefix = match layout { Layout::Csc => &col_prefix, Layout::Csr => &row_prefix };
@@ -605,32 +791,48 @@ pub fn svd_pass<'py>(
             rest = tail;
             consumed = hi;
         }
-        py.detach(|| pool.install(|| {
-            chunks.par_iter().zip(slices.into_par_iter()).map_init(
-                || open_ro(&path, snapshot).map_err(|e| e.to_string()),
-                |conn, (meta, (a_lo, mine))| -> Result<(), String> {
-                    let conn = conn.as_ref().map_err(|e| e.clone())?;
-                    let chunk = prof.time(&prof.read_ns, || read_chunk(conn, &matrix, meta, &dtype, layout, &prof))?;
-                    SCRATCH.with(|sc| OWN.with(|own| {
-                        let (mut sc, mut bk) = (sc.borrow_mut(), own.borrow_mut());
-                        prof.time(&prof.bucket_ns, || bucket(&chunk, brows, n_blocks, &mut sc, &mut bk, kept_ref));
-                        // Block order, stored order within a block: the maps,
-                        // the depth and the operand row `b` stay in cache, and
-                        // each output row's sum runs in stored order.
-                        prof.time(&prof.multiply_ns, || {
-                            for e in 0..bk.val.len() {
-                                let Some((a, b, r, j)) = map(bk.own[e], bk.other[e]) else { continue };
-                                let w = weigh(bk.f32_data, bk.val[e], tfidf.as_ref(), r, j);
-                                let src = &dense_s[b * k..(b + 1) * k];
-                                let dst = &mut mine[(a - a_lo) * k..(a - a_lo + 1) * k];
-                                for (d, s) in dst.iter_mut().zip(src) { *d += w * *s; }
-                            }
-                        });
-                    }));
-                    Ok(())
-                },
-            ).collect::<Result<Vec<()>, String>>().map(|_| ())
-        }))
+        // Reading the store: one sweep. Handed-over chunks: batches, each
+        // fetched on this thread while the previous one is computed.
+        let batches: Vec<&[ChunkMeta]> = if source.is_some() {
+            split_batches(&chunks, entry_budget, threads)
+        } else {
+            vec![&chunks[..]]
+        };
+        let mut slice_iter = slices.into_iter();
+        for (bi, batch) in batches.iter().enumerate() {
+            let mine: Vec<(usize, &mut [f64])> = slice_iter.by_ref().take(batch.len()).collect();
+            let blobs = match &source {
+                Some(src) => Some(fetch_blobs(src, layout, batch, batches.get(bi + 1).copied(), &prof)?),
+                None => None,
+            };
+            let blobs = &blobs;
+            let r: Result<(), String> = py.detach(|| pool.install(|| {
+                batch.par_iter().zip(mine.into_par_iter()).enumerate().map_init(
+                    open_worker,
+                    |conn, (ci, (meta, (a_lo, mine)))| -> Result<(), String> {
+                        let chunk = get_chunk(blobs.as_ref().map(|b| &b[ci]), conn, meta)?;
+                        SCRATCH.with(|sc| OWN.with(|own| {
+                            let (mut sc, mut bk) = (sc.borrow_mut(), own.borrow_mut());
+                            prof.time(&prof.bucket_ns, || bucket(&chunk, brows, n_blocks, &mut sc, &mut bk, kept_ref));
+                            // Block order, stored order within a block: the maps,
+                            // the depth and the operand row `b` stay in cache, and
+                            // each output row's sum runs in stored order.
+                            prof.time(&prof.multiply_ns, || {
+                                for e in 0..bk.val.len() {
+                                    let Some((a, b, r, j)) = map(bk.own[e], bk.other[e]) else { continue };
+                                    let w = weigh(bk.f32_data, bk.val[e], tfidf.as_ref(), r, j);
+                                    let src = &dense_s[b * k..(b + 1) * k];
+                                    let dst = &mut mine[(a - a_lo) * k..(a - a_lo + 1) * k];
+                                    for (d, s) in dst.iter_mut().zip(src) { *d += w * *s; }
+                                }
+                            });
+                        }));
+                        Ok(())
+                    },
+                ).collect::<Result<Vec<()>, String>>().map(|_| ())
+            }));
+            r.map_err(PyValueError::new_err)?;
+        }
     } else {
         // Owner-computes. Batches of chunks in order; each batch bucketed in
         // parallel over chunks, then multiplied in parallel over blocks of
@@ -646,49 +848,39 @@ pub fn svd_pass<'py>(
             blocks.push((lo, mine));
             rest = tail;
         }
-        let budget = if batch_bytes > 0 { batch_bytes } else { BATCH_BYTES };
-        let mut batches: Vec<&[ChunkMeta]> = Vec::new();
-        let mut i = 0;
-        while i < chunks.len() {
-            let mut j = i;
-            let mut bytes = 0usize;
-            while j < chunks.len() {
-                let more = chunks[j].nnz.max(0) as usize * ENTRY_BYTES;
-                let min_par = j - i < threads;
-                if j > i && !min_par && bytes + more > budget { break; }
-                bytes += more;
-                j += 1;
-            }
-            batches.push(&chunks[i..j]);
-            i = j;
-        }
+        let batches = split_batches(&chunks, entry_budget, threads);
         // The batch's bucketed chunks live across batches: cleared and
         // refilled, never reallocated.
         let widest = batches.iter().map(|b| b.len()).max().unwrap_or(0);
         let mut bucketed: Vec<Bucketed> = (0..widest).map(|_| Bucketed::default()).collect();
-        py.detach(|| pool.install(|| {
-            for batch in batches {
+        for (bi, batch) in batches.iter().enumerate() {
+            let blobs = match &source {
+                Some(src) => Some(fetch_blobs(src, layout, batch, batches.get(bi + 1).copied(), &prof)?),
+                None => None,
+            };
+            let blobs = &blobs;
+            let slots = &mut bucketed[..batch.len()];
+            let blocks = &mut blocks;
+            let r: Result<(), String> = py.detach(|| pool.install(|| {
                 // One read transaction per task, not per chunk: twenty
                 // threads each opening a transaction per chunk at the same
                 // instant serialise on the store's locks (measured: the
                 // fetch alone cost ten times what it costs when threads are
                 // out of step). A task takes a contiguous run of chunks.
-                let slots = &mut bucketed[..batch.len()];
                 let per_task = batch.len().div_ceil(threads).max(1);
-                batch.par_chunks(per_task).zip(slots.par_chunks_mut(per_task)).map_init(
-                    || open_ro(&path, snapshot).map_err(|e| e.to_string()),
-                    |conn, (metas, slots)| -> Result<(), String> {
-                        let conn = conn.as_ref().map_err(|e| e.clone())?;
-                        conn.execute_batch("BEGIN").map_err(|e| e.to_string())?;
+                batch.par_chunks(per_task).zip(slots.par_chunks_mut(per_task)).enumerate().map_init(
+                    open_worker,
+                    |conn, (ti, (metas, slots))| -> Result<(), String> {
+                        if let Some(Ok(c)) = conn.as_ref() { c.execute_batch("BEGIN").map_err(|e| e.to_string())?; }
                         let r: Result<(), String> = (|| {
-                            for (meta, slot) in metas.iter().zip(slots.iter_mut()) {
-                                let chunk = prof.time(&prof.read_ns, || read_chunk(conn, &matrix, meta, &dtype, layout, &prof))?;
+                            for (m, (meta, slot)) in metas.iter().zip(slots.iter_mut()).enumerate() {
+                                let chunk = get_chunk(blobs.as_ref().map(|b| &b[ti * per_task + m]), conn, meta)?;
                                 SCRATCH.with(|sc| prof.time(&prof.bucket_ns,
                                     || bucket(&chunk, brows, n_blocks, &mut sc.borrow_mut(), slot, kept_ref)));
                             }
                             Ok(())
                         })();
-                        let _ = conn.execute_batch("COMMIT");
+                        if let Some(Ok(c)) = conn.as_ref() { let _ = c.execute_batch("COMMIT"); }
                         r
                     },
                 ).collect::<Result<Vec<()>, String>>()?;
@@ -706,12 +898,13 @@ pub fn svd_pass<'py>(
                         }
                     });
                 });
-            }
-            Ok(())
-        }))
-    };
-    result.map_err(PyValueError::new_err)?;
-    prof.report(&format!("{} {}", mode, if owned { "owned" } else { "owner-computes" }),
+                Ok(())
+            }));
+            r.map_err(PyValueError::new_err)?;
+        }
+    }
+    prof.report(&format!("{} {}{}", mode, if owned { "owned" } else { "owner-computes" },
+                         if source.is_some() { ", chunks handed over" } else { "" }),
                 nnz_total, t_wall.elapsed().as_secs_f64(), threads);
     Ok(numpy::ndarray::Array2::from_shape_vec((out_rows, k), out).unwrap().into_pyarray(py))
 }

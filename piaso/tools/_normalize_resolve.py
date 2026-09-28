@@ -89,6 +89,11 @@ def _ensure_infog_params(ds, modality, use_cached_stats=True, batch_size=2048):
                 DeprecationWarning, stacklevel=3,
             )
             return legacy
+    if getattr(ds, "read_only", False):
+        # A store opened read-only cannot keep the cache: compute for this call.
+        from ..tools._normalization import _infog_streaming
+        return _infog_streaming(ds, batch_size=batch_size, modality=modality,
+                                write=False)["infog_params"]
     # Cache miss / forced refresh — compute via piaso.tl.infog (streaming, lazy)
     from ..tools._normalization import infog as _infog
     _infog(ds, save_layer=False, streaming=True, batch_size=batch_size, verbosity=0)

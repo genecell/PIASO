@@ -164,14 +164,20 @@ def dataset_info(name: str) -> dict:
 def fetch_dataset(name: str, force: bool = False, data_dir=None) -> Path:
     """Download a tutorial dataset into the PIASO data root.
 
-    Downloads the file if not already cached. Verifies MD5 checksum.
+    Downloads the file if it is not already there. The download goes to a
+    temporary name, its MD5 checksum is verified, and only then is it
+    renamed into place, so a file under its final name is always complete.
+    An existing file is returned as it is, without being read again:
+    a downloaded ``.cytome`` is a working file that analyses write into,
+    and it is never replaced unless ``force=True``.
 
     Parameters
     ----------
     name : str
         Dataset name (e.g., 'sea_ad_mtg_20k', 'mouse_brain_10k_gemx').
     force : bool
-        If True, re-download even if file exists and checksum matches.
+        If True, download again and replace the existing file (only once
+        the new download has passed its checksum).
     data_dir : str or Path, optional
         Store this dataset under ``<data_dir>/datasets/`` instead of the
         default root. Resolution order, most specific wins: this argument,
@@ -192,40 +198,65 @@ def fetch_dataset(name: str, force: bool = False, data_dir=None) -> Path:
     filename = info["filename"]
     datasets_dir = _datasets_dir(data_dir)
     dest = datasets_dir / filename
-
-    # Check cache
-    if not force and dest.exists():
-        expected_md5 = info.get("md5", "")
-        if expected_md5:
-            actual_md5 = _md5_file(dest)
-            if actual_md5 == expected_md5:
-                return dest
-            else:
-                print(f"Checksum mismatch for '{name}', re-downloading...")
-        else:
-            return dest
-
-    # Download
-    datasets_dir.mkdir(parents=True, exist_ok=True)
-    size_mb = info.get("size_bytes", 0) / 1e6
-    print(f"Downloading '{info['title']}' ({size_mb:.1f} MB)...")
-    _download_with_progress(info["url"], dest, info.get("size_bytes", 0))
-
-    # Verify checksum
     expected_md5 = info.get("md5", "")
-    if expected_md5:
-        actual_md5 = _md5_file(dest)
-        if actual_md5 != expected_md5:
-            dest.unlink()
-            raise RuntimeError(
-                f"MD5 checksum mismatch for '{name}'.\n"
-                f"Expected: {expected_md5}\n"
-                f"Got:      {actual_md5}\n"
-                f"The file may be corrupted. Try again with force=True."
-            )
+    expected_size = int(info.get("size_bytes", 0) or 0)
+
+    # A file under its final name was verified before it was renamed there,
+    # so it is used as it is: never re-read to checksum it, never replaced
+    # without force=True. A downloaded store is a working file -- adding an
+    # embedding changes its bytes, and re-downloading over it would destroy
+    # that work. A size that differs from the registry is only reported.
+    if not force and dest.exists():
+        if expected_size and dest.stat().st_size != expected_size and not str(dest).endswith(".cytome"):
+            warnings.warn(
+                f"{dest} is {dest.stat().st_size:,} bytes, the registry says "
+                f"{expected_size:,}. If an earlier download was interrupted, "
+                f"fetch it again with force=True.", UserWarning, stacklevel=2)
+        return dest
+
+    datasets_dir.mkdir(parents=True, exist_ok=True)
+    _remove_stale_partials(datasets_dir, filename)
+    print(f"Downloading '{info['title']}' ({expected_size / 1e6:.1f} MB)...")
+    import tempfile
+    fd, tmp = tempfile.mkstemp(prefix=f".{filename}.", suffix=".part", dir=str(datasets_dir))
+    os.close(fd)
+    tmp = Path(tmp)
+    try:
+        _download_with_progress(info["url"], tmp, expected_size)
+        if expected_md5:
+            actual_md5 = _md5_file(tmp)
+            if actual_md5 != expected_md5:
+                raise RuntimeError(
+                    f"MD5 checksum mismatch for '{name}'.\n"
+                    f"Expected: {expected_md5}\n"
+                    f"Got:      {actual_md5}\n"
+                    f"The download is corrupted and was discarded; "
+                    f"{'the existing file is unchanged; ' if dest.exists() else ''}"
+                    f"try again.")
+        # Atomic on one file system: the final name only ever holds a
+        # complete, verified file.
+        os.replace(tmp, dest)
+    finally:
+        if tmp.exists():
+            tmp.unlink()
 
     print(f"Saved to {dest}")
     return dest
+
+
+def _remove_stale_partials(datasets_dir: Path, filename: str, max_age_s: float = 86400.0) -> None:
+    """Delete ``.<filename>.*.part`` left by a download that was killed.
+
+    Only files older than ``max_age_s`` go, so a download running in another
+    process right now keeps its file."""
+    import time
+    now = time.time()
+    for p in datasets_dir.glob(f".{filename}.*.part"):
+        try:
+            if now - p.stat().st_mtime > max_age_s:
+                p.unlink()
+        except OSError:
+            pass
 
 
 def _warn_if_X_is_not_counts(name: str, info: dict, obj) -> None:

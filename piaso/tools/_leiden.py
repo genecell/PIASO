@@ -1,4 +1,4 @@
-"""Leiden clustering using igraph directly.
+"""Leiden clustering: PIASO's own implementation, in its Rust extension, or igraph's.
 
 Supports both AnnData and cytome.Dataset as input.
 """
@@ -42,24 +42,36 @@ def leiden(
     neighbors_key=None,
     knn_result=None,
     cell_mask=None,
+    backend='auto',
+    n_threads=0,
 ):
-    """Leiden clustering using igraph (no scanpy/leidenalg dependency).
+    """Leiden clustering of the neighbour graph.
 
-    Reads the connectivities matrix and runs the Leiden algorithm
-    via igraph's ``community_leiden()``.
+    Reads the connectivities matrix and runs the Leiden algorithm: PIASO's
+    own implementation, in its Rust extension, or igraph's
+    ``community_leiden()``.
 
     Parameters
     ----------
-    data : AnnData or cytome.Dataset
+    data : AnnData, cytome.Dataset, or the path of a cytome
         If AnnData: reads from obsp, stores in obs.
-        If cytome.Dataset: reads connectivities from cytome graphs, stores in cells.
+        If cytome.Dataset or a path: reads connectivities from cytome graphs,
+        stores in cells.
     resolution : float
-        Resolution parameter controlling cluster granularity.
-    n_iterations : int
-        Number of Leiden iterations.
-    random_state : int
-        Random seed for reproducibility. Sets igraph's internal RNG to ensure
-        deterministic results across repeated calls.
+        Resolution parameter controlling cluster granularity: higher gives
+        more and smaller clusters.
+    n_iterations : int, default 10
+        How many times the whole algorithm runs, each run starting from the
+        partition the one before it ended with. A negative number repeats
+        until a run changes nothing, which with random refinement can take
+        long. More runs raise the modularity a little and make two seeds
+        agree a little more; on 2.3 million cells 2 runs give 96 to 99 % of
+        the partition of 10 in under half the time.
+    random_state : int or None, default 42
+        The seed. With ``backend='rust'`` one graph and one seed give one
+        partition, on any machine and any number of threads; ``None``
+        refines without a random choice. With ``backend='igraph'`` it seeds
+        igraph's generator, and repeated calls on one machine agree.
     key_added : str
         Column name to store cluster labels.
     neighbors_key : str, optional
@@ -78,6 +90,31 @@ def leiden(
     cell_mask : ndarray, optional
         Cytome only: boolean mask or sorted indices of the cells the graph was
         built on with the same mask in ``neighbors``.
+    backend : {'auto', 'rust', 'igraph'}, default 'auto'
+        ``'auto'`` is ``'rust'`` when the extension provides it, else
+        ``'igraph'``. ``'rust'``: PIASO's Leiden, parallel and
+        deterministic. One graph and one ``random_state`` give one
+        partition: the number of threads, the cores of the machine and the
+        layout of the graph in memory do not enter the result. Same
+        objective and the same randomised refinement as igraph, and the
+        same modularity; ``random_state=None`` refines greedily, with no
+        random choice. It releases Python's lock while it runs. The graph
+        must be symmetric, and a directed one is refused. The graph passed
+        in is not modified. Ctrl-C stops a run.
+
+        Everything in PIASO that clusters calls this function, so
+        ``leiden_local`` and ``runGDR`` follow the same backend.
+
+        *Changed in 1.2.6*: ``'rust'`` is the default, and the partitions
+        differ from those of 1.2.5 by about as much as another seed would
+        change them. Pass ``backend='igraph'`` for the partitions of earlier
+        versions.
+    n_threads : int, default 0
+        ``'rust'`` only: threads to use. 0 uses all the cores this process
+        may use (on a cluster: the job's allocation), or the number in the
+        environment variable ``RAYON_NUM_THREADS`` if it is set. The labels
+        are the same for every value. A graph of fewer than 32,768 nodes is
+        clustered on one thread whatever is asked, which is faster there.
 
     Returns
     -------
@@ -94,6 +131,9 @@ def leiden(
         depending on the backend and echoed an array of strings in a
         notebook. Read them from ``adata.obs[key_added]``.
     """
+    # A store that cannot be written fails here, not after the work.
+    from ..utils._cytome_compat import require_writable as _require_writable
+    _require_writable(data, "piaso.tl.leiden")
     # A cytome path is as valid an input as it is for infog / runSVD / runGDR.
     # Without this a pipeline written entirely with a path worked for three
     # calls and then raised "'str' object has no attribute 'obsm'" on the
@@ -102,7 +142,6 @@ def leiden(
         from ._normalization import _open_cytome
         data = _open_cytome(data)
 
-    import igraph as ig
     from ._neighbors import _neighbors_graph_keys
 
     # Resolve the adjacency/connectivities graph name: explicit adjacency_key
@@ -147,6 +186,19 @@ def leiden(
             )
         adj = adj[cell_mask_arr][:, cell_mask_arr]
 
+    if backend == 'auto':
+        try:
+            from .. import _piaso as _ext
+            backend = 'rust' if hasattr(_ext, 'leiden_csr') else 'igraph'
+        except Exception:
+            backend = 'igraph'
+    if backend == 'rust':
+        labels = _leiden_rust(adj, resolution, n_iterations, random_state, n_threads)
+        return _store_labels(data, labels, key_added, cell_mask)
+    if backend != 'igraph':
+        raise ValueError(f"leiden: backend must be 'auto', 'rust' or 'igraph', got {backend!r}")
+    import igraph as ig
+
     # Build undirected igraph graph from sparse adjacency.
     # Our connectivities (from fuzzy_simplicial_set) are symmetric,
     # so we take the upper triangle to build an undirected graph
@@ -182,14 +234,45 @@ def leiden(
         )
 
     labels = np.array(partition.membership, dtype=str)
+    return _store_labels(data, labels, key_added, cell_mask)
 
-    # Numeric-aware category order so the result is "0","1","2",...,"10" rather
-    # than the lexical "0","1","10","11",... that plotters fall back to.
-    _levels = list(dict.fromkeys(labels.tolist()))
+
+def _leiden_rust(adj, resolution, n_iterations, random_state, n_threads=0):
+    """Labels from PIASO's Leiden on a symmetric sparse matrix, as strings."""
+    import scipy.sparse as _sp
+    from .. import _piaso
+    A = _sp.csr_matrix(adj)
+    if A.dtype not in (np.float32, np.float64):
+        A = A.astype(np.float32)
+    if not A.has_canonical_format:
+        # Entries out of order, or one (row, column) stored in pieces whose
+        # sum is what counts: put in order on a copy, never in the caller's
+        # matrix. A matrix already in order is read in place.
+        A = A.copy()
+        A.sum_duplicates()
+    seed = None if random_state is None else int(random_state) & 0xFFFFFFFFFFFFFFFF
+    membership, _q = _piaso.leiden_csr(
+        np.ascontiguousarray(A.indptr, dtype=np.int64),
+        np.ascontiguousarray(A.indices, dtype=np.int32),
+        np.ascontiguousarray(A.data), A.shape[0],
+        float(resolution), int(n_iterations) if int(n_iterations) != 0 else 1, seed=seed,
+        n_threads=int(n_threads))
+    return np.asarray(membership).astype(str)
+
+
+def _label_order(labels) -> list:
+    """Numeric-aware category order, so the result is "0","1","2",...,"10"
+    rather than the lexical "0","1","10","11",... that plotters fall back to."""
+    _levels = list(dict.fromkeys(np.asarray(labels).tolist()))
     try:
-        _order = [str(i) for i in sorted(int(x) for x in _levels)]
+        return [str(i) for i in sorted(int(x) for x in _levels)]
     except (ValueError, TypeError):
-        _order = sorted(_levels)
+        return sorted(_levels)
+
+
+def _store_labels(data, labels, key_added, cell_mask):
+    """Write the labels where the caller expects them, or return them."""
+    _order = _label_order(labels)
 
     # Store results.
     # When cell_mask is set, labels apply to masked cells only —

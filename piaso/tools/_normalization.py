@@ -950,6 +950,9 @@ def infog(
     source, adata
         Deprecated aliases for ``data``; passing either warns.
     """
+    # A store that cannot be written fails here, not after the work.
+    from ..utils._cytome_compat import require_writable as _require_writable
+    _require_writable(data, "piaso.tl.infog")
     data = _resolve_data_arg(data, 'infog', source=source, adata=adata)
     is_cytome = isinstance(data, str) or _is_cytome_dataset(data)
 

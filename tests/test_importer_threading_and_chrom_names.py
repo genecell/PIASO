@@ -76,12 +76,12 @@ def _run(*args):
                           capture_output=True, text=True, timeout=900)
 
 
-def _import(paths, prefixes, out, threads, extra=()):
+def _import(paths, prefixes, out, threads, extra=(), genome="hg38"):
     """Auto-discover mode: no --barcodes, so pass 1 runs."""
     return subprocess.run(
         [str(IMPORTER), "--fragments", *map(str, paths),
          "--fragment-prefixes", prefixes, "--output", str(out),
-         "--genome", "hg38", "--layout", "csr", "--min-fragments", "5",
+         "--genome", str(genome), "--layout", "csr", "--min-fragments", "5",
          "--threads", str(threads), "--chunk-size", "500", *map(str, extra)],
         capture_output=True, text=True, timeout=900)
 
@@ -279,3 +279,47 @@ def test_a_stale_index_is_refused(tmp_path):
              "--threads", "2", "--chunk-size", "500")
     assert r.returncode != 0
     assert "stale" in r.stderr, r.stderr[-2000:]
+
+
+# ── 4. the genome is one table: by name, or by file with its own chromosome names ──
+def _tiles_and_chroms(cytome):
+    con = sqlite3.connect(str(cytome))
+    try:
+        chroms = [r[0] for r in con.execute("SELECT DISTINCT chrom FROM fragment_chunks ORDER BY chrom")]
+        n_tiles = con.execute("SELECT COUNT(*) FROM tiles").fetchone()[0]
+        return chroms, n_tiles
+    finally:
+        con.close()
+
+
+def test_a_primate_genome_imports_by_name(tmp_path):
+    """A macaque run once failed with "Cannot read genome file 'Mmul_10'":
+    only hg38 and mm10 were compiled into the importer. Every genome PIASO
+    knows is now one table shared with `piaso.data.chrom_sizes`."""
+    from piaso.data import chrom_sizes
+    paths, prefixes = _fixture(tmp_path, n_files=2, chroms=["chr1", "chr2", "chr20", "chrX"])
+    out = tmp_path / "mac.cytome"
+    r = _import(paths, prefixes, out, threads=4, genome="Mmul_10", extra=["--tile-size", "500"])
+    assert r.returncode == 0, r.stderr[-3000:]
+    chroms, n_tiles = _tiles_and_chroms(out)
+    assert chroms == ["chr1", "chr2", "chr20", "chrX"]
+    sizes = chrom_sizes("Mmul_10")
+    assert n_tiles == sum(-(-n // 500) for n in sizes.values()) == 5_707_964
+
+
+def test_a_chrom_sizes_file_keeps_lettered_chromosomes(tmp_path):
+    """A reference that spells a chromosome `chr2A` (chimpanzee, gorilla) must
+    keep its fragments: the allowlist is the genome's table, not a literal
+    chr1..chr22 list, and a file is reduced by name (no `_`, no chrUn, no chrM)."""
+    sizes = tmp_path / "panTro.chrom.sizes"
+    sizes.write_text("chr1\t1000000\nchr2A\t900000\nchr2B\t800000\nchrX\t700000\n"
+                     "chrM\t16000\nchrUn_NW_1\t5000\nchr1_random\t4000\n")
+    paths, prefixes = _fixture(tmp_path, n_files=2, chroms=["chr1", "chr2A", "chr2B", "chrX", "chrM"])
+    out = tmp_path / "pan.cytome"
+    r = _import(paths, prefixes, out, threads=4, genome=sizes, extra=["--tile-size", "500"])
+    assert r.returncode == 0, r.stderr[-3000:]
+    chroms, n_tiles = _tiles_and_chroms(out)
+    assert chroms == ["chr1", "chr2A", "chr2B", "chrX"], "chr2A/chr2B kept, chrM dropped"
+    assert n_tiles == (1000000 + 900000 + 800000 + 700000) // 500
+    # chrM fragments are reported as dropped, not silently lost
+    assert "chrM" in r.stderr, r.stderr[-2000:]

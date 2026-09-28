@@ -344,7 +344,7 @@ def _get_expression_data_cytome(
 
     # Discover which features are obs/cells columns (cheap path) and which
     # require matrix lookup.
-    with _open_cytome(source) as ds:
+    with _open_cytome(source, mode="r") as ds:
         cells_cols = set(ds.cells.columns)
     cells_feats = [f for f in features if f in cells_cols]
     matrix_feats = [f for f in features if f not in cells_cols]
@@ -374,7 +374,7 @@ def _get_expression_data_cytome(
 
     if matrix_feats:
         from ._plotEmbedding import _resolve_cytome_feature_values_batch
-        with _open_cytome(source) as ds:
+        with _open_cytome(source, mode="r") as ds:
             # ONE streaming pass for all genes (was one pass per gene — the slow
             # path for many markers). Numerically identical to per-feature reads.
             batched = _resolve_cytome_feature_values_batch(

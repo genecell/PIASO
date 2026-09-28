@@ -40,6 +40,90 @@ from ..utils._cytome_compat import open_cytome_sync as _open_cytome
 from typing import Sequence
 
 
+def _leiden_local_group(ds, gmask, g, sub, *, modality, measurement, select,
+                        max_nnz_percentile, n_components, svd_method, n_iter, tol,
+                        n_neighbors, batch_size, random_state, resolution, n_threads=0,
+                        backend='auto'):
+    """Cluster one coarse group in its own space.
+
+    ``sub`` is the group's own store (from ``ds.split``), holding only its
+    cells and the matrix being clustered; it is embedded and clustered here
+    and closed at the end. Returns ``(labels, n_selected)``: the sub-labels
+    ``<g>-<k>`` of the group's cells in the parent's order, or ``None`` for
+    the labels when the group is too degenerate to embed and should stay one
+    sub-cluster.
+    """
+    import os
+    from ._runTFIDF import compute_tfidf_stats
+    try:
+        from ..preprocessing._selectPeaks import selectPeaks
+    except ImportError:
+        selectPeaks = None
+
+    peak_like = modality in ("ATAC", "tiles")
+    matrix = f"{modality}_{measurement}"
+    n_g = int(np.asarray(gmask).sum())
+    try:
+        svd_kw = dict(modality=modality, measurement=measurement, streaming=True,
+                      key_added="X_svd", method=svd_method, n_iter=n_iter, tol=tol,
+                      random_state=random_state, batch_size=batch_size, verbosity=0,
+                      n_threads=n_threads)
+        if select and peak_like and selectPeaks is not None:
+            # 1) per-group peak selection (20% cumulative-nnz, as the pipeline)
+            selectPeaks(sub,
+                        max_cumulative_nnz_percentile=max_nnz_percentile,
+                        measurement=measurement, modality=modality,
+                        key_added="highly_variable", verbose=False)
+            selected = np.asarray(_read_selected_mask(sub, modality), dtype=bool)
+            n_sel = int(selected.sum())
+            nc = int(min(n_components, n_g - 1, max(n_sel - 1, 1)))
+            if nc < 2 or n_sel < 2:
+                return None, n_sel
+            # 2) TF-IDF statistics + 3) streaming SVD on the selected peaks
+            tfidf_stats = compute_tfidf_stats(sub, measurement=measurement, modality=modality)
+            tfidf_stats["col_mask"] = selected
+            runSVD(sub, tfidf_params=tfidf_stats, n_components=nc, **svd_kw)
+        else:
+            use_hv = False
+            if select:
+                try:
+                    hv = np.asarray(_read_selected_mask(sub, modality), dtype=bool)
+                    use_hv = bool(hv.any())
+                except Exception:
+                    use_hv = False
+            n_feat = int(sub._conn.execute(
+                "SELECT n_cols FROM matrix_meta WHERE matrix_name=?", (matrix,)).fetchone()[0])
+            n_sel = int(hv.sum()) if use_hv else n_feat
+            nc = int(min(n_components, n_g - 1, max(n_sel - 1, 1)))
+            if nc < 2:
+                return None, n_sel
+            runSVD(sub, use_highly_variable=use_hv, n_components=nc, **svd_kw)
+
+        # 4) neighbours + 5) Leiden in the group's own space. modality is
+        # passed on: the embedding was stored under it.
+        _piaso_neighbors(sub, use_rep="X_svd", modality=modality,
+                         n_neighbors=min(n_neighbors, n_g - 1),
+                         random_state=random_state, key_added="neighbors")
+        # Private, case-collision-proof key: the subset inherits the
+        # parent's cell columns, and SQLite columns are case-insensitive,
+        # so writing 'leiden_local' beside an existing 'Leiden_local'
+        # would land in it.
+        _sub_key = "_piaso_ll_subleiden"
+        _piaso_leiden(sub, resolution=resolution, key_added=_sub_key,
+                      random_state=random_state, n_iterations=10,
+                      adjacency_key="connectivities", backend=backend, n_threads=n_threads)
+        sub_labels = np.asarray(sub.cells[_sub_key]).astype("U")
+        sub_bc = np.asarray(sub.cells["barcode"], dtype=object)
+        lab_map = {b: f"{g}-{lab}" for b, lab in zip(sub_bc, sub_labels)}
+        parent_bc = np.asarray(ds.cells["barcode"], dtype=object)[np.asarray(gmask)]
+        return np.array([lab_map[b] for b in parent_bc], dtype=object), n_sel
+    finally:
+        try:
+            sub.close()
+        except Exception:
+            pass
+
+
 def _leiden_local_cytome_streaming_svd(
     ds,
     groupby: str,
@@ -59,12 +143,14 @@ def _leiden_local_cytome_streaming_svd(
     random_state: int = 10,
     min_cells: int = 20,
     verbose: bool = True,
+    n_threads: int = 0,
+    backend: str = 'auto',
 ):
     """Streaming, RAM-bounded `leiden_local` on a cytome, one group at a time.
 
     Each coarse group is **subset to its own cytome** carrying only the
-    matrix being clustered (peak RAM about one chunk, never the whole
-    matrix), and re-embedded in its own space:
+    matrix being clustered and its feature table (peak RAM about one chunk,
+    never the whole matrix), and re-embedded in its own space:
 
     - ATAC / tiles with ``select``: ``selectPeaks`` by cumulative non-zeros
       -> TF-IDF -> randomized SVD -> neighbours -> Leiden (``dr_method='X_svd'``).
@@ -77,11 +163,13 @@ def _leiden_local_cytome_streaming_svd(
     Sub-labels are ``<group>-<k>`` in ``ds.cells[key_added]``. A group with
     fewer than ``min_cells`` cells, or one whose chain fails, is kept as
     one sub-cluster ``<group>-0`` (the failure with a ``RuntimeWarning``).
+
+    All groups' stores are written in one scan of the matrix (``ds.split``);
+    the groups are then clustered one at a time, each store removed when its
+    group is done.
     """
-    import os
     import tempfile
     import warnings
-    from ._runTFIDF import compute_tfidf_stats
     try:
         from ..preprocessing._selectPeaks import selectPeaks
     except ImportError:
@@ -91,110 +179,78 @@ def _leiden_local_cytome_streaming_svd(
         selectPeaks = None
 
     peak_like = modality in ("ATAC", "tiles")
-    matrix = f"{modality}_{measurement}"
     if select and peak_like and selectPeaks is None and verbose:
         print("  [leiden_local] per-group peak selection is not available in this build; "
               "each group uses its stored 'highly_variable' selection, or every feature")
     coarse = np.asarray(ds.cells[groupby]).astype("U")
-    all_bc = np.asarray(ds.cells["barcode"], dtype=object)
     if groups is None:
         groups = np.unique(coarse)
     # object dtype -- a fixed-width "<U1" (from a single-char coarse label)
     # would silently TRUNCATE the prefixed sub-labels ("A-3" -> "A").
     result = coarse.astype(object)
+    params = dict(modality=modality, measurement=measurement, select=bool(select),
+                  max_nnz_percentile=max_nnz_percentile, n_components=n_components,
+                  svd_method=svd_method, n_iter=n_iter, tol=tol, n_neighbors=n_neighbors,
+                  batch_size=batch_size, random_state=random_state, resolution=resolution,
+                  n_threads=n_threads, backend=backend)
+
+    todo = []
+    for g in groups:
+        n_g = int((coarse == str(g)).sum())
+        if n_g == 0:
+            continue
+        if n_g < max(min_cells, 3):
+            result[coarse == str(g)] = [f"{g}-0"] * n_g
+            if verbose:
+                print(f"  [leiden_local] group {g}: {n_g} cells (<{min_cells}) -> single sub-cluster")
+            continue
+        todo.append((str(g), n_g))
+
+    def on_done(g, labels, n_sel, error):
+        gmask = coarse == g
+        n_g = int(gmask.sum())
+        if error is not None:
+            warnings.warn(
+                f"leiden_local: group {g} failed ({error}); "
+                f"keeping it as a single sub-cluster.", RuntimeWarning, stacklevel=3)
+            result[gmask] = [f"{g}-0"] * n_g
+        elif labels is None:
+            result[gmask] = [f"{g}-0"] * n_g
+            if verbose:
+                print(f"  [leiden_local] group {g}: n_sel={n_sel} -> single sub-cluster")
+        else:
+            result[gmask] = labels
+            if verbose:
+                print(f"  [leiden_local] group {g}: {n_g} cells, {n_sel} features -> "
+                      f"{len(set(labels))} sub-clusters")
 
     tmpdir = tempfile.mkdtemp(prefix="leiden_local_")
     try:
-        for gi, g in enumerate(groups):
-            gmask = (coarse == str(g))
-            n_g = int(gmask.sum())
-            if n_g == 0:
-                continue
-            if n_g < max(min_cells, 3):
-                result[gmask] = [f"{g}-0"] * n_g
-                if verbose:
-                    print(f"  [leiden_local] group {g}: {n_g} cells (<{min_cells}) -> single sub-cluster")
-                continue
-
-            sub_path = os.path.join(tmpdir, f"g{gi}.cytome")
-            sub = ds.subset(gmask, output=sub_path, matrices=[matrix],
-                            include_fragments=False, include_embeddings=False)
+        import os
+        # Every group's store in one scan of the matrix (``split``); older
+        # cytomes without it make them one at a time.
+        outputs = {g: os.path.join(tmpdir, f"g{gi}.cytome") for gi, (g, _n) in enumerate(todo)}
+        matrix = f"{modality}_{measurement}"
+        if hasattr(ds, "split") and todo:
+            stores = ds.split(coarse, outputs, [matrix], include_fragments=False,
+                                 include_embeddings=False)
+        else:
+            stores = None
+        for g, _n in todo:
             try:
-                svd_kw = dict(modality=modality, measurement=measurement, streaming=True,
-                              key_added="X_svd", method=svd_method, n_iter=n_iter, tol=tol,
-                              random_state=random_state, batch_size=batch_size, verbosity=0)
-                if select and peak_like and selectPeaks is not None:
-                    # 1) per-group peak selection (20% cumulative-nnz, as the pipeline)
-                    selectPeaks(sub, streaming=True,
-                                max_cumulative_nnz_percentile=max_nnz_percentile,
-                                measurement=measurement, modality=modality,
-                                key_added="highly_variable", verbose=False)
-                    selected = np.asarray(_read_selected_mask(sub, modality), dtype=bool)
-                    n_sel = int(selected.sum())
-                    nc = int(min(n_components, n_g - 1, max(n_sel - 1, 1)))
-                    if nc < 2 or n_sel < 2:
-                        result[gmask] = [f"{g}-0"] * n_g
-                        if verbose:
-                            print(f"  [leiden_local] group {g}: n_sel={n_sel}, nc={nc} -> single sub-cluster")
-                        continue
-                    # 2) TF-IDF statistics + 3) streaming SVD on the selected peaks
-                    tfidf_stats = compute_tfidf_stats(sub, measurement=measurement, modality=modality)
-                    tfidf_stats["col_mask"] = selected
-                    runSVD(sub, tfidf_params=tfidf_stats, n_components=nc, **svd_kw)
-                else:
-                    use_hv = False
-                    if select:
-                        try:
-                            hv = np.asarray(_read_selected_mask(sub, modality), dtype=bool)
-                            use_hv = bool(hv.any())
-                        except Exception:
-                            use_hv = False
-                    n_feat = int(sub._conn.execute(
-                        "SELECT n_cols FROM matrix_meta WHERE matrix_name=?", (matrix,)).fetchone()[0])
-                    n_sel = int(hv.sum()) if use_hv else n_feat
-                    nc = int(min(n_components, n_g - 1, max(n_sel - 1, 1)))
-                    if nc < 2:
-                        result[gmask] = [f"{g}-0"] * n_g
-                        continue
-                    runSVD(sub, use_highly_variable=use_hv, n_components=nc, **svd_kw)
-
-                # 4) neighbours + 5) Leiden in the group's own space. modality is
-                # passed on: the embedding was stored under it.
-                _piaso_neighbors(sub, use_rep="X_svd", modality=modality,
-                                 n_neighbors=min(n_neighbors, n_g - 1),
-                                 random_state=random_state, key_added="neighbors")
-                # Private, case-collision-proof key: the subset inherits the
-                # parent's cell columns, and SQLite columns are case-insensitive,
-                # so writing 'leiden_local' beside an existing 'Leiden_local'
-                # would land in it.
-                _sub_key = "_piaso_ll_subleiden"
-                _piaso_leiden(sub, resolution=resolution, key_added=_sub_key,
-                              random_state=random_state, n_iterations=10,
-                              adjacency_key="connectivities")
-                sub_labels = np.asarray(sub.cells[_sub_key]).astype("U")
-                sub_bc = np.asarray(sub.cells["barcode"], dtype=object)
-                lab_map = {b: f"{g}-{lab}" for b, lab in zip(sub_bc, sub_labels)}
-                result[gmask] = [lab_map[b] for b in all_bc[gmask]]
-                if verbose:
-                    print(f"  [leiden_local] group {g}: {n_g} cells, {n_sel} features -> "
-                          f"{len(set(sub_labels))} sub-clusters")
+                sub = stores.pop(g) if stores is not None else ds.subset(
+                    coarse == g, output=outputs[g], matrices=[matrix],
+                    include_fragments=False, include_embeddings=False)
+                labels, n_sel = _leiden_local_group(ds, coarse == g, g, sub, **params)
+                on_done(g, labels, n_sel, None)
             except Exception as exc:  # one bad group must not kill the run
-                warnings.warn(
-                    f"leiden_local: group {g} failed ({type(exc).__name__}: {exc}); "
-                    f"keeping it as a single sub-cluster.", RuntimeWarning, stacklevel=2)
-                result[gmask] = [f"{g}-0"] * n_g
+                on_done(g, None, 0, f"{type(exc).__name__}: {exc}")
             finally:
-                try:
-                    sub.close()
-                except Exception:
-                    pass
                 for suf in ("", "-wal", "-shm"):
-                    fp = sub_path + suf
-                    if os.path.exists(fp):
-                        try:
-                            os.remove(fp)
-                        except Exception:
-                            pass
+                    try:
+                        os.remove(outputs[g] + suf)
+                    except OSError:
+                        pass
     finally:
         import shutil
         shutil.rmtree(tmpdir, ignore_errors=True)
@@ -299,6 +355,8 @@ def leiden_local(
     random_state: int = 10,
     min_cells: int = 20,
     verbosity: int = 1,
+    n_threads: int = 0,
+    backend: str = 'auto',
 ):
     """Leiden clustering within each group of a coarse clustering.
 
@@ -381,6 +439,11 @@ def leiden_local(
         sub-cluster ``<group>-0`` rather than re-embedded.
     verbosity : int, default 1
         ``1`` reports each group's outcome.
+    n_threads : int, default 0
+        Threads for each group's SVD and Leiden; 0 uses all the cores this
+        process may use. The labels do not depend on it.
+    backend : {'auto', 'rust', 'igraph'}, default 'auto'
+        The Leiden of every group, as in :func:`piaso.tl.leiden`.
 
     Returns
     -------
@@ -395,6 +458,9 @@ def leiden_local(
     so one bad group does not lose the run; a result full of ``-0`` labels
     is the sign to read the warnings.
     """
+    # A store that cannot be written fails here, not after the work.
+    from ..utils._cytome_compat import require_writable as _require_writable
+    _require_writable(adata, "piaso.tl.leiden_local")
     if clustering_type not in {'each', 'all'}:
         raise ValueError(f"Invalid value for clustering_type: '{clustering_type}'. "
                          "Allowed values are 'each' or 'all'.")
@@ -414,7 +480,7 @@ def leiden_local(
             select=(dr_method == 'X_svd'), max_nnz_percentile=max_nnz_percentile,
             n_components=n_components, svd_method=svd_method, n_iter=n_iter, tol=svd_tol,
             n_neighbors=n_neighbors, batch_size=batch_size, random_state=random_state,
-            min_cells=min_cells, verbose=verbose,
+            min_cells=min_cells, verbose=verbose, n_threads=n_threads, backend=backend,
         )
 
     # --- Cytome, other methods: convert, run, write back ---
@@ -439,7 +505,7 @@ def leiden_local(
                                svd_method, n_iter, svd_tol, random_state, verbosity, said)
         knn = _piaso_neighbors(adata_i, use_rep=use_rep, n_neighbors=n_neighbors, random_state=random_state)
         _piaso_leiden(adata_i, resolution=resolution, key_added='leiden_local', knn_result=knn,
-                      random_state=random_state)
+                      random_state=random_state, backend=backend, n_threads=n_threads)
         labels = adata_i.obs['leiden_local'].astype(str)
         width = max(len(x) for x in labels)          # equal-width numbers
         existing_groups[group_idx] = [f"{prefix}-{x.zfill(width)}" for x in labels]

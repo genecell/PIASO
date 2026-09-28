@@ -120,6 +120,12 @@ class EngineOps:
         Rayon threads for the pass; ``0`` uses every core. The result does
         not depend on it: the engine sums every output element in one fixed
         order whatever the thread count.
+    source
+        A chunk source for a store this process holds open (``ds.chunk_source``):
+        the engine computes on the blobs it hands over and never opens the
+        file. ``path`` and ``snapshot`` are then unused. Without it the
+        engine opens the store itself, which is right only when no
+        connection of this process holds it (the command-line tools).
     snapshot
         Read the store with no file locks (SQLite ``immutable``). Only
         after :func:`snapshot_store` has emptied the write-ahead log and
@@ -129,18 +135,26 @@ class EngineOps:
 
     def __init__(self, path, matrix_name, n_rows_matrix, n_cols_matrix,
                  col_mask=None, row_keep=None, tfidf=None,
-                 n_threads=0, snapshot=False):
+                 n_threads=0, snapshot=False, source=None):
         from .. import _piaso
         self._pass = _piaso.svd_pass
+        self._pass_source = getattr(_piaso, "svd_pass_source", None)
         self.path = str(path)
         self.snapshot = bool(snapshot)
         self.matrix_name = matrix_name
+        self.source = source
+        if source is not None and self._pass_source is None:
+            raise RuntimeError("piaso._piaso has no svd_pass_source; rebuild the extension")
         # Which layout the pass will take, decided in Rust by the size of the
         # buffer the scattered product writes into (see svd_pass.rs). Kept
         # here so the caller can say so, and can tell a user with a row-major
         # peak matrix what a column-major store would buy.
         try:
-            lay, has_csr, has_csc, _nr, _nc = _piaso.svd_layout(self.path, matrix_name)
+            if source is not None:
+                _nr, _nc, _dt, has_csr, has_csc = source.meta()
+                lay = _piaso.svd_layout_rule(_nr, _nc, has_csr, has_csc)
+            else:
+                lay, has_csr, has_csc, _nr, _nc = _piaso.svd_layout(self.path, matrix_name, snapshot=self.snapshot)
             self.layout, self.has_csr, self.has_csc = lay, bool(has_csr), bool(has_csc)
         except Exception:
             self.layout, self.has_csr, self.has_csc = "auto", None, None
@@ -187,6 +201,15 @@ class EngineOps:
             self.passes += 1
 
     def _pass_raw(self, mode, dense):
+        if self.source is not None:
+            return self._pass_source(
+                self.source, mode,
+                np.ascontiguousarray(dense, dtype=np.float64),
+                self.remap, self.n_cols,
+                self.row_map, self.n_rows,
+                self.depth, self.idf, self.scale,
+                self.n_threads,
+            )
         return self._pass(
             self.path, self.matrix_name, mode,
             np.ascontiguousarray(dense, dtype=np.float64),

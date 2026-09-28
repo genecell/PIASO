@@ -105,7 +105,7 @@ def test_rna_cytome_with_a_materialised_infog_layer_streams_per_group(tmp_path, 
 
 def test_x_svd_full_streams_with_every_feature_and_the_subset_carries_one_matrix(tmp_path, capsys, monkeypatch):
     """'X_svd_full' is not an alias: every feature, values as stored. And the
-    per-group subset asks for the one matrix it clusters."""
+    per-group stores (one split of the whole store) carry the one matrix it clusters."""
     import piaso
     import cytome
     rng = np.random.default_rng(2)
@@ -116,11 +116,11 @@ def test_x_svd_full_streams_with_every_feature_and_the_subset_carries_one_matrix
     Y = (rng.random((X.shape[0], 50)) < 0.2).astype(np.float32)
     ds = _store(tmp_path / "full.cytome", X, "ATAC", extra_matrix=("tiles_counts", Y, ("tiles", tiles)))
     seen = []
-    real_subset = cytome.CytomeDataset.subset
-    def spy(self, mask, output=None, **kw):
-        seen.append(kw.get("matrices"))
-        return real_subset(self, mask, output=output, **kw)
-    monkeypatch.setattr(cytome.CytomeDataset, "subset", spy)
+    real_split = cytome.CytomeDataset.split
+    def spy(self, labels, outputs, matrices, **kw):
+        seen.append(list(matrices))
+        return real_split(self, labels, outputs, matrices, **kw)
+    monkeypatch.setattr(cytome.CytomeDataset, "split", spy)
     piaso.tl.leiden_local(ds, groupby="coarse", modality="ATAC", dr_method="X_svd_full",
                           resolution=1.0, n_components=10, min_cells=10, verbosity=1)
     out = capsys.readouterr().out

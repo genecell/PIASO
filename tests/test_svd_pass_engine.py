@@ -239,3 +239,46 @@ def test_the_aitken_guard_does_not_stop_a_crawling_iteration():
     ok, crit = _converged(crawl, 1e-2)
     assert ok is False and crit > 1e-2
     assert _converged(crawl[:2], 1e-2) == (False, None)
+
+
+def test_runSVD_keeps_the_datasets_lock_and_survives_large_writes(store):
+    """The engine must never open a store this process's Python connection
+    holds: a second SQLite in the process resets the shared-memory index the
+    connection has mapped (SIGBUS on a later large commit, seen in
+    leiden_local on a macaque store), and closing its file handle drops the
+    connection's locks (another process may then delete the log). runSVD
+    hands the engine the chunks instead. Here another process has had the
+    store open and left; runSVD runs, and afterwards the store is still
+    locked by this process and large writes through the same handle work."""
+    import fcntl, struct, subprocess, sys, textwrap, piaso
+    path, X, depth, idf, mask = store
+    ds = cytome.open(path)
+    ds.features("ATAC")["selected"] = mask
+    ds.metadata["pad"] = list(range(10_000)); ds.flush()
+    holder = subprocess.Popen([sys.executable, "-c", textwrap.dedent(f"""
+        import sqlite3, time
+        c = sqlite3.connect({str(path)!r}); c.execute("BEGIN"); c.execute("SELECT count(*) FROM matrix_meta").fetchone()
+        print("held", flush=True); time.sleep(60)""")], stdout=subprocess.PIPE, text=True)
+    probe = textwrap.dedent(r'''
+        import fcntl, os, struct, sys
+        fd = os.open(sys.argv[1], os.O_RDWR)
+        r = fcntl.fcntl(fd, fcntl.F_GETLK, struct.pack("hhqqi", fcntl.F_WRLCK, 0, 0x40000002, 510, 0))
+        os.close(fd)
+        print("free" if struct.unpack("hhqqi", r)[0] == fcntl.F_UNLCK else f"held {struct.unpack('hhqqi', r)[4]}")
+    ''')
+    try:
+        assert holder.stdout.readline().strip() == "held"
+        holder.kill(); holder.wait()          # only this process holds the store now
+        ds.metadata["after_reader"] = list(range(10_000)); ds.flush()
+        piaso.tl.runSVD(ds, modality="ATAC", measurement="counts", streaming=True, auto_tfidf=True,
+                        n_components=4, n_iter=4, random_state=10, key_added="X_src", verbosity=0)
+        lock = subprocess.run([sys.executable, "-c", probe, str(path)], capture_output=True,
+                              text=True, check=True).stdout.strip()
+        import os
+        assert lock == f"held {os.getpid()}", lock
+        for i in range(3):                                            # > the WAL index's first page
+            ds.metadata[f"big{i}"] = list(range(1_500_000)); ds.flush()
+        from piaso.tools._embedding_names import storage_name
+        assert np.asarray(ds.embeddings[storage_name("X_src", "ATAC")]).shape == (X.shape[0], 4)
+    finally:
+        holder.kill(); ds.close()

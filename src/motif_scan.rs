@@ -1,4 +1,4 @@
-//! PWM motif scanning hot loop (rayon-parallel over motifs).
+//! PWM motif scanning hot loop (parallel over motifs, on a pool of its own).
 //!
 //! Deliberately minimal: the Python wrapper (`piaso/grn/_scan_rust.py`) computes
 //! the log-odds PSSMs, the per-motif score thresholds (DP p-value or relative),
@@ -33,7 +33,12 @@ use rayon::prelude::*;
 /// Returns `(best_score [n_pssm, n_seq] f32, hit_count [n_pssm, n_seq] i32)`.
 /// `best_score` is `f32::NAN` where a sequence is shorter than the motif, else the
 /// max window score seen — the wrapper gates the cistrome via `hit_count`.
+/// `n_threads` — 0 (default): RAYON_NUM_THREADS, else the cores this process
+/// may use. The scan runs on a pool of its own with Python's lock released,
+/// so it is safe after a fork, other Python threads run meanwhile, and
+/// Ctrl-C stops it within about 1,024 sequences of one motif.
 #[pyfunction]
+#[pyo3(signature = (pssms, widths, thresholds, seq_codes, seq_offsets, n_threads=0))]
 pub fn scan_motifs_fwd<'py>(
     py: Python<'py>,
     pssms: Vec<f64>,
@@ -41,66 +46,97 @@ pub fn scan_motifs_fwd<'py>(
     thresholds: Vec<f64>,
     seq_codes: Vec<u8>,
     seq_offsets: Vec<usize>,
+    n_threads: usize,
 ) -> PyResult<(Bound<'py, PyArray2<f32>>, Bound<'py, PyArray2<i32>>)> {
     let n_pssm = widths.len();
     let n_seq = seq_offsets.len().saturating_sub(1);
 
-    // Byte offset (in f64 elements) of each PSSM block: 5 rows * w each.
+    // Offset (in f64 elements) of each PSSM block: 5 rows * w each.
     let mut offsets = Vec::with_capacity(n_pssm);
     let mut acc = 0usize;
     for &w in &widths {
         offsets.push(acc);
         acc += 5 * w;
     }
+    if acc > pssms.len() || thresholds.len() < n_pssm
+        || seq_offsets.last().copied().unwrap_or(0) > seq_codes.len() {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "scan_motifs_fwd: pssms, thresholds or seq_offsets do not match widths and seq_codes"));
+    }
+    if seq_codes.iter().any(|&c| c > 4) {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "scan_motifs_fwd: seq_codes must be 0..=4 (A, C, G, T, N)"));
+    }
 
-    // Parallel over PSSMs; each produces a row of length n_seq for best + count.
-    let rows: Vec<(Vec<f32>, Vec<i32>)> = (0..n_pssm)
-        .into_par_iter()
-        .map(|p| {
-            let w = widths[p];
-            let off = offsets[p];
-            let thr = thresholds[p];
-            let pssm = &pssms[off..off + 5 * w];
-            let mut best_row = vec![f32::NAN; n_seq];
-            let mut cnt_row = vec![0i32; n_seq];
-            for si in 0..n_seq {
-                let seq = &seq_codes[seq_offsets[si]..seq_offsets[si + 1]];
-                let n = seq.len();
-                if n < w {
-                    continue;
-                }
-                let mut best = f64::NEG_INFINITY;
-                let mut cnt = 0i32;
-                for pos in 0..=(n - w) {
-                    let mut score = 0.0f64;
-                    for j in 0..w {
-                        let c = seq[pos + j] as usize; // 0..=4
-                        // pssm row-major: row c, column j  -> c*w + j
-                        score += pssm[c * w + j];
-                    }
-                    if score > best {
-                        best = score;
-                    }
-                    if score >= thr {
-                        cnt += 1;
-                    }
-                }
-                if best > f64::NEG_INFINITY {
-                    best_row[si] = best as f32;
-                }
-                cnt_row[si] = cnt;
-            }
-            (best_row, cnt_row)
-        })
-        .collect();
+    // The output is written in place, one row per PSSM: the rows are never
+    // held a second time (8 bytes per motif and sequence saved at the end).
+    let mut best = vec![f32::NAN; n_pssm * n_seq];
+    let mut count = vec![0i32; n_pssm * n_seq];
+    let (pssms, thresholds, seq_codes, seq_offsets) = (&pssms, &thresholds, &seq_codes, &seq_offsets);
+    let (widths_r, offsets_r) = (&widths, &offsets);
+    let (best_r, count_r) = (&mut best, &mut count);
+    crate::threads::run_released(py, "scan_motifs_fwd", n_threads, move |cancel| {
+        best_r
+            .par_chunks_mut(n_seq.max(1))
+            .zip(count_r.par_chunks_mut(n_seq.max(1)))
+            .enumerate()
+            .for_each(|(p, (best_row, cnt_row))| {
+                let w = widths_r[p];
+                scan_row(&pssms[offsets_r[p]..offsets_r[p] + 5 * w], w, thresholds[p],
+                         seq_codes, seq_offsets, best_row, cnt_row, cancel);
+            });
+    })?;
 
-    let mut best = Array2::<f32>::from_elem((n_pssm, n_seq), f32::NAN);
-    let mut count = Array2::<i32>::zeros((n_pssm, n_seq));
-    for (p, (br, cr)) in rows.into_iter().enumerate() {
-        for s in 0..n_seq {
-            best[[p, s]] = br[s];
-            count[[p, s]] = cr[s];
+    let best = Array2::from_shape_vec((n_pssm, n_seq), best)
+        .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
+    let count = Array2::from_shape_vec((n_pssm, n_seq), count)
+        .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
+    Ok((best.into_pyarray(py), count.into_pyarray(py)))
+}
+
+/// One PSSM against every sequence, into its output row.
+///
+/// The PSSM is copied position-major (5 scores per position) so a window is
+/// scored by walking it and the columns together, with no index arithmetic
+/// or bounds checks in the inner loop. The terms are added in the same order
+/// as before, so the scores are identical to the bit. The indexed loop it
+/// replaces ran at 10 s or 13.6 s on the same input depending on unrelated
+/// code elsewhere in the library.
+#[allow(clippy::too_many_arguments)]
+fn scan_row(pssm: &[f64], w: usize, thr: f64, seq_codes: &[u8], seq_offsets: &[usize],
+            best_row: &mut [f32], cnt_row: &mut [i32], cancel: &std::sync::atomic::AtomicBool) {
+    // pssm is row-major 5 x w (row = base A,C,G,T,N; column = position)
+    let mut cols = vec![[0.0f64; 5]; w];
+    for (j, col) in cols.iter_mut().enumerate() {
+        for (c, v) in col.iter_mut().enumerate() {
+            *v = pssm[c * w + j];
         }
     }
-    Ok((best.into_pyarray(py), count.into_pyarray(py)))
+    for si in 0..best_row.len() {
+        if si % 1024 == 0 && cancel.load(std::sync::atomic::Ordering::Relaxed) {
+            return;
+        }
+        let seq = &seq_codes[seq_offsets[si]..seq_offsets[si + 1]];
+        if seq.len() < w {
+            continue;
+        }
+        let mut best = f64::NEG_INFINITY;
+        let mut cnt = 0i32;
+        for window in seq.windows(w) {
+            let mut score = 0.0f64;
+            for (col, &c) in cols.iter().zip(window) {
+                score += col[(c as usize).min(4)];
+            }
+            if score > best {
+                best = score;
+            }
+            if score >= thr {
+                cnt += 1;
+            }
+        }
+        if best > f64::NEG_INFINITY {
+            best_row[si] = best as f32;
+        }
+        cnt_row[si] = cnt;
+    }
 }

@@ -50,7 +50,7 @@ def _get_feature_values(
         df_cols = [groupby] if groupby else []
         df = _read_cells_columns(data, df_cols) if df_cols else None
 
-        with _open_cytome(data) as ds:
+        with _open_cytome(data, mode="r") as ds:
             cells_cols = list(ds.cells.columns)
         if feature in cells_cols:
             extra = _read_cytome_features(data, [feature], groupby)
@@ -58,7 +58,7 @@ def _get_feature_values(
             if df is None:
                 df = extra
         else:
-            with _open_cytome(data) as ds:
+            with _open_cytome(data, mode="r") as ds:
                 values, _ = _resolve_cytome_feature_values(
                     ds, feature,
                     modality=modality, cytome_layer=cytome_layer,

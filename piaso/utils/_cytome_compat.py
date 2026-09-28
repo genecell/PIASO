@@ -140,16 +140,48 @@ def _is_cytome_dataset_obj(obj) -> bool:
     return False
 
 
+def require_writable(target, what: str) -> None:
+    """Fail now if ``target``, a cytome dataset or path, cannot be written.
+
+    Called first by functions that compute before they write, so a store
+    opened read-only (or a read-only file) fails in a second instead of at the
+    end of the run. AnnData passes, as does a cytome older than 0.3.6, which
+    has no read-only mode.
+    """
+    try:
+        import cytome
+    except ImportError:
+        return
+    check = getattr(cytome, "require_writable", None)
+    if check is not None:
+        check(target, what)
+
+
+def _open_path(path, mode: str = "r+"):
+    """``cytome.open(path, mode=mode)``; a cytome older than 0.3.6 has no
+    ``mode`` and opens for writing, as it always did."""
+    import cytome
+    if mode == "r+":
+        return cytome.open(os.fspath(path))
+    try:
+        return cytome.open(os.fspath(path), mode=mode)
+    except TypeError:
+        return cytome.open(os.fspath(path))
+
+
 @contextmanager
-def open_cytome(source) -> Iterator:
+def open_cytome(source, mode: str = "r+") -> Iterator:
     """Context manager that yields a cytome Dataset.
 
     If ``source`` is a string path, opens the dataset and closes on exit.
     If ``source`` is already a Dataset, yields it unchanged and does not close.
+
+    ``mode="r"`` for code that only reads (the plotting functions): the file
+    is then never changed, so a downloaded store keeps its checksum and a
+    read-only one opens without a warning.
     """
     if _is_path_like(source):
-        import cytome
-        ds = cytome.open(os.fspath(source))
+        ds = _open_path(source, mode)
         try:
             yield ds
         finally:
@@ -290,10 +322,16 @@ def write_cells_column(ds, name: str, values, *, overwrite: bool = False,
     import numpy as np
     resolved = check_cells_column_free(ds, name, overwrite=overwrite, what=what)
     ds.cells[name] = np.asarray(values)
-    # cytome buffers a new column until flush; flush now so the schema the
-    # next check reads already contains this one.
-    ds.flush()
+    # cytome buffers a new column until flush. From cytome 0.3.6 a waiting
+    # column is visible to the next check, and several are written in one
+    # pass at the caller's flush; before, flush now so the next check sees it.
+    if not _pending_columns_visible(ds):
+        ds.flush()
     return resolved
+
+
+def _pending_columns_visible(ds) -> bool:
+    return hasattr(type(ds.cells), "_pending_columns")
 
 
 def check_cells_column_free(ds, name: str, *, overwrite: bool = False,
@@ -304,9 +342,12 @@ def check_cells_column_free(ds, name: str, *, overwrite: bool = False,
     function intends to write *before* writing the first, so a refusal
     leaves the cytome untouched rather than half-written.
     """
-    # The schema itself, not a cached column list: a column written a moment
-    # ago must already count.
-    existing = [r[1] for r in ds._conn.execute("PRAGMA table_info(cells)")]
+    # Not a cached column list: a column written a moment ago must already
+    # count, flushed or not.
+    if _pending_columns_visible(ds):
+        existing = list(ds.cells.columns)
+    else:
+        existing = [r[1] for r in ds._conn.execute("PRAGMA table_info(cells)")]
     same = [c for c in existing if c == name]
     variants = [c for c in existing if c != name and c.lower() == str(name).lower()]
     if variants and not same and not overwrite:
@@ -431,3 +472,31 @@ def column_major_layer(ds, modality: str, layer: str):
         live = sqlite3.connect(f"file:{resolve_cytome_path(ds)}?mode=ro", uri=True)
         return MeasurementLayer(live, f"{modality}_{layer}")
     return MeasurementLayer(ds._conn, f"{modality}_{layer}")
+
+
+def released_store(source):
+    """Close every dataset of this process on ``source``'s file for a writer
+    or reader from another library, and reopen them afterwards.
+
+    ``cytome.released`` (cytome >= 0.3.4) knows every open dataset; with an
+    older cytome only the dataset passed in can be closed, so a second handle
+    on the same file stays open -- upgrade cytome to cover it."""
+    try:
+        from cytome import released
+    except ImportError:
+        released = None
+    if released is not None:
+        return released(source)
+
+    @contextmanager
+    def _only_this_one():
+        ds = source if _is_cytome_dataset_obj(source) else None
+        if ds is not None:
+            ds.flush()
+            ds.close()
+        try:
+            yield [ds] if ds is not None else []
+        finally:
+            if ds is not None:
+                ds.reopen()
+    return _only_this_one()

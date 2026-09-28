@@ -288,3 +288,48 @@ def test_user_reported_bug_cytome_list_modality(tmp_path):
     assert len(axs) == 3
     plt.close(fig)
     ds.close()
+
+
+def test_an_array_of_gene_names_means_one_panel_per_name():
+    """`color=names['Right'].values[:10]` (a numpy object array of gene names)
+    used to be read as per-cell values and refused with "color= has 10 values
+    but the data has N cells". An array of names is a list of keys."""
+    import piaso
+    adata = _build_anndata(n_cells=40)
+    genes = np.asarray(adata.var_names[:3], dtype=object)
+    fig, axs = piaso.pl.plotEmbedding(adata, basis="X_umap", color=genes, show=False, return_fig=True)
+    assert len(axs) == 3
+    for ax, g in zip(axs, genes):
+        assert ax.get_title() == g
+    plt.close("all")
+    # a pandas Index and a two-name array behave the same way
+    fig, axs = piaso.pl.plotEmbedding(adata, basis="X_umap", color=adata.var_names[:2], show=False, return_fig=True)
+    assert len(axs) == 2; plt.close("all")
+
+
+def test_a_string_array_with_one_entry_per_cell_still_colours_by_value():
+    import piaso
+    adata = _build_anndata(n_cells=40)
+    labels = np.asarray(["a" if i % 2 else "b" for i in range(40)], dtype=object)
+    fig, axs = piaso.pl.plotEmbedding(adata, basis="X_umap", color=labels, show=False, return_fig=True)
+    ax = axs[0] if isinstance(axs, (list, np.ndarray)) else axs
+    texts = {t.get_text() for t in ax.get_legend().get_texts()} if ax.get_legend() else set()
+    assert texts >= {"a", "b"}
+    plt.close("all")
+
+
+def test_a_string_array_that_names_nothing_says_it_was_read_as_keys():
+    """Ten strings against forty cells is read as ten keys; when none of them
+    exists the message has to say why they were read as keys, or the user is
+    left with a bare "'x' not found" for what they meant as per-cell labels."""
+    import piaso
+    adata = _build_anndata(n_cells=40)
+    labels = np.asarray(["a", "b"] * 5)          # dtype '<U1': no per-element walk needed
+    with pytest.raises(KeyError, match=r"array of 10 strings.*40 cells.*'a'"):
+        piaso.pl.plotEmbedding(adata, basis="X_umap", color=labels, show=False)
+    # a fixed-width string array of real names still means one panel per name
+    genes = np.asarray(adata.var_names[:3]).astype(str)
+    assert genes.dtype.kind == "U"
+    fig, axs = piaso.pl.plotEmbedding(adata, basis="X_umap", color=genes, show=False, return_fig=True)
+    assert len(axs) == 3
+    plt.close("all")

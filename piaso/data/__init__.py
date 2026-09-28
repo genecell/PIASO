@@ -8,6 +8,7 @@ from ._genome import (
     GTF_PRESETS,
     DEFAULT_GTF_RELEASE,
 )
+from ._chrom_sizes import chrom_sizes, KNOWN_GENOMES
 from ._datasets import (
     list_datasets,
     dataset_info,

@@ -276,7 +276,7 @@ def _cytome_extract(source, basis, obs_columns=None):
         ``adata.uns[f'{col}_colors']`` convention.
     """
     obs_columns = list(obs_columns or [])
-    with _open_cytome(source) as ds:
+    with _open_cytome(source, mode="r") as ds:
         emb_name = _resolve_cytome_basis(ds, basis)
         coords = np.asarray(ds.embeddings[emb_name])
         if coords.ndim == 1:
@@ -345,7 +345,7 @@ def _resolve_categorical_style(data, color, user_palette=None):
         palette = None
     try:
         if _is_cytome_input(data):
-            with _open_cytome(data) as ds:
+            with _open_cytome(data, mode="r") as ds:
                 entry = None
                 getter = getattr(ds, "get_categories", None)
                 if getter is not None:
@@ -887,7 +887,7 @@ def plot_embeddings_split(data,
             + ["barcode"],
         )
         if splitby not in obs_df.columns:
-            with _open_cytome(data) as _ds:
+            with _open_cytome(data, mode="r") as _ds:
                 avail = sorted(_ds.cells.columns)
             raise ValueError(
                 f"The splitby key '{splitby}' was not found in cytome cells "
@@ -904,7 +904,7 @@ def plot_embeddings_split(data,
             full_color_data = obs_df[color].values
             is_numeric = pd.api.types.is_numeric_dtype(obs_df[color])
         else:
-            with _open_cytome(data) as _ds:
+            with _open_cytome(data, mode="r") as _ds:
                 full_color_data, resolved_modality_for_title = (
                     _resolve_cytome_feature_values(
                         _ds, color,
@@ -946,7 +946,7 @@ def plot_embeddings_split(data,
     _stored_order = None
     if _is_cytome_input(data):
         try:
-            with _open_cytome(data) as _ds:
+            with _open_cytome(data, mode="r") as _ds:
                 _cats = _ds.get_categories(splitby)
                 if isinstance(_cats, dict):        # {'order': [...], ...}
                     _cats = _cats.get("order")
@@ -1147,20 +1147,12 @@ def plot_embeddings_split(data,
             axs[i].set_visible(False)
             continue
 
-        # Per-panel palette: subset of the global mapping in alphabetical
-        # order so the renderer's `sorted(set(...))` gives consistent
-        # colours across panels.
-        panel_palette = None
-        if not is_numeric:
-            if groups is not None:
-                # Greying via `groups` is delegated to _render_embedding; pass the
-                # GLOBAL category→colour dict so colours stay consistent while
-                # non-group cells are greyed out.
-                panel_palette = dict(cat_to_color)
-            else:
-                panel_cats = sorted(set(str(v) for v in full_color_data[mask]),
-                                    key=natural_key)
-                panel_palette = [cat_to_color[c] for c in panel_cats]
+        # Every panel gets the global category -> colour mapping, by name. A
+        # list here was built in sorted order while the renderer indexes it
+        # in the column's category order, so wherever the two orders differed
+        # (a categorical or stored order such as MGE-like before CGE-like)
+        # the colours landed on the wrong categories. A dict cannot.
+        panel_palette = None if is_numeric else dict(cat_to_color)
 
         # Inject the resolved modality into per-panel titles when requested.
         if show_modality_in_title and resolved_modality_for_title:
@@ -1290,6 +1282,55 @@ def _is_value_array(color):
     Pass a numpy array or a pandas Series to colour by values.
     """
     return isinstance(color, (np.ndarray, pd.Series, pd.Categorical, pd.Index))
+
+
+def _n_cells_of(data):
+    """How many cells ``data`` has, or None when that needs opening a file."""
+    for attr in ("n_obs", "n_cells"):
+        n = getattr(data, attr, None)
+        if isinstance(n, (int, np.integer)):
+            return int(n)
+    return None
+
+
+def _keys_from_array(color, n_cells):
+    """An array of *names* handed to ``color=`` -- ``names['Right'].values[:10]``,
+    a ``var_names`` slice, a pandas Index of genes -- means one panel per name,
+    exactly as a list does. It is told apart from per-cell values by length:
+    a string array with one entry per cell colours by those values; any other
+    length is a list of keys. Returns the list, or None when ``color`` is not
+    such an array."""
+    if not isinstance(color, (np.ndarray, pd.Index, pd.Series)):
+        return None
+    arr = np.asarray(color)
+    if arr.ndim != 1 or arr.dtype.kind not in "OUS" or arr.size == 0:
+        return None
+    if n_cells is not None and arr.size == n_cells:
+        return None
+    # a fixed-width string array is all strings by construction; only an
+    # object array needs the walk (a Series of mixed values, a None in it)
+    if arr.dtype.kind == "O" and not all(isinstance(x, str) for x in arr.tolist()):
+        return None
+    return arr.tolist()
+
+
+def _check_keys_resolve(keys, data, n_cells):
+    """When an array was read as names, say so in the error if none of them is
+    a column or a feature: a per-cell array of the wrong length would otherwise
+    surface as "'x' not found", two calls deep, with no mention of the length."""
+    obs = getattr(data, "obs", None)
+    var_names = getattr(data, "var_names", None)
+    if obs is None or var_names is None:
+        return
+    known = set(map(str, obs.columns)) | set(map(str, var_names))
+    if any(k in known for k in keys):
+        return
+    shown = ", ".join(map(repr, keys[:5])) + (", ..." if len(keys) > 5 else "")
+    raise KeyError(
+        f"color= was an array of {len(keys)} strings, read as a list of keys "
+        f"(one panel per name) because the data has {n_cells} cells; none of them "
+        f"is an .obs column or a feature: {shown}. Pass per-cell values as an "
+        f"array with one entry per cell, or keys that exist in the data.")
 
 
 def _value_array_name(color, default="value"):
@@ -1447,7 +1488,7 @@ def _get_embedding_and_color(
             is_cat = not _is_numeric_dtype(values)
             return coords, values, is_cat, None, True
         # color is not an obs column — resolve via the modality registry.
-        with _open_cytome(data) as ds:
+        with _open_cytome(data, mode="r") as ds:
             values, resolved = _resolve_cytome_feature_values(
                 ds, color,
                 modality=modality, cytome_layer=cytome_layer,
@@ -2248,6 +2289,11 @@ def plotEmbedding(
             f"plotEmbedding() got unexpected keyword argument(s): {unexpected}"
         )
 
+    _n_cells = _n_cells_of(data)
+    _keys = _keys_from_array(color, _n_cells)
+    if _keys is not None:
+        _check_keys_resolve(_keys, data, _n_cells)
+        color = _keys
     if isinstance(color, (list, tuple)):
         color_list = list(color)
         if ax is not None:

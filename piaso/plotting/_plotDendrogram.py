@@ -35,7 +35,7 @@ def _get_group_means(data, groupby, features=None, layer=None, use_raw=None, n_t
         # (the previous behaviour) — auto-discovering matrix-side HVGs would
         # need a streaming pass we don't want by default.
         if features is None:
-            with _open_cytome(data) as ds:
+            with _open_cytome(data, mode="r") as ds:
                 col_names = [c for c in ds.cells.columns if c != groupby]
                 numeric_cols = []
                 for c in col_names:
@@ -116,7 +116,7 @@ def _detect_embedding(data):
     """
     try:
         if _is_cytome_input(data):
-            with _open_cytome(data) as ds:
+            with _open_cytome(data, mode="r") as ds:
                 present = set(ds.list_embeddings())
         else:
             present = set(getattr(data, 'obsm', {}) or {})
@@ -135,7 +135,7 @@ def _group_centroids_from_rep(data, groupby, use_rep):
     caller can fall back to the marker-gene mode.
     """
     if _is_cytome_input(data):
-        with _open_cytome(data) as ds:
+        with _open_cytome(data, mode="r") as ds:
             if use_rep not in ds.list_embeddings() or groupby not in ds.cells.columns:
                 return None
             emb = np.asarray(ds.embeddings[use_rep])

@@ -33,6 +33,8 @@ unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("picco", "
 pyo3 = { version = "0.29", features = ["extension-module", "generate-import-lib"] }
 numpy = "0.29"
 rayon = "1.10"
+# exp with the same bits on every machine (the Leiden's random draws)
+libm = "0.2"
 # piaso-atac + quantify dependencies
 rusqlite = { version = "0.31", features = ["bundled"] }
 lz4_flex = "0.11"

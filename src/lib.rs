@@ -1,22 +1,7 @@
 // --- Shared modules used by both PyO3 extension and piaso-atac CLI ---
 pub mod encoder;
 pub mod store;
-// The fragment chain: readers, the column window and the sinks the peak
-// caller and the quantifier are built from. Held with them: only a build
-// that enables one of those features compiles them, and publish.sh does not
-// ship their sources.
-#[cfg(any(feature = "picco", feature = "quantify"))]
-pub mod index_fragments;
-#[cfg(any(feature = "picco", feature = "quantify"))]
-pub mod bucket_sink;
-#[cfg(any(feature = "picco", feature = "quantify"))]
-pub mod column_window;
-#[cfg(any(feature = "picco", feature = "quantify"))]
-pub mod csc_sink;
-#[cfg(any(feature = "picco", feature = "quantify"))]
-pub mod csr_finalize;
-#[cfg(any(feature = "picco", feature = "quantify"))]
-pub mod cytome_reader;
+pub mod genomes;
 pub mod motif_scan;
 
 // --- PyO3 gene set scoring ---
@@ -69,7 +54,7 @@ where
     let n_ctrl_total = n_sets * n_ctrl_set;
 
     let pool = rayon::ThreadPoolBuilder::new()
-        .num_threads(n_threads)
+        .num_threads(crate::threads::count(n_threads))
         .build()
         .map_err(|e| format!("rayon: {}", e))?;
 
@@ -502,21 +487,28 @@ where
 }
 
 
-/// Call peaks using PICCO (Rust backend, in-process via PyO3).
-///
-/// Equivalent to `piaso-atac call-peaks` CLI but runs in-process,
-/// avoiding subprocess overhead and enabling direct Python dict return.
 
 
-/// Quantify peak activity per cell (Rust backend, in-process via PyO3).
-///
-/// Equivalent to `piaso-atac quantify` CLI but runs in-process.
 
 
 /// Python module
 mod svd_pass;
+pub mod threads;
+mod leiden;
 
-/// Build the chunk position index of a fragment store (see `index_fragments`).
+
+/// Chromosome sizes of a genome known by name, or of a chrom.sizes file, as
+/// ``[(chrom, size), ...]`` in canonical order.
+#[pyfunction]
+fn chrom_sizes(genome: &str) -> PyResult<Vec<(String, i64)>> {
+    genomes::chrom_sizes(genome).map_err(pyo3::exceptions::PyValueError::new_err)
+}
+
+/// The genomes ``chrom_sizes`` knows by name.
+#[pyfunction]
+fn known_genomes() -> Vec<&'static str> {
+    genomes::known_genomes()
+}
 
 #[pymodule]
 fn _piaso(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -526,5 +518,10 @@ fn _piaso(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(motif_scan::scan_motifs_fwd, m)?)?;
     m.add_function(wrap_pyfunction!(svd_pass::svd_pass, m)?)?;
     m.add_function(wrap_pyfunction!(svd_pass::svd_layout, m)?)?;
+    m.add_function(wrap_pyfunction!(svd_pass::svd_pass_source, m)?)?;
+    m.add_function(wrap_pyfunction!(svd_pass::svd_layout_rule, m)?)?;
+    m.add_function(wrap_pyfunction!(leiden::leiden_csr, m)?)?;
+    m.add_function(wrap_pyfunction!(chrom_sizes, m)?)?;
+    m.add_function(wrap_pyfunction!(known_genomes, m)?)?;
         Ok(())
 }

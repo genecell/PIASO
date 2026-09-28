@@ -218,6 +218,9 @@ def neighbors(
         ``piaso.tl.leiden`` read it back from there. The function is
         self-contained: no value passing required.
     """
+    # A store that cannot be written fails here, not after the work.
+    from ..utils._cytome_compat import require_writable as _require_writable
+    _require_writable(data, "piaso.tl.neighbors")
     # A cytome path is as valid an input as it is for infog / runSVD / runGDR.
     # Without this a pipeline written entirely with a path worked for three
     # calls and then raised "'str' object has no attribute 'obsm'" on the

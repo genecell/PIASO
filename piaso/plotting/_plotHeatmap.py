@@ -132,7 +132,7 @@ def _get_cell_expression(data, features, groupby, layer=None, use_raw=None,
         # Pre-fetch each feature as an n_cells vector. Cells columns first
         # (cheap), matrix-resolved features second (one streaming column
         # read per feature).
-        with _open_cytome(data) as ds:
+        with _open_cytome(data, mode="r") as ds:
             cells_cols = set(ds.cells.columns)
         cells_feats = [f for f in features if f in cells_cols]
         matrix_feats = [f for f in features if f not in cells_cols]
@@ -142,7 +142,7 @@ def _get_cell_expression(data, features, groupby, layer=None, use_raw=None,
             for f in cells_feats:
                 feature_vecs[f] = pd.to_numeric(extra[f], errors='coerce').values.astype(float)
         if matrix_feats:
-            with _open_cytome(data) as ds:
+            with _open_cytome(data, mode="r") as ds:
                 for f in matrix_feats:
                     vals, _ = _resolve_cytome_feature_values(
                         ds, f,

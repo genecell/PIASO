@@ -29,13 +29,13 @@ def _get_feature_vector(data, feature, layer=None, use_raw=None,
     if _is_cytome_input(data):
         from ..utils._cytome_compat import open_cytome as _open_cytome
         from ._plotEmbedding import _resolve_cytome_feature_values
-        with _open_cytome(data) as ds:
+        with _open_cytome(data, mode="r") as ds:
             cells_cols = set(ds.cells.columns)
         if feature in cells_cols:
             return pd.to_numeric(
                 pd.Series(_read_cells_column(data, feature)), errors='coerce'
             ).values
-        with _open_cytome(data) as ds:
+        with _open_cytome(data, mode="r") as ds:
             vals, _ = _resolve_cytome_feature_values(
                 ds, feature,
                 modality=modality, cytome_layer=cytome_layer,
@@ -69,7 +69,7 @@ def _get_color_values(data, color,
     if _is_cytome_input(data):
         from ..utils._cytome_compat import open_cytome as _open_cytome
         from ._plotEmbedding import _resolve_cytome_feature_values
-        with _open_cytome(data) as ds:
+        with _open_cytome(data, mode="r") as ds:
             cells_cols = set(ds.cells.columns)
         if color in cells_cols:
             vals = pd.Series(_read_cells_column(data, color))
@@ -78,7 +78,7 @@ def _get_color_values(data, color,
                 return numeric.values, False
             return vals.values, True
         # Resolve via modality registry (gene/peak/tile name)
-        with _open_cytome(data) as ds:
+        with _open_cytome(data, mode="r") as ds:
             vals, _ = _resolve_cytome_feature_values(
                 ds, color,
                 modality=modality, cytome_layer=cytome_layer,
@@ -113,7 +113,7 @@ def _get_entity_column(data, entity, col):
     """
     if _is_cytome_input(data):
         from ..utils._cytome_compat import open_cytome as _open_cytome
-        with _open_cytome(data) as ds:
+        with _open_cytome(data, mode="r") as ds:
             tbls = {r[0] for r in ds._conn.execute(
                 "SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
             if entity not in tbls:
