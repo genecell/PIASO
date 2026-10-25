@@ -636,9 +636,13 @@ def runSCALAR(
             f"runSCALAR: specificity_matrix has {_n} negative entries. COSG "
             "marks genes failing its expressed_pct filter with -1, and two "
             "such sentinels multiply to +1 - the largest product in the table. "
-            "Run COSG with remove_lowly_expressed=False, or convert the "
-            "sentinels to 0 (cosg.indexByGene does so by default), and let "
-            "runSCALAR's own expressed_pct apply the detection floor.")
+            "Build the matrix with the filter off: "
+            "piaso.tl.specificity_matrix(adata, groupby=..., "
+            "cosg_remove_lowly_expressed=False), or cosg.cosg(adata, groupby=..., "
+            "n_genes_user=adata.n_vars, remove_lowly_expressed=False) as in the "
+            "SCALAR tutorial. Or set the -1 entries to 0 (cosg.indexByGene does "
+            "so by default). runSCALAR's own expressed_pct applies the "
+            "detection floor.")
     del _vals, _spec_common
 
     if statistic not in ('product', 'min'):

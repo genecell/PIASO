@@ -130,3 +130,99 @@ def test_the_two_primate_genomes_are_registered():
     # is describing the assembly, not the cells.
     assert GENOME_FEATURES["mCalJac1"]["has_chrM"] is False
     assert GENOME_FEATURES["Mmul_10"]["has_chrM"] is True
+
+
+def _reference_from(tmp_path, gtf_text, fai):
+    d = tmp_path / "ref2"
+    (d / "fasta").mkdir(parents=True)
+    (d / "genes").mkdir(parents=True)
+    (d / "fasta" / "genome.fa.fai").write_text(fai)
+    with gzip.open(d / "genes" / "genes.gtf.gz", "wt") as fh:
+        fh.write(gtf_text)
+    return str(d)
+
+
+# NCBI style: a repeated symbol is suffixed in gene_id and kept whole in `gene`.
+REPEATED = """\
+chr1\tSrc\ttranscript\t1001\t1072\t.\t+\t.\tgene_id "TRNAN-GUU"; transcript_id "R1"; gene "TRNAN-GUU"; transcript_biotype "tRNA"; db_xref "GeneID:11";
+chr1\tSrc\ttranscript\t5000001\t5000072\t.\t-\t.\tgene_id "TRNAN-GUU_1"; transcript_id "R2"; gene "TRNAN-GUU"; transcript_biotype "tRNA"; db_xref "GeneID:12";
+chr1\tSrc\ttranscript\t9000001\t9000072\t.\t+\t.\tgene_id "TRNAN-GUU_2"; transcript_id "R3"; gene "TRNAN-GUU"; transcript_biotype "tRNA"; db_xref "GeneID:13";
+chr1\tSrc\ttranscript\t9000201\t9000272\t.\t+\t.\tgene_id "TRNAN-GUU_3"; transcript_id "R4"; gene "TRNAN-GUU"; transcript_biotype "tRNA"; db_xref "GeneID:14";
+"""
+
+
+def test_genes_that_share_a_name_stay_separate(tmp_path):
+    """Keyed by name, the Mmul_10 reference's copies of TRNAN-GUU became one 118.6 Mb gene.
+
+    Each gene_id is its own row, and so are its promoters: TRNAN-GUU_2 and _3 sit 200 bp apart,
+    their promoters overlap, and they are still two genes.
+    """
+    ref = _reference_from(tmp_path, REPEATED, "chr1\t10000000\t0\t80\t81\n")
+    out = makeGenomeFiles(ref, "T", str(tmp_path / "o"), verbose=False)
+    genes = _rows(out["gene_boundary"])
+    assert [(r[1], r[2], r[3]) for r in genes] == [
+        ("1000", "1072", "TRNAN-GUU"), ("5000000", "5000072", "TRNAN-GUU"),
+        ("9000000", "9000072", "TRNAN-GUU"), ("9000200", "9000272", "TRNAN-GUU")]
+    assert max(int(r[2]) - int(r[1]) for r in genes) == 72
+    prom = _rows(out["promoter"])
+    assert len(prom) == 4, prom
+    assert int(prom[3][1]) < int(prom[2][2]), "the last two promoters overlap and stay two rows"
+
+
+def test_the_tss_file_carries_the_gene_id_in_column_8(tmp_path):
+    """As in the shipped hg38 and mm10 files; NCBI's db_xref was there before."""
+    ref = _reference_from(tmp_path, REPEATED, "chr1\t10000000\t0\t80\t81\n")
+    out = makeGenomeFiles(ref, "T", str(tmp_path / "o"), verbose=False)
+    assert [(r[3], r[6], r[7], r[8]) for r in _rows(out["tss_bed"])][:2] == [
+        ("TRNAN-GUU", "tRNA", "TRNAN-GUU", "R1"), ("TRNAN-GUU", "tRNA", "TRNAN-GUU_1", "R2")]
+
+
+# GENCODE / Ensembl style: gene lines, gene_name, gene_type / transcript_type, an unnamed gene.
+ENSEMBL = """\
+8\tEns\tgene\t1001\t3000\t.\t+\t.\tgene_id "ENSG1"; gene_name "CHRNA2"; gene_type "protein_coding";
+8\tEns\ttranscript\t1001\t3000\t.\t+\t.\tgene_id "ENSG1"; transcript_id "ENST1"; gene_name "CHRNA2"; transcript_type "protein_coding";
+8\tEns\texon\t1001\t1500\t.\t+\t.\tgene_id "ENSG1"; transcript_id "ENST1"; gene_name "CHRNA2";
+8\tEns\tgene\t7001\t9000\t.\t-\t.\tgene_id "ENSMMUG00000023296"; gene_biotype "protein_coding";
+8\tEns\ttranscript\t7001\t9000\t.\t-\t.\tgene_id "ENSMMUG00000023296"; transcript_id "ENSMMUT9"; transcript_biotype "protein_coding";
+"""
+
+
+def test_gencode_and_ensembl_attributes_are_read(tmp_path):
+    """Names from gene_name, biotypes from transcript_type (GENCODE spells it so), and a gene
+    without a name written under its ID."""
+    ref = _reference_from(tmp_path, ENSEMBL, "8\t20000\t0\t80\t81\n")
+    out = makeGenomeFiles(ref, "T", str(tmp_path / "o"), verbose=False)
+    assert [(r[3], r[5]) for r in _rows(out["gene_boundary"])] == [
+        ("CHRNA2", "+"), ("ENSMMUG00000023296", "-")]
+    tss = _rows(out["tss_bed"])
+    assert [(r[3], r[6], r[7]) for r in tss] == [
+        ("CHRNA2", "protein_coding", "ENSG1"),
+        ("ENSMMUG00000023296", "protein_coding", "ENSMMUG00000023296")]
+    assert int(tss[1][1]) == 8999           # minus strand: the right edge, 0-based
+
+
+def test_the_genes_are_those_of_cytomes_reader(reference, tmp_path):
+    """One reader: the gene BED is cytome.read_gtf's gene table, row for row."""
+    import cytome
+
+    out = makeGenomeFiles(reference, "TestG", str(tmp_path / "o"), verbose=False)
+    genes, _ = cytome.read_gtf(os.path.join(reference, "genes", "genes.gtf.gz"))
+    want = {(g.chrom, g.start, g.end, g.gene_name or g.gene_id, g.strand)
+            for g in genes.itertuples()}
+    got = {(r[0], int(r[1]), int(r[2]), r[3], r[5]) for r in _rows(out["gene_boundary"])}
+    assert got == want
+
+
+def test_an_older_cytome_is_named_in_the_error(reference, tmp_path, monkeypatch):
+    import builtins
+
+    real_import = builtins.__import__
+
+    def no_reader(name, *a, **k):
+        if name == "cytome.io.gtf_import":
+            raise ImportError("cannot import name 'read_gtf'")
+        return real_import(name, *a, **k)
+
+    monkeypatch.setattr(builtins, "__import__", no_reader)
+    with pytest.raises(ImportError, match="cytome 0.3.7"):
+        makeGenomeFiles(reference, "TestG", str(tmp_path / "o"), verbose=False)

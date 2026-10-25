@@ -467,6 +467,42 @@ def test_runSVD_defaults_tfidf_for_peak_counts_only_and_converges_by_default(tmp
     rna.close()
 
 
+def test_runSVD_reads_peak_and_tile_counts_when_no_layer_is_named(tmp_path):
+    """Left unnamed, the layer follows the modality: runSVD(ds, modality='ATAC')
+    on a store holding only its counts reads the counts, the same embedding as
+    measurement='counts' (it looked for an INFOG layer and failed); tiles the
+    same; RNA still reads INFOG."""
+    import cytome
+    import piaso
+
+    rng = np.random.default_rng(67)
+    X = ((rng.random((80, 240)) < 0.2) * rng.integers(1, 5, (80, 240))).astype(np.float32)
+    common = dict(n_components=3, random_state=0)
+
+    atac = _store(tmp_path / "atac.cytome", X)
+    atac.peaks["highly_variable"] = np.ones(240, dtype=bool); atac.flush()
+    tiles = cytome.create(str(tmp_path / "tiles.cytome"))
+    tiles.set_entity("cells", pd.DataFrame({
+        "cell_idx": np.arange(80), "barcode": [f"B{i}" for i in range(80)]}))
+    tiles.set_entity("tiles", pd.DataFrame({
+        "tile_idx": np.arange(240), "tile_id": [f"chr1:{i*500}-{i*500+500}" for i in range(240)],
+        "chr": ["chr1"] * 240, "start": np.arange(240) * 500, "end_": np.arange(240) * 500 + 500,
+        "highly_variable": np.ones(240, dtype=bool)}))
+    tiles.add_matrix("tiles_counts", sp.csr_matrix(X)); tiles.flush()
+    for ds, modality in ((atac, "ATAC"), (tiles, "tiles")):
+        piaso.tl.runSVD(ds, modality=modality, key_added="X_named", measurement="counts", **common)
+        piaso.tl.runSVD(ds, modality=modality, key_added="X_unnamed", **common)
+        np.testing.assert_array_equal(np.asarray(ds.embeddings[f"{modality}_unnamed"]),
+                                      np.asarray(ds.embeddings[f"{modality}_named"]), err_msg=modality)
+        ds.close()
+
+    rna = _store(tmp_path / "rna.cytome", X, modality="RNA")
+    rna.genes["highly_variable"] = np.ones(240, dtype=bool); rna.flush()
+    with pytest.raises(KeyError, match="RNA_infog"):
+        piaso.tl.runSVD(rna, modality="RNA", **common)
+    rna.close()
+
+
 def test_default_tfidf_steps_aside_for_a_layer_that_is_not_raw_counts(tmp_path, capsys):
     """Switched on by the default, TF-IDF on a layer holding negative values
     warns and factorises the values as stored; asked for explicitly, it still

@@ -707,6 +707,59 @@ def _resolve_marker_weights(marker_gene_set, marker_gene_weights):
     return ordered
 
 
+def _smoothing_neighbors(adata, use_rep, k_nearest_neighbors, use_existing_adjacency_graph, use_faiss, n_jobs,
+                         verbosity):
+    """Each cell's smoothing neighbors, chosen as ``smoothCellTypePrediction`` chooses them for its vote: the
+    ``k_nearest_neighbors`` strongest connections of ``adata.obsp['connectivities']`` when
+    ``use_existing_adjacency_graph`` and the graph exists (all of a row's connections when it has fewer), else the
+    ``k_nearest_neighbors`` nearest cells in ``adata.obsm[use_rep]``, the cell itself included (FAISS when asked and
+    installed, else scikit-learn). Returns a cells x cells CSR indicator, one row per cell."""
+    import scipy.sparse as sp
+    n = adata.n_obs
+    if use_existing_adjacency_graph and 'neighbors' in adata.uns and 'connectivities' in adata.obsp:
+        conn = adata.obsp['connectivities']
+        if not isinstance(conn, sp.csr_matrix):
+            raise ValueError(
+                f"Expected adata.obsp['connectivities'] to be a CSR matrix, but got {type(conn).__name__}. "
+                f"Please convert it using `.tocsr()` method.")
+        rows, cols = [], []
+        for i in range(n):
+            s, e = conn.indptr[i], conn.indptr[i + 1]
+            idx = conn.indices[s:e]
+            if e - s > k_nearest_neighbors:
+                idx = idx[np.argsort(conn.data[s:e])[::-1][:k_nearest_neighbors]]
+            rows.append(np.full(len(idx), i))
+            cols.append(idx)
+        rows, cols = np.concatenate(rows), np.concatenate(cols)
+        return sp.csr_matrix((np.ones(len(rows)), (rows, cols)), shape=(n, n))
+    if use_rep not in adata.obsm:
+        available = list(adata.obsm.keys())
+        raise ValueError(
+            f"Embedding key '{use_rep}' not found in adata.obsm. "
+            f"Available: {available if available else 'none'}. "
+            f"Pass use_rep= one of these (e.g. use_rep='X_svd'), or "
+            f"smooth_prediction=False to skip smoothing.")
+    X_embed = adata.obsm[use_rep]
+    k = min(int(k_nearest_neighbors), n)
+    indices = None
+    if use_faiss and k < n:
+        try:
+            import faiss
+            Xf = X_embed if X_embed.dtype == np.float32 else X_embed.astype('float32')
+            index = faiss.IndexFlatL2(Xf.shape[1])
+            index.add(Xf)
+            _, indices = index.search(Xf, k)
+        except ImportError:
+            if verbosity > 0:
+                print("FAISS not available, falling back to scikit-learn NearestNeighbors")
+    if indices is None:
+        from sklearn.neighbors import NearestNeighbors
+        _, indices = NearestNeighbors(n_neighbors=k, n_jobs=n_jobs).fit(X_embed).kneighbors(X_embed)
+    indices = np.asarray(indices)
+    return sp.csr_matrix((np.ones(indices.size), indices.ravel(), np.arange(0, indices.size + 1, indices.shape[1])),
+                         shape=(n, n))
+
+
 def predictCellTypeByMarker(
     adata,
     marker_gene_set: Union[List, Dict, pd.DataFrame],
@@ -726,10 +779,12 @@ def predictCellTypeByMarker(
     delimiter_cell_type: str = '-',
     inplace: bool = True,
     random_seed: int = 1927,
+    exclude_set_genes: bool = True,
     verbosity: int = 1,
     n_jobs: int = -1,
     modality: Optional[str] = None,
     cytome_layer: str = "counts",
+    smooth_by: Literal["labels", "scores"] = "labels",
 ):
     """
     Predict cell types using marker genes and optionally smooth predictions.
@@ -771,6 +826,24 @@ def predictCellTypeByMarker(
         Key in adata.obsm containing the low-dimensional embedding to use for neighbor search
     k_nearest_neighbors : int, default=7
         Number of neighbors to consider for smoothing
+    smooth_by : {'labels', 'scores'}, default 'labels'
+        How the neighbors are pooled when ``smooth_prediction=True``. The
+        neighbors are the same either way (``use_rep``,
+        ``k_nearest_neighbors``, ``use_existing_adjacency_graph``,
+        ``use_faiss``).
+
+        - ``'labels'``: each cell first takes its best-scoring cell type, then
+          the most common type among its neighbors (a vote).
+        - ``'scores'``: each cell's scores (its -log10 p-values with
+          ``use_score=False``) are averaged over its neighbors, and the cell
+          takes the best type of the average. A cell's evidence counts in
+          proportion to its strength, and a type that wins narrowly in many
+          neighbors is not outvoted. Where each cell's own scores are noisy,
+          as in sparse single-nucleus ATAC, this pools more evidence than the
+          vote. The averaged matrix is kept in
+          ``adata.obsm['{key_added}_score_smoothed']`` (or
+          ``'{key_added}_nlog10pvals_smoothed'``), and the confidence is the
+          share of the neighbors whose own best type is the one chosen.
     return_confidence : bool, default=True
         Whether to return confidence scores for smoothed predictions
     use_existing_adjacency_graph : bool, default=False
@@ -787,6 +860,9 @@ def predictCellTypeByMarker(
         Whether to modify adata in place or return a copy
     random_seed : int, default=1927
         Random seed for reproducibility
+    exclude_set_genes : bool, default=True
+        With ``score_method='piaso'``, draw each marker's controls from its
+        nearest genes outside its own cell type's set (see ``piaso.tl.score``).
     verbosity : int, default=1
         Level of verbosity (0=quiet, 1=basic info, 2=detailed)
     n_jobs : int, default=-1
@@ -818,6 +894,9 @@ def predictCellTypeByMarker(
     ...     inplace=True
     ... )
     """
+    if smooth_by not in ("labels", "scores"):
+        raise ValueError(f"smooth_by must be 'labels' or 'scores', not {smooth_by!r}.")
+
     # --- Cytome dispatch: build a minimal AnnData shim ---
     _cytome_ds = None
     if isinstance(adata, str) or _is_cytome(adata):
@@ -868,6 +947,7 @@ def predictCellTypeByMarker(
             max_workers=max_workers,
             return_pvals=True,
             random_seed=random_seed,
+            exclude_set_genes=exclude_set_genes,
             verbosity=verbosity,
             **({"modality": modality, "cytome_layer": cytome_layer}
                if modality is not None or cytome_layer != "counts" else {})
@@ -960,21 +1040,47 @@ def predictCellTypeByMarker(
         
         # Set key for smoothed predictions
         smoothed_key = f"{key_added}_smoothed"
-        
-        # Smooth predictions
-        smoothCellTypePrediction(
-            adata,
-            groupby=smoothing_input_key,
-            key_added=smoothed_key,
-            use_rep=use_rep,
-            k_nearest_neighbors=k_nearest_neighbors,
-            return_confidence=return_confidence,
-            inplace=True,
-            use_existing_adjacency_graph=use_existing_adjacency_graph,
-            use_faiss=use_faiss,
-            verbosity=verbosity,
-            n_jobs=n_jobs
-        )
+
+        if smooth_by == "scores":
+            # Average each cell's scores (or -log10 p-values) over its neighbors, then take the best type
+            import scipy.sparse as _sp
+            _name = "score" if use_score else "nlog10pvals"
+            _matrix = np.asarray(marker_gene_score if use_score else marker_gene_nlog10pvals, dtype=np.float64)
+            _nbrs = _smoothing_neighbors(adata, use_rep, k_nearest_neighbors, use_existing_adjacency_graph,
+                                         use_faiss, n_jobs, verbosity)
+            _deg = np.asarray(_nbrs.sum(axis=1)).ravel()
+            _avg = (_sp.diags(1.0 / np.maximum(_deg, 1.0)) @ _nbrs) @ _matrix
+            adata.obsm[f"{key_added}_{_name}_smoothed"] = _avg
+            _avg_df = pd.DataFrame(_avg, columns=gene_set_names)
+            _smoothed = _avg_df.idxmax(axis=1).values
+            if extract_cell_type:
+                _smoothed = np.array([np.str_.rsplit(i, delimiter_cell_type, 1)[0] for i in _smoothed])
+            adata.obs[smoothed_key] = _smoothed
+            if return_confidence:
+                # the share of a cell's neighbors whose own best type is the one chosen
+                _raw = adata.obs[smoothing_input_key].astype(str).to_numpy()
+                _r, _c = _nbrs.nonzero()
+                _agree = np.bincount(_r, weights=(_raw[_c] == np.asarray(_smoothed, dtype=str)[_r]).astype(float),
+                                     minlength=adata.n_obs)
+                adata.obs[f"{smoothed_key}_confidence"] = _agree / np.maximum(_deg, 1.0)
+            if verbosity > 0:
+                print(f"Scores averaged over each cell's {k_nearest_neighbors} neighbors before the best type is "
+                      f"taken (smooth_by='scores')")
+        else:
+            # Smooth predictions
+            smoothCellTypePrediction(
+                adata,
+                groupby=smoothing_input_key,
+                key_added=smoothed_key,
+                use_rep=use_rep,
+                k_nearest_neighbors=k_nearest_neighbors,
+                return_confidence=return_confidence,
+                inplace=True,
+                use_existing_adjacency_graph=use_existing_adjacency_graph,
+                use_faiss=use_faiss,
+                verbosity=verbosity,
+                n_jobs=n_jobs
+            )
         
         # Update main prediction key with smoothed predictions
         if verbosity > 1:
@@ -1003,6 +1109,9 @@ def predictCellTypeByMarker(
             
         if smooth_prediction:
             print(f"  - adata.obs['{key_added}_raw']: original unsmoothed predictions")
+            if smooth_by == "scores":
+                _nm = "score" if use_score else "nlog10pvals"
+                print(f"  - adata.obsm['{key_added}_{_nm}_smoothed']: the matrix averaged over each cell's neighbors")
             if return_confidence:
                 print(f"  - adata.obs['{key_added}_confidence_smoothed']: smoothing confidence scores")
 

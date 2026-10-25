@@ -349,7 +349,9 @@ def compute_tfidf_stats(
     # needed to find them again. Measured at 20K cells x 30K peaks: 1.0 MB of
     # JSON becomes 98 bytes.
     if write_to_metadata:
-        stored = {"scale_factor": scale_factor}
+        # The cache has one slot per modality; it records which matrix filled
+        # it, so a reader asking for another matrix computes its own.
+        stored = {"scale_factor": scale_factor, "matrix": f"{modality}_{_layer}"}
 
         # Per-feature IDF. MUST use ds.features(modality), NOT
         # getattr(ds, entity_name): for 'tiles'/'GA' the modality name collides
@@ -409,6 +411,15 @@ def compute_tfidf_stats(
     return params
 
 
+def _tfidf_cache_matrix(stored, modality):
+    """The matrix a cached TF-IDF payload was computed from. Payloads written
+    before the cache recorded it are the main matrix's, ``<modality>_counts``,
+    the only one the cache was filled from by default."""
+    if isinstance(stored, dict) and stored.get("matrix"):
+        return str(stored["matrix"])
+    return f"{modality}_counts"
+
+
 def _hydrate_tfidf_params(ds, stored, modality):
     """Fill in the arrays a cached params dict refers to by column name.
 
@@ -418,6 +429,7 @@ def _hydrate_tfidf_params(ds, stored, modality):
     same three keys.
     """
     params = dict(stored)
+    params.pop("matrix", None)
     depth_col = params.pop("cell_depth_column", None)
     if depth_col is not None and "cell_depth" not in params:
         params["cell_depth"] = np.asarray(ds.cells[depth_col], dtype=np.float64)
@@ -444,7 +456,13 @@ def _load_or_compute_tfidf_stats(
     (``ds.metadata['{modality}_infog_params']``).
     """
     key = f"{modality}_tfidf_params"
-    if not force_recompute and key in ds.metadata:
+    this = f"{modality}_{layer}"
+    owner = _tfidf_cache_matrix(ds.metadata[key], modality) if key in ds.metadata else None
+    if not force_recompute and owner is not None and owner != this:
+        if verbosity > 0:
+            print(f"  Cached TF-IDF stats at {key!r} are {owner}'s, not {this}'s; "
+                  f"computing")
+    elif not force_recompute and owner is not None:
         stored = ds.metadata[key]
         try:
             params = _hydrate_tfidf_params(ds, stored, modality)
@@ -468,8 +486,10 @@ def _load_or_compute_tfidf_stats(
     return compute_tfidf_stats(
         ds, measurement=layer, batch_size=batch_size,
         scale_factor=scale_factor, modality=modality,
-        # a store opened read-only cannot keep the cache
-        write_to_metadata=not getattr(ds, "read_only", False),
+        # a store opened read-only cannot keep the cache, and a matrix beside
+        # the main one does not take the slot from the main matrix's
+        write_to_metadata=(not getattr(ds, "read_only", False)
+                           and (owner in (None, this) or layer == "counts")),
     )
 
 

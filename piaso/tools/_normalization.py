@@ -1101,12 +1101,17 @@ def _knn_from_mean_var(mean_var, n_nearest_neighbors, leaf_size, query_rows=None
 
     Shared by the AnnData and cytome stats functions, which had this logic
     twice, verbatim. Returns a full-height ``(n_features, k)`` array so callers
-    can keep indexing it by global feature id — including the Rust entry points,
-    which take the flattened array and index it themselves. Rows that were not
-    queried are left as zeros; nothing reads them.
+    can keep indexing it by global feature id. Rows that were not queried are
+    left as zeros; nothing reads them. int32: feature ids fit, and the table is
+    half the size (the exclusion of a set's own genes doubles its width; on
+    885,938 tiles the int64 table was 425 MB).
     """
     kdt = KDTree(mean_var, leaf_size=leaf_size, metric='euclidean')
     n_features = mean_var.shape[0]
+    # A small panel can have fewer features than the neighbours asked for
+    # (twice n_nearest_neighbors when a set's own genes are excluded): at
+    # most every other feature.
+    n_nearest_neighbors = max(1, min(int(n_nearest_neighbors), n_features - 1))
     rows = (np.arange(n_features) if query_rows is None
             else np.asarray(query_rows, dtype=np.int64))
     raw = kdt.query(mean_var[rows] if query_rows is not None else mean_var,
@@ -1124,8 +1129,8 @@ def _knn_from_mean_var(mean_var, n_nearest_neighbors, leaf_size, query_rows=None
     trimmed = np.take_along_axis(raw, gather, axis=1)[:, :n_nearest_neighbors]
 
     if query_rows is None:
-        return trimmed.astype(np.int64)
-    knn_idx = np.zeros((n_features, n_nearest_neighbors), dtype=np.int64)
+        return trimmed.astype(np.int32)
+    knn_idx = np.zeros((n_features, n_nearest_neighbors), dtype=np.int32)
     knn_idx[rows] = trimmed
     return knn_idx
 
@@ -1180,12 +1185,51 @@ def _as_scoring_csr(X, what="the expression matrix"):
     return X
 
 
+def _add_column_moments(chunk, col_sum, col_sq_sum, col_start=0):
+    """Add one chunk's per-feature sums of x and of x**2 into float64 accumulators.
+
+    Every value is converted to float64 before it is added (``np.bincount``),
+    so the chunk's own dtype never limits the sums: a float32 matrix used to be
+    summed in float32 by scipy (``.sum(axis=0)`` keeps the data's type), which
+    moved gene means by up to 7.5e-6 relative and changed the nearest
+    neighbours, hence the control genes, of about 0.3 % of genes depending on
+    the path. Holds one float64 copy of the chunk's values at a time. Row-major
+    (CSR) and column-major (CSC, a run of features from ``col_start``) chunks
+    and dense blocks are accepted.
+    """
+    n = chunk.shape[1]
+    if not sparse.issparse(chunk):
+        x = np.asarray(chunk, dtype=np.float64)
+        col_sum[col_start:col_start + n] += x.sum(axis=0)
+        col_sq_sum[col_start:col_start + n] += np.einsum("ij,ij->j", x, x)
+        return
+    if chunk.format == "csc":
+        cols = np.repeat(np.arange(n), np.diff(chunk.indptr))
+    else:
+        chunk = chunk.tocsr() if chunk.format != "csr" else chunk
+        cols = chunk.indices
+    d = np.asarray(chunk.data, dtype=np.float64)
+    col_sum[col_start:col_start + n] += np.bincount(cols, weights=d, minlength=n)
+    d = d * d
+    col_sq_sum[col_start:col_start + n] += np.bincount(cols, weights=d, minlength=n)
+
+
+def _mean_var_from_moments(col_sum, col_sq_sum, n_rows):
+    n = max(int(n_rows), 1)
+    mean = col_sum / n
+    return np.column_stack([mean, col_sq_sum / n - mean ** 2])
+
+
 def _precompute_stats(cellxgene, n_nearest_neighbors=30, leaf_size=40,
                       query_rows=None):
     """Compute KDTree-based KNN indices for control gene sampling.
 
-    Uses CSR sharing trick for variance computation (reuses indices/indptr,
-    only allocates data**2).
+    Each feature's mean and variance are summed in float64 over blocks of
+    ``_PASS1_BLOCK_ROWS`` rows, exactly as the cytome path's first pass sums
+    them, so an AnnData and a cytome of the same matrix get the same
+    statistics and the same neighbours. Peak extra memory is one block's values
+    in float64 (0.7 GB on 281 million non-zeros, against 9 GB for the earlier
+    whole-matrix ``.mean()`` and squared copy).
 
     Parameters
     ----------
@@ -1205,29 +1249,15 @@ def _precompute_stats(cellxgene, n_nearest_neighbors=30, leaf_size=40,
     knn_idx : ndarray (n_genes, n_nearest_neighbors)
         KNN indices for each gene (self-loops removed).
     """
-    if sparse.issparse(cellxgene) and not sparse.isspmatrix_csr(cellxgene):
+    if sparse.issparse(cellxgene) and cellxgene.format != "csr":
         cellxgene = cellxgene.tocsr()
-    # `.mean(axis=0)` returns (1, n_genes) for a sparse matrix or np.matrix but
-    # (n_genes,) for an ndarray, so anything indexing [0] here silently turns a
-    # dense input's per-gene means into one scalar and the KD-tree input becomes
-    # ragged. Ravel, once, and every container behaves the same.
-    infog_mean = np.asarray(cellxgene.mean(axis=0), dtype=np.float64).ravel()
-    mean_sq = infog_mean ** 2
-
-    if sparse.issparse(cellxgene):
-        data_sq = cellxgene.data.astype(np.float64) ** 2
-        X_sq = sparse.csr_matrix((data_sq, cellxgene.indices, cellxgene.indptr),
-                                  shape=cellxgene.shape, copy=False)
-        residual_var = np.asarray(X_sq.mean(axis=0), dtype=np.float64).ravel() - mean_sq
-        del X_sq, data_sq
-    else:
-        residual_var = np.asarray(
-            np.mean(np.asarray(cellxgene, dtype=np.float64) ** 2, axis=0)).ravel() - mean_sq
-
-    mean_var = np.column_stack([infog_mean, residual_var])
-    return _knn_from_mean_var(mean_var, n_nearest_neighbors, leaf_size,
-                              query_rows=query_rows)
-
+    n_rows, n_cols = cellxgene.shape
+    col_sum = np.zeros(n_cols, dtype=np.float64)
+    col_sq_sum = np.zeros(n_cols, dtype=np.float64)
+    for a in range(0, n_rows, _PASS1_BLOCK_ROWS):
+        _add_column_moments(cellxgene[a:min(a + _PASS1_BLOCK_ROWS, n_rows)], col_sum, col_sq_sum)
+    return _knn_from_mean_var(_mean_var_from_moments(col_sum, col_sq_sum, n_rows), n_nearest_neighbors,
+                              leaf_size, query_rows=query_rows)
 
 
 def _precompute_stats_streaming(
@@ -1294,24 +1324,105 @@ def _precompute_stats_streaming(
                 continue
             if not chunk_keep.all():
                 chunk_csr = chunk_csr[chunk_keep]
-        # Accumulate per-column sum
-        col_sum[cs:ce] += np.array(chunk_csr.sum(axis=0), dtype=np.float64).ravel()
-        # Sharing trick: reuse indices/indptr, only square data
-        sq_data = chunk_csr.data.astype(np.float64) ** 2
-        X_sq = type(chunk_csr)(
-            (sq_data, chunk_csr.indices, chunk_csr.indptr),
-            shape=chunk_csr.shape, copy=False,
-        )
-        col_sq_sum[cs:ce] += np.array(X_sq.sum(axis=0), dtype=np.float64).ravel()
+        # float64 per-feature sums, as the in-memory path takes them
+        _add_column_moments(chunk_csr, col_sum, col_sq_sum, cs)
 
-    infog_mean = col_sum / max(n_effective, 1)
-    mean_sq = infog_mean ** 2
-    residual_var = (col_sq_sum / max(n_effective, 1)) - mean_sq
+    return _knn_from_mean_var(_mean_var_from_moments(col_sum, col_sq_sum, n_effective), n_nearest_neighbors,
+                              leaf_size, query_rows=query_rows)
 
-    mean_var = np.array([infog_mean, residual_var]).T
-    return _knn_from_mean_var(mean_var, n_nearest_neighbors, leaf_size,
-                              query_rows=query_rows)
 
+
+def _warn_short_controls(report, stacklevel=3):
+    """One warning per score() call for the genes with fewer control candidates than asked for."""
+    if not report:
+        return
+    k = report["k"]
+    if report.get("short"):
+        warnings.warn(
+            f"score(): {report['short']} gene(s) in {report['sets']} gene set(s) have fewer than {k} candidate "
+            f"control genes (the fewest: {report['min_pool']}), because the matrix has few genes or the set's own "
+            f"genes fill their nearest genes; their controls are drawn uniformly from the candidates they have.",
+            RuntimeWarning, stacklevel=stacklevel)
+    if report.get("none"):
+        warnings.warn(
+            f"score(): {report['none']} gene(s) have no candidate outside their own set among their nearest "
+            f"genes; their controls keep the set's own genes.", RuntimeWarning, stacklevel=stacklevel)
+
+
+def _draw_controls(knn_rows, n_ctrl_set, random_seed, members=None, k=None, report=None):
+    """The control genes of one gene set, the same on every path.
+
+    For each of the set's genes (one row of ``knn_rows``: its nearest genes in
+    mean and variance), ``n_ctrl_set`` draws, uniform over its ``k`` candidates,
+    from a fresh ``np.random.RandomState(random_seed)`` per set (gene by gene,
+    PIASO 1.0's stream). Returns ``(n_ctrl_set, n_genes)`` feature ids; row ``c``
+    is control set ``c``. Every path calls this (an AnnData with or without the
+    compiled extension, a cytome), so the same seed gives the same control sets
+    whatever the backend; restarting the stream per set keeps a set's controls
+    independent of the other sets in the call.
+
+    ``members`` (the set's feature ids) excludes the set's own genes. Each member
+    among a gene's ``k`` nearest gives its place to the next nearest gene outside
+    the set (from the longer ``knn_rows`` the caller queried, ``2 * k``
+    neighbours), so the candidates are the gene's ``k`` nearest non-members, the
+    draws stay uniform over them, and only the draws that land on a member
+    change: every other draw is the same gene as without the exclusion. In the
+    rare row with fewer than ``k`` non-members, the draws that land on a member
+    are drawn again from the row's non-members, from a second fixed stream; a
+    gene with none keeps its nearest genes.
+
+    Genes left with fewer than ``k`` candidates (a matrix with few features caps
+    the table; a large set can fill a gene's nearest genes) are counted in
+    ``report`` (a dict the caller warns from once per call, ``_warn_short_controls``)
+    or, without one, warned about here.
+    """
+    knn_rows = np.asarray(knn_rows)
+    n_gs = knn_rows.shape[0]
+    # the first k columns are the candidates; a wider table (2k, queried for
+    # the exclusion) supplies the replacements; a narrower one caps k
+    k_req = knn_rows.shape[1] if k is None else int(k)
+    k = min(k_req, knn_rows.shape[1])
+    rs = np.random.RandomState(random_seed)
+    rand_idx = rs.randint(0, k, size=(n_gs, n_ctrl_set))
+    cand = knn_rows[:, :k].copy()
+    short = []
+    if members is not None:
+        members = np.asarray(members)
+        is_member = np.isin(knn_rows, members)
+        for g in np.flatnonzero(is_member[:, :k].any(axis=1)):
+            hit = np.flatnonzero(is_member[g, :k])              # members' places among the k nearest
+            spare = knn_rows[g, k:][~is_member[g, k:]]          # the next nearest non-members, in order
+            n = min(len(hit), len(spare))
+            cand[g, hit[:n]] = spare[:n]
+            if n < len(hit):
+                short.append(g)
+    out = cand[np.arange(n_gs)[:, None], rand_idx]
+    pools = np.full(n_gs, k, dtype=np.int64)               # each gene's candidates
+    if short:
+        rs2 = (np.random.RandomState([int(random_seed) & 0xFFFFFFFF, 1]) if random_seed is not None
+               else np.random.RandomState())
+        for g in short:
+            ok = ~np.isin(cand[g], members)
+            pools[g] = int(ok.sum())
+            if not ok.any():
+                continue
+            pool = cand[g][ok]
+            bad = ~ok[rand_idx[g]]
+            out[g, bad] = pool[rs2.randint(0, len(pool), size=int(bad.sum()))]
+    lacking = pools < k_req
+    if lacking.any():
+        local = report is None
+        rep = {"k": k_req} if local else report
+        rep["k"] = k_req
+        some = lacking & (pools > 0)
+        rep["short"] = rep.get("short", 0) + int(some.sum())
+        rep["none"] = rep.get("none", 0) + int((pools == 0).sum())
+        rep["sets"] = rep.get("sets", 0) + 1
+        if some.any():
+            rep["min_pool"] = min(rep.get("min_pool", k_req), int(pools[some].min()))
+        if local:
+            _warn_short_controls(rep)
+    return out.T
 
 
 def _gene_set_weight_matrix(gene_sets_indices, weights_list, n_features):
@@ -1351,6 +1462,7 @@ def _score_streaming_multi(
     layer: str = "counts",
     random_seed: int = 1927,
     n_ctrl_set: int = 100,
+    exclude_set_genes: bool = True,
     compute_pvalues: bool = False,
     max_workers: int = 1,
     use_rust: bool = True,
@@ -1614,7 +1726,7 @@ def _score_streaming_multi(
         if verbosity > 0:
             print(f"  Pass 1: Computing per-feature stats (streaming)...")
         knn_idx = _precompute_stats_streaming(
-            chunk_factory, n_cells, n_features, n_nearest_neighbors, leaf_size,
+            chunk_factory, n_cells, n_features, n_nearest_neighbors * (2 if exclude_set_genes else 1), leaf_size,
             cell_mask=cell_mask_arr,
             query_rows=_gene_set_query_rows(gene_sets_indices, n_features),
         )
@@ -1622,6 +1734,7 @@ def _score_streaming_multi(
     # --- Build control structures (no I/O) ---
     all_ctrl_rows, all_ctrl_cols, all_ctrl_data = [], [], []
     scaling_factors = np.zeros(n_sets, dtype=np.float64)
+    _ctrl_report = {}
 
     for gs_idx in range(n_sets):
         # A LOCAL RandomState, not np.random.seed(): the global seed is
@@ -1631,15 +1744,12 @@ def _score_streaming_multi(
         # happened to agree -- the same trap as igraph's global RNG. Legacy
         # RandomState reproduces the global stream exactly, so this is
         # thread-safe AND bit-identical to the previous behaviour.
-        _rs = np.random.RandomState(random_seed)
         gene_idx = gene_sets_indices[gs_idx]
         weights = weights_list[gs_idx]
-
-        gs_knn_idx = knn_idx[gene_idx]
         n_gs = len(gene_idx)
-        n_neighbors = gs_knn_idx.shape[1]
-        rand_idx = _rs.randint(0, n_neighbors, size=(n_gs, n_ctrl_set))
-        ctrl_sampled = gs_knn_idx[np.arange(n_gs)[:, None], rand_idx].T
+        ctrl_sampled = _draw_controls(knn_idx[gene_idx], n_ctrl_set, random_seed,
+                                      members=gene_idx if exclude_set_genes else None,
+                                      k=n_nearest_neighbors, report=_ctrl_report)
 
         # One COO for ALL sets, with a column offset per set, instead of n_sets
         # small CSR conversions plus an hstack of n_sets blocks. Same triplets
@@ -1652,6 +1762,7 @@ def _score_streaming_multi(
         )
         all_ctrl_data.append(np.tile(weights, n_ctrl_set))
         scaling_factors[gs_idx] = np.median(weights) * n_gs
+    _warn_short_controls(_ctrl_report)
 
     big_ctrl_csr = sparse.coo_matrix(
         (
@@ -1951,6 +2062,7 @@ def score(
     layer=_UNSET,                              # default → 'infog'; None → adata.X; canonical (beats cytome_layer)
     random_seed: int = 1927,
     n_ctrl_set: int = 100,
+    exclude_set_genes: bool = True,
     key_added: str = None,
     compute_pvalues: bool = False,
     fallback_chunk_size: int = 10000,
@@ -2027,10 +2139,26 @@ def score(
         Layer in ``adata.layers`` to use. Default is 'infog'.
 
     random_seed : int, optional
-        Random seed for reproducibility. Default is 1927.
+        Seed of the control sets. Each gene set's controls are drawn from a fresh
+        ``np.random.RandomState(random_seed)``, so the same seed gives the same
+        control sets on every path (an AnnData with or without the compiled
+        extension, a cytome) and a set's controls do not depend on the other
+        sets in the call. Default is 1927.
 
     n_ctrl_set : int, optional
         Number of control gene sets. Default is 100.
+
+    exclude_set_genes : bool, optional
+        Draw each gene's controls from its ``n_nearest_neighbors`` nearest genes
+        outside its own set, so that no member of a set serves as a control for
+        that set; members of other sets stay allowed. Each member among a gene's
+        nearest genes gives its place to the next nearest non-member, so only
+        the draws that would have been a member change. Default True. False
+        lets a set's own genes serve as its controls, the draws of PIASO 1.2.6
+        and earlier on the paths that drew in numpy. Either way, a gene with
+        fewer than ``n_nearest_neighbors`` candidates (a matrix with few genes,
+        or a set large enough to fill a gene's nearest genes) draws from those
+        it has, and one warning per call says how many genes and the fewest.
 
     key_added : str, optional
         Key for storing results in adata (single-set mode only).
@@ -2186,6 +2314,7 @@ def score(
                 n_nearest_neighbors=n_nearest_neighbors, leaf_size=leaf_size,
                 modality=modality, layer=layer,
                 random_seed=random_seed, n_ctrl_set=n_ctrl_set,
+                exclude_set_genes=exclude_set_genes,
                 compute_pvalues=compute_pvalues,
                 max_workers=max_workers, use_rust=use_rust,
                 compute_on_fly=compute_on_fly,
@@ -2205,6 +2334,7 @@ def score(
                 n_nearest_neighbors=n_nearest_neighbors, leaf_size=leaf_size,
                 modality=modality, layer=layer,
                 random_seed=random_seed, n_ctrl_set=n_ctrl_set,
+                exclude_set_genes=exclude_set_genes,
                 compute_pvalues=compute_pvalues,
                 max_workers=max_workers, use_rust=use_rust,
                 compute_on_fly=compute_on_fly,
@@ -2263,44 +2393,37 @@ def score(
         # Resolved before the tree is queried, so only the rows control sampling
         # will read get computed — same shortcut the cytome path takes.
         knn_idx = _precompute_stats(
-            cellxgene, n_nearest_neighbors, leaf_size,
+            cellxgene, n_nearest_neighbors * (2 if exclude_set_genes else 1), leaf_size,
             query_rows=_gene_set_query_rows(
                 _gene_list_feature_indices(gene_list, var_names_to_idx), n_genes),
         )
 
-    # --- Try Rust backend (multi-set only) ---
+    # --- Rust backend (multi-set only): the multiply and reduce. The control
+    # genes are always drawn in numpy (_draw_controls), so a missing extension
+    # changes the speed, never the control sets or the scores. The fused
+    # kernel `score_complete`, which drew its own controls with a different
+    # generator (1.1.0 to 1.2.6), is no longer called.
     _rust_fmr = None
     _rust_fmr32 = None
-    _rust_sc = None
     if use_rust and _multi:
         try:
-            from piaso._piaso import fused_matmul_reduce, score_complete
+            from piaso._piaso import fused_matmul_reduce
             _rust_fmr = fused_matmul_reduce
-            _rust_sc = score_complete
             try:
                 from piaso._piaso import fused_matmul_reduce_f32
                 _rust_fmr32 = fused_matmul_reduce_f32
             except ImportError:
                 _rust_fmr32 = None
         except ImportError:
-            try:
-                from piaso._piaso import fused_matmul_reduce
-                _rust_fmr = fused_matmul_reduce
-            except ImportError:
-                pass
-            # use_rust=True was requested but the compiled extension
-            # (piaso._piaso) is missing/stale, so we silently dropped to the
-            # pure-Python path (correct, but ~16× slower). Warn so this isn't
-            # invisible — mirrors quantifyPeakActivity's stale-.so guard, but a
-            # warning (not an error) since the Python path is fully valid.
             # Python de-dupes identical warnings per call site, so loops won't
             # spam. Pass use_rust=False to silence intentionally.
             warnings.warn(
                 "score(use_rust=True): the compiled Rust backend "
-                "(piaso._piaso.score_complete) is unavailable — falling back to "
-                "the pure-Python path (~16x slower, identical results). Rebuild "
-                "the extension (maturin develop / pip install with a Rust "
-                "toolchain) for the fast path, or pass use_rust=False to silence.",
+                "(piaso._piaso.fused_matmul_reduce) is unavailable; falling back to "
+                "the pure-Python multiply (slower, with the same control sets and "
+                "the same scores). Rebuild the extension (maturin develop / pip "
+                "install with a Rust toolchain) for the fast path, or pass "
+                "use_rust=False to silence.",
                 RuntimeWarning,
                 stacklevel=2,
             )
@@ -2365,67 +2488,19 @@ def score(
         if n_sets == 0:
             raise ValueError("No valid gene sets found.")
 
-        # --- Fused Rust path: control sampling + matmul + reduce in one call ---
-        if _rust_sc is not None:
-            cellxgene_csr = cellxgene.tocsr() if not sparse.isspmatrix_csr(cellxgene) else cellxgene
-
-            # Pack gene sets and weights into flat arrays with offsets (CSR-style)
-            gs_flat = []
-            gs_offsets = [0]
-            w_flat = []
-            w_offsets = [0]
-            for gs_idx in range(n_sets):
-                gs_flat.extend(gene_sets_indices[gs_idx])
-                gs_offsets.append(len(gs_flat))
-                w_flat.extend(weights_list[gs_idx].tolist())
-                w_offsets.append(len(w_flat))
-
-            scores_flat, query_flat, sf_flat, pval_flat = _rust_sc(
-                cellxgene_csr.data.astype(np.float64, copy=False),
-                cellxgene_csr.indices.astype(np.int32, copy=False),
-                cellxgene_csr.indptr.astype(np.int32, copy=False),
-                n_cells, n_genes,
-                knn_idx.ravel().astype(np.int64, copy=False),
-                knn_idx.shape[1],
-                np.array(gs_flat, dtype=np.int32),
-                np.array(gs_offsets, dtype=np.int32),
-                np.array(w_flat, dtype=np.float64),
-                np.array(w_offsets, dtype=np.int32),
-                n_ctrl_set, random_seed,
-                # The kernel's TILE, not a memory chunk. `chunk_size` still
-                # means rows-per-dense-block in the Python fallback below, so
-                # this is fixed at the use site rather than by redefining the
-                # parameter.
-                _kernel_tile_rows(n_cells, max(1, max_workers)),
-                max(1, max_workers), compute_pvalues,
-            )
-            score_matrix = scores_flat.reshape(n_cells, n_sets)
-            pval_matrix = pval_flat.reshape(n_cells, n_sets) if pval_flat is not None else None
-            if key_added is not None and len(gene_set_names) == 1:
-                _write_single_set_result(adata, key_added, score_matrix,
-                                         pval_matrix, verbosity)
-            return score_matrix, gene_set_names, pval_matrix
-
-        # --- Python fallback: build control blocks + matmul ---
+        # --- Control blocks (numpy draws) + the multiply (Rust when available) ---
         all_ctrl_rows, all_ctrl_cols, all_ctrl_data = [], [], []
         query_scores = np.zeros((n_cells, n_sets), dtype=np.float64)
         scaling_factors = np.zeros(n_sets, dtype=np.float64)
+        _ctrl_report = {}
 
         for gs_idx in range(n_sets):
-            # Reset seed per gene set for reproducibility
-            _rs = np.random.RandomState(random_seed)  # thread-safe, same stream
-
             gene_idx = gene_sets_indices[gs_idx]
             weights = weights_list[gs_idx]
-
-            # KNN indices for this gene set's genes
-            gs_knn_idx = knn_idx[gene_idx]
-
-            # Sample control genes (vectorized)
             n_gs = len(gene_idx)
-            n_neighbors = gs_knn_idx.shape[1]
-            rand_idx = _rs.randint(0, n_neighbors, size=(n_gs, n_ctrl_set))
-            ctrl_sampled = gs_knn_idx[np.arange(n_gs)[:, None], rand_idx].T
+            ctrl_sampled = _draw_controls(knn_idx[gene_idx], n_ctrl_set, random_seed,
+                                          members=gene_idx if exclude_set_genes else None,
+                                          k=n_nearest_neighbors, report=_ctrl_report)
 
             # One COO for all sets with a column offset per set — see the
             # cytome path for why this is equivalent to n_sets blocks + hstack.
@@ -2437,6 +2512,7 @@ def score(
             all_ctrl_data.append(np.tile(weights, n_ctrl_set))
 
             scaling_factors[gs_idx] = np.median(weights) * n_gs
+        _warn_short_controls(_ctrl_report)
 
         # Query scores for every gene set in one matmul rather than a
         # column-subset per set inside the loop above — same change as the
@@ -2545,12 +2621,13 @@ def score(
         gene_idx = [var_names_to_idx[g] for g in gene_list]
         gene_list_knn_idx = knn_idx[gene_idx]
 
-        # Vectorized control gene sampling
+        # Control genes: the one sampler every path uses
         n_genes_gs = len(gene_idx)
-        n_neighbors = gene_list_knn_idx.shape[1]
-        _rs_single = np.random.RandomState(random_seed)
-        rand_idx = _rs_single.randint(0, n_neighbors, size=(n_genes_gs, n_ctrl_set))
-        ctrl_sampled = gene_list_knn_idx[np.arange(n_genes_gs)[:, None], rand_idx].T
+        _ctrl_report = {}
+        ctrl_sampled = _draw_controls(gene_list_knn_idx, n_ctrl_set, random_seed,
+                                      members=gene_idx if exclude_set_genes else None,
+                                      k=n_nearest_neighbors, report=_ctrl_report)
+        _warn_short_controls(_ctrl_report)
 
         # Build sparse control weight matrix (vectorized)
         rows = ctrl_sampled.ravel()

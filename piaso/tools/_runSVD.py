@@ -138,6 +138,7 @@ def _runSVD_original(
     verbosity: int = 0,
     selected_feature_col_name: str = _DEFAULT_SELECTED_COL,
     modality: str = "RNA",
+    drop_first_component: bool = False,
 ):
     """
     Performs Truncated Singular Value Decomposition (SVD) on the specified gene expression matrix (adata.X or a specified layer)
@@ -204,10 +205,74 @@ def _runSVD_original(
         expr = StandardScaler(with_mean=False).fit_transform(expr)
 
     transformer = TruncatedSVD(n_components=n_components, random_state=random_state, n_iter = n_iter)
-    adata.obsm[key_added] = transformer.fit_transform(expr)
+    emb = transformer.fit_transform(expr)
+    dropped_sv = None
+    if drop_first_component:
+        # n_components here already counts the left-out first component
+        emb = np.ascontiguousarray(emb[:, 1:])
+        dropped_sv = float(transformer.singular_values_[0])
+    adata.obsm[key_added] = emb
+    _record_drop_first(adata, key_added, emb.shape[1], drop_first_component, dropped_sv)
+    if drop_first_component and verbosity > 0:
+        print(f"runSVD: components 2 to {emb.shape[1] + 1} of {emb.shape[1] + 1} kept (the first left out)")
 
     if verbosity>0:
         print(f'The cell embeddings were saved as `{key_added}` in adata.obsm.')
+
+
+def _unit_rows(embeddings):
+    """Each row of ``embeddings`` scaled to length 1, and the lengths it had.
+
+    The lengths are computed in float64. A cell with no signal in the selected
+    features has a row of zeros in the matrix, and the solver returns it as
+    rounding noise (about 1e-17), which scaling would turn into a random unit
+    vector; a row shorter than 1e-10 of the longest is therefore kept at zero,
+    with length 0. Multiplying each row back by its length gives the
+    embedding as it was, to rounding.
+    """
+    emb = np.asarray(embeddings)
+    e64 = emb.astype(np.float64, copy=False)
+    lengths = np.sqrt(np.einsum("ij,ij->i", e64, e64))
+    longest = float(lengths.max()) if lengths.size else 0.0
+    empty = lengths <= 1e-10 * longest
+    lengths = np.where(empty, 0.0, lengths)
+    unit = np.where(empty[:, None], 0.0, e64 / np.where(empty, 1.0, lengths)[:, None])
+    return np.ascontiguousarray(unit.astype(emb.dtype, copy=False)), lengths
+
+
+def _length_column(key_added):
+    """The obs (or cells-table) column holding each cell's embedding length before it was scaled."""
+    return f"{key_added}_length"
+
+
+def _record_svd_params(adata, key_added, n_kept, dropped, dropped_singular_value=None,
+                       unit_length=False, lengths=None):
+    """Say, next to an AnnData's embedding, which components it holds when the first was
+    left out, and whether its rows were scaled to unit length (their lengths in obs)."""
+    key = f"{key_added}_params"
+    rec = {}
+    if dropped:
+        rec.update(first_component_dropped=True, components=[2, int(n_kept) + 1],
+                   n_components=int(n_kept))
+        if dropped_singular_value is not None:
+            rec["dropped_singular_value"] = float(dropped_singular_value)
+    if unit_length:
+        rec.update(unit_length=True, length_column=_length_column(key_added))
+    if rec:
+        adata.uns[key] = rec
+    elif isinstance(adata.uns.get(key), dict) and \
+            {"first_component_dropped", "unit_length"} & set(adata.uns[key]):
+        del adata.uns[key]          # a rerun without the options must not keep the old record
+    col = _length_column(key_added)
+    if unit_length and lengths is not None:
+        adata.obs[col] = np.asarray(lengths, dtype=np.float64)
+    elif col in adata.obs.columns:
+        del adata.obs[col]          # nor a length that no longer describes the embedding
+
+
+def _record_drop_first(adata, key_added, n_kept, dropped, dropped_singular_value=None):
+    """Say, next to an AnnData's embedding, which components it holds when the first was left out."""
+    _record_svd_params(adata, key_added, n_kept, dropped, dropped_singular_value)
 
 
 def _engine_threads(n_threads):
@@ -239,7 +304,7 @@ def _cached_factory(factory):
 # ============================================================================
 def _streaming_rsvd(chunk_iter_factory, n_cells, n_features, n_components, n_iter,
                     random_state, oversampling=10, verbosity=0, cache_chunks=False,
-                    tol=None, method="power"):
+                    tol=None, method="power", stop_on="residuals"):
     """
     Streaming randomized SVD using Halko-Martinsson-Tropp algorithm.
 
@@ -309,6 +374,7 @@ def _streaming_rsvd(chunk_iter_factory, n_cells, n_features, n_components, n_ite
         FactoryOps(chunk_iter_factory, n_cells, n_features),
         n_components=n_components, n_iter=n_iter, random_state=random_state,
         oversampling=oversampling, tol=tol, method=method, verbosity=verbosity,
+        stop_on=stop_on,
     )
     return embeddings, S, Vt
 
@@ -373,7 +439,12 @@ def _get_svd_chunk_iterator(source, hvg_indices, batch_size, layer, measurement,
     """
     if isinstance(source, str) or _is_cytome_dataset(source):
         ds = _open_cytome(source) if isinstance(source, str) else source
-        _layer = measurement or layer or "infog"
+        # Left unnamed, the layer follows the modality: the raw counts of
+        # peaks or tiles, which the default TF-IDF transforms (and from which
+        # its statistics are computed), INFOG for RNA. Reading INFOG for ATAC
+        # made runSVD(ds, modality='ATAC') fail on a store holding its counts.
+        _layer = measurement or layer or (
+            "counts" if modality in _LEGACY_FALLBACK_MODALITIES else "infog")
 
         # Check if compact HVG measurement exists
         _has_compact = False
@@ -495,6 +566,7 @@ def _runSVD_streaming(
     compute_on_fly: bool = True,
     tol: Optional[float] = None,
     method: str = "auto",
+    stop_on: str = "residuals",
     n_threads: int = 0,
     use_engine: bool = True,
     selected_feature_col_name: str = _DEFAULT_SELECTED_COL,
@@ -502,8 +574,16 @@ def _runSVD_streaming(
     _auto_tfidf_inferred: bool = False,
     cell_mask=None,
     return_svd: bool = False,
+    drop_first_component: bool = False,
+    unit_length: bool = False,
 ):
-    """Streaming randomized SVD implementation."""
+    """Streaming randomized SVD implementation.
+
+    With ``drop_first_component`` the caller passes ``n_components`` already
+    counting the left-out component; it is dropped here, before anything is
+    written or returned. With ``unit_length`` each cell's vector (of the kept
+    components) is scaled to length 1 after that, before anything is written or
+    returned."""
     is_adata = isinstance(source, AnnData)
     is_cytome = isinstance(source, str) or _is_cytome_dataset(source)
 
@@ -693,7 +773,7 @@ def _runSVD_streaming(
               f"{n_components} components")
         if method == "power":
             print(f"  Solver: power iteration"
-                  + (f" (tol={tol}, at most {n_iter} rounds = "
+                  + (f" (tol={tol} on the {stop_on.replace('_', ' ')}, at most {n_iter} rounds = "
                      f"{2 + 2 * n_iter} passes)" if tol is not None
                      else f" ({n_iter} rounds = {2 + 2 * n_iter} passes)"))
 
@@ -799,7 +879,7 @@ def _runSVD_streaming(
             embeddings, S, Vt, _svd_info = rsvd_core(
                 _engine_ops, n_components=n_components, n_iter=n_iter,
                 random_state=random_state, oversampling=oversampling,
-                tol=tol, method=method, verbosity=verbosity,
+                tol=tol, method=method, verbosity=verbosity, stop_on=stop_on,
             )
         finally:
             if _legacy_release is not None:
@@ -845,7 +925,7 @@ def _runSVD_streaming(
                 FactoryOps(_fac, n_cells, n_features),
                 n_components=n_components, n_iter=n_iter,
                 random_state=random_state, oversampling=oversampling,
-                tol=tol, method=method, verbosity=verbosity,
+                tol=tol, method=method, verbosity=verbosity, stop_on=stop_on,
             )
         else:
             embeddings, S, Vt = _streaming_rsvd(
@@ -853,7 +933,7 @@ def _runSVD_streaming(
                 n_components=n_components, n_iter=n_iter,
                 random_state=random_state, oversampling=oversampling,
                 verbosity=verbosity, cache_chunks=cache_chunks,
-                tol=tol, method=method,
+                tol=tol, method=method, stop_on=stop_on,
             )
 
     # Truncate to true cell count if defensive over-allocation was used
@@ -863,6 +943,21 @@ def _runSVD_streaming(
         if embeddings.shape[0] > true_n:
             embeddings = embeddings[:true_n]
 
+    dropped_sv = None
+    if drop_first_component:
+        dropped_sv = float(S[0]) if S is not None else None
+        embeddings = np.ascontiguousarray(embeddings[:, 1:])
+        S = S[1:] if S is not None else None
+        Vt = Vt[1:] if Vt is not None else None
+        if verbosity > 0:
+            print(f"runSVD: components 2 to {embeddings.shape[1] + 1} of {embeddings.shape[1] + 1} "
+                  f"kept (the first left out)")
+    lengths = None
+    if unit_length:
+        embeddings, lengths = _unit_rows(embeddings)
+        if verbosity > 0:
+            print("runSVD: each cell's embedding vector scaled to unit length")
+
     # Write results.
     # When cell_mask is set, embeddings shape is (n_masked, n_components)
     # — NOT (n_cells, n_components) — so writing to a full-cell-aligned
@@ -871,13 +966,26 @@ def _runSVD_streaming(
     if cell_mask is None:
         if is_adata:
             source.obsm[key_added] = embeddings
+            _record_svd_params(source, key_added, embeddings.shape[1], drop_first_component,
+                               dropped_sv, unit_length=unit_length, lengths=lengths)
         elif is_cytome:
             from ._embedding_names import storage_name
+            emb_name = storage_name(key_added, modality)
+            prov = {"modality": modality, "function": "piaso.tl.runSVD",
+                    "layer": layer, "key_added": key_added}
+            if drop_first_component:
+                prov.update(first_component_dropped=True,
+                            components=f"2 to {embeddings.shape[1] + 1}",
+                            dropped_singular_value=dropped_sv)
+            if unit_length:
+                # The lengths go to the cells table, so the scaling is reversible
+                # and the length-against-depth diagnostic stays available.
+                prov.update(unit_length=True, length_column=_length_column(emb_name))
+                ds.cells[_length_column(emb_name)] = np.asarray(lengths, dtype=np.float64)
             ds.add_embedding(
-                storage_name(key_added, modality), embeddings,
+                emb_name, embeddings,
                 dtype=_resolve_layer_dtype(None),
-                provenance={"modality": modality, "function": "piaso.tl.runSVD",
-                            "layer": layer, "key_added": key_added},
+                provenance=prov,
             )
             ds.flush()
 
@@ -890,6 +998,203 @@ def _runSVD_streaming(
     # tuple for: AnnData input (in-memory callers chain on it), cell_mask runs
     # (no cytome write — required by runGDR), or an explicit return_svd=True.
     if is_adata or cell_mask is not None or return_svd:
+        return embeddings, S, Vt
+    return None
+
+
+# ============================================================================
+# In-memory AnnData: the store's solver over the matrix in memory
+# ============================================================================
+def _runSVD_anndata(
+    adata,
+    use_highly_variable: bool = True,
+    n_components: int = 50,
+    n_iter=None,
+    random_state: Optional[int] = 10,
+    scale_data: bool = False,
+    oversampling: int = 10,
+    batch_size: int = 1024,
+    key_added: str = 'X_svd',
+    layer: Optional[str] = None,
+    modality: str = "RNA",
+    verbosity: int = 0,
+    cache_chunks: bool = False,
+    tfidf_params: Optional[dict] = None,
+    infog_params: Optional[dict] = None,
+    hvg_indices_override=None,
+    selected_feature_col_name: str = _DEFAULT_SELECTED_COL,
+    auto_tfidf: bool = False,
+    tol: Optional[float] = None,
+    method: str = "auto",
+    stop_on: str = "residuals",
+    n_threads: int = 0,
+    use_engine: bool = True,
+    cell_mask=None,
+    return_tuple: bool = False,
+    drop_first_component: bool = False,
+    unit_length: bool = False,
+):
+    """runSVD on an in-memory AnnData with the solver a store gets.
+
+    The products come from the Rust pass engine reading the matrix in memory
+    (``MatrixChunkSource``), with the store's semantics: the transform on
+    full rows, then the selected columns, then the kept cells. Without the
+    engine (``use_engine=False``, INFOG on the fly, or an extension without
+    ``svd_pass_source``) Python computes the same products one chunk at a
+    time. ``n_components`` already counts a left-out first component.
+    """
+    import time as _time
+    from ._rsvd_core import EngineOps, rsvd_core
+    from ._svd_memsource import (MatrixChunkSource, assert_raw_counts_matrix, engine_ready,
+                                 matrix_python_ops, tfidf_stats_matrix)
+    from ..utils._bool_mask import as_bool_mask
+
+    if layer:
+        if layer not in adata.layers:
+            raise ValueError(f"{layer} not found in adata.layers.")
+        X, where = adata.layers[layer], f"adata.layers[{layer!r}]"
+    else:
+        X, where = adata.X, "adata.X"
+    if X is None:
+        raise ValueError(f"runSVD: {where} is empty.")
+    if not sparse.issparse(X) and not isinstance(X, np.ndarray) and hasattr(X, "to_memory"):
+        X = X.to_memory()                       # a backed AnnData's sparse matrix
+    # Canonical before anything reads values: duplicates summed (a copy;
+    # the caller's matrix is left as it is).
+    X = engine_ready(X)
+    n_obs, n_vars = adata.n_obs, adata.n_vars
+    if tfidf_params is not None and infog_params is not None:
+        raise ValueError("runSVD: pass tfidf_params or infog_params, not both.")
+    if scale_data and (tfidf_params is not None or infog_params is not None or auto_tfidf):
+        raise ValueError("runSVD: scale_data=True scales the values as stored; it cannot be "
+                         "combined with TF-IDF or INFOG applied on the fly.")
+
+    # The features: explicit indices, else the TF-IDF parameters' mask, else
+    # the selected column, as on a store.
+    col_mask = None
+    if hvg_indices_override is not None:
+        col_mask = np.zeros(n_vars, dtype=bool)
+        col_mask[np.asarray(hvg_indices_override, dtype=np.int64)] = True
+    elif tfidf_params is not None and tfidf_params.get("col_mask") is not None:
+        col_mask = as_bool_mask(tfidf_params["col_mask"], name="tfidf_params['col_mask']")
+    elif use_highly_variable:
+        hv_col = _resolve_selected_col_anndata(adata, modality, selected_feature_col_name)
+        col_mask = as_bool_mask(adata.var[hv_col].values, name=f"var.{hv_col}")
+    if col_mask is not None and col_mask.shape[0] != n_vars:
+        raise ValueError(f"runSVD: the feature mask has {col_mask.shape[0]} entries and the "
+                         f"matrix {n_vars} columns")
+    n_features = n_vars if col_mask is None else int(col_mask.sum())
+    _assert_enough_features(n_features, n_components, oversampling, selected_feature_col_name)
+    row_keep = None if cell_mask is None else _mask_to_indices(cell_mask, n_obs)
+
+    # What the products do to each stored value.
+    tf, chunk_norm, transform = None, None, "values as stored"
+    if tfidf_params is not None:
+        tf = {"cell_depth": np.asarray(tfidf_params["cell_depth"], dtype=np.float64),
+              "idf": np.asarray(tfidf_params["idf"], dtype=np.float32),
+              "scale_factor": tfidf_params.get("scale_factor", 1e4)}
+        transform = "TF-IDF on the fly"
+    elif auto_tfidf:
+        # The statistics a store's compute_tfidf_stats gives the same counts.
+        assert_raw_counts_matrix(X, where)
+        tf = tfidf_stats_matrix(X)
+        transform = "TF-IDF on the fly"
+    elif infog_params is not None:
+        from ._normalization import _normalize_chunk_infog
+        _ip = infog_params
+
+        def chunk_norm(chunk, rows, _ip=_ip):
+            return _normalize_chunk_infog(chunk, _ip["cell_depth"][rows], _ip["inv_gene_depth"],
+                                          _ip["scale"], _ip["counts_sum"], _ip.get("threshold"))
+        transform = "INFOG on the fly"
+
+    if scale_data:
+        # Scaled on exactly what is factorised: the selected features of the kept cells.
+        if col_mask is not None:
+            X = X[:, np.flatnonzero(col_mask)]
+        if row_keep is not None:
+            X = X[row_keep]
+        X = engine_ready(StandardScaler(with_mean=False).fit_transform(X))
+        col_mask, row_keep = None, None
+        transform = "each feature scaled to unit variance"
+    n_rows, n_cols = X.shape
+
+    engine = False
+    if use_engine and chunk_norm is None:
+        try:
+            from .. import _piaso as _ext
+            engine = hasattr(_ext, "svd_pass_source")
+        except Exception:
+            engine = False
+    threads = _engine_threads(n_threads)
+    src = None
+    if engine:
+        from ._svd_memsource import BATCH_BYTES as _mem_batch
+        src = MatrixChunkSource(X, n_threads=threads, rows_per_chunk=batch_size, cache=cache_chunks)
+        ops = EngineOps("", src.matrix_name, n_rows, n_cols, col_mask=col_mask, row_keep=row_keep,
+                        tfidf=tf, n_threads=n_threads, source=src, batch_bytes=_mem_batch)
+    else:
+        ops = matrix_python_ops(X, col_mask=col_mask, row_keep=row_keep, tfidf=tf,
+                                chunk_norm=chunk_norm, rows_per_chunk=batch_size)
+    if verbosity > 0:
+        print(f"In-memory SVD: {ops.n_rows} cells x {ops.n_cols} features, {n_components} components")
+        if engine:
+            print(f"  SVD engine: Rust pass over {where} ({n_rows} rows x {ops.n_cols} selected columns, "
+                  f"{'column' if src.layout == 'csc' else 'row'} chunks, {transform}), {threads} threads"
+                  + (", chunks kept in memory after the first pass" if cache_chunks else ""))
+        else:
+            why = ("use_engine=False" if not use_engine
+                   else "INFOG on the fly is computed in Python" if chunk_norm is not None
+                   else "the Rust extension has no svd_pass_source")
+            print(f"  SVD products computed in Python ({why}), {transform}")
+        if method == "power":
+            print(f"  Solver: power iteration"
+                  + (f" (tol={tol} on the {stop_on.replace('_', ' ')}, at most {n_iter} rounds = "
+                     f"{2 + 2 * n_iter} passes)" if tol is not None else f" ({n_iter} rounds = {2 + 2 * n_iter} passes)"))
+
+    t0 = _time.perf_counter()
+    try:
+        embeddings, S, Vt, _info = rsvd_core(
+            ops, n_components=n_components, n_iter=n_iter, random_state=random_state,
+            oversampling=oversampling, tol=tol, method=method, verbosity=verbosity,
+            stop_on=stop_on,
+        )
+    finally:
+        if src is not None:
+            if verbosity > 0 and cache_chunks:
+                if src.cache_declined:
+                    print(f"  SVD engine: chunk cache declined, it would have held "
+                          f"{src.cache_declined[0] / 1e9:.1f} GB against a budget of "
+                          f"{src.cache_declined[1] / 1e9:.1f} GB")
+                else:
+                    print(f"  SVD engine: {src.cached_bytes / 1e9:.2f} GB of chunks kept in memory")
+            src.close()
+    if verbosity > 0 and engine:
+        wall = _time.perf_counter() - t0
+        print(f"  Solver time: {wall:.1f} s, of which {ops.seconds:.1f} s in {ops.passes} passes "
+              f"over the matrix and {max(wall - ops.seconds, 0.0):.1f} s in numpy between them")
+
+    dropped_sv = None
+    if drop_first_component:
+        dropped_sv = float(S[0])
+        embeddings = np.ascontiguousarray(embeddings[:, 1:])
+        S, Vt = S[1:], Vt[1:]
+        if verbosity > 0:
+            print(f"runSVD: components 2 to {embeddings.shape[1] + 1} of {embeddings.shape[1] + 1} "
+                  f"kept (the first left out)")
+    lengths = None
+    if unit_length:
+        embeddings, lengths = _unit_rows(embeddings)
+        if verbosity > 0:
+            print("runSVD: each cell's embedding vector scaled to unit length")
+    if cell_mask is None:
+        # A subset's embedding is not aligned with adata's cells: returned, never stored.
+        adata.obsm[key_added] = embeddings
+        _record_svd_params(adata, key_added, embeddings.shape[1], drop_first_component, dropped_sv,
+                           unit_length=unit_length, lengths=lengths)
+        if verbosity > 0:
+            print(f"The cell embeddings were saved as `{key_added}` in adata.obsm.")
+    if return_tuple or cell_mask is not None:
         return embeddings, S, Vt
     return None
 
@@ -920,12 +1225,15 @@ def runSVD(
     selected_feature_col_name: str = _DEFAULT_SELECTED_COL,
     tol: Optional[float] = None,
     method: str = "auto",
+    stop_on: str = "residuals",
     n_threads: int = 0,
     use_engine: bool = True,
     auto_tfidf: Optional[bool] = None,
     cell_mask=None,
     return_svd: bool = False,
     compute_on_fly: bool = True,
+    drop_first_component: bool = False,
+    unit_length: Optional[bool] = None,
     # ---- deprecated aliases (back-compat) ----
     source=_UNSET,
     adata=_UNSET,
@@ -934,10 +1242,16 @@ def runSVD(
     Truncated SVD dimensionality reduction.
 
     Supports three modes:
-    - ``runSVD(adata)`` — standard in-memory.
-    - ``runSVD(adata, streaming=True)`` — streaming from an in-memory AnnData.
+    - ``runSVD(adata)`` — an in-memory AnnData; writes ``obsm[key_added]``.
+    - ``runSVD(adata, streaming=True)`` — the same computation, also
+      returning ``(embeddings, S, Vt)``.
     - ``runSVD("path.cytome")`` / ``runSVD(ds)`` — streaming from a cytome
       (self-contained: writes the embedding to the cytome and returns None).
+
+    Every input gets the same solver (``method``, ``tol``) and, with the Rust
+    extension, the same pass engine: an AnnData and the same matrix in a
+    store give the same embedding, to the bit when the values and the
+    TF-IDF statistics are the same.
 
     Parameters
     ----------
@@ -947,11 +1261,15 @@ def runSVD(
     use_highly_variable : bool, default True
         Restrict SVD to features flagged in ``selected_feature_col_name``.
     n_components : int, default 50
-        Number of singular components (SVD dimensions).
+        Number of singular components (SVD dimensions) in the embedding.
+        With ``drop_first_component=True`` they are components 2 to
+        ``n_components + 1``.
     random_state : int or None, default 10
         Random seed for the randomized SVD solver.
     scale_data : bool, default False
-        Z-score the (selected) features before SVD.
+        Scale each selected feature to unit variance (no centering, so a
+        sparse matrix stays sparse) before the SVD. AnnData only; it makes a
+        scaled copy of the selected features of the cells used.
     n_iter : int, optional
         The number of rounds. For ``'power'`` and ``'krylov'`` without
         ``tol`` it is exact (7 when left unset); with ``tol``, and for ``'auto'``,
@@ -962,19 +1280,25 @@ def runSVD(
         Name for the embedding (AnnData ``obsm[key_added]`` / cytome embedding;
         on a cytome it is stored as ``{modality}_{key_added without 'X_'}``).
     layer : str, optional
-        AnnData layer to read instead of ``.X`` (in-memory path).
+        AnnData layer to read instead of ``.X``.
     verbosity : int, default 0
         Verbosity level.
     streaming : bool, default False
-        Force the chunked streaming path for an in-memory AnnData. A cytome
-        always streams; this has no effect on one.
+        For an AnnData, also return ``(embeddings, S, Vt)``; the computation
+        is the same either way (the engine reads an in-memory matrix chunk
+        by chunk in both cases). A cytome always streams; this has no
+        effect on one.
     batch_size : int, default 1024
-        Rows per chunk for the Python chunk reader (AnnData, or a cytome with
-        ``use_engine=False``). The Rust engine reads the store's own chunks
-        and ignores it.
+        Rows per chunk when the products are computed in Python
+        (``use_engine=False``, INFOG with ``infog_params``, or no Rust
+        extension), and for a dense AnnData matrix. The engine otherwise
+        cuts an in-memory matrix itself and reads a store's own chunks; the
+        result does not depend on the chunking.
     measurement : str, optional
         Cytome measurement/layer to read (e.g. ``'counts'``, ``'infog'``,
-        ``'tfidf'``). Defaults to the modality's standard layer.
+        ``'tfidf'``). Defaults to the modality's standard layer: ``'counts'``
+        for ``'ATAC'`` and ``'tiles'`` (which TF-IDF, on by default there,
+        transforms), ``'infog'`` otherwise.
     oversampling : int, default 10
         Extra components sampled by the randomized SVD for accuracy
         (solver uses ``n_components + oversampling``).
@@ -990,7 +1314,10 @@ def runSVD(
         The Python chunk reader keeps them decoded, several times larger.
         On local disk the operating system already caches the store between
         passes, so this mainly helps on a network mount without the option
-        of copying the store to local scratch.
+        of copying the store to local scratch. For an AnnData, each pass
+        otherwise copies every chunk as it goes, a batch at a time; with
+        this the copies are kept, one copy of the selected matrix, under
+        the same budget.
     tfidf_params : dict, optional
         Apply TF-IDF inline during chunk iteration. Keys: ``'cell_depth'``
         (ndarray), ``'idf'`` (ndarray), ``'scale_factor'`` (float); optional
@@ -1004,64 +1331,138 @@ def runSVD(
     infog_params : dict, optional
         The INFOG counterpart of ``tfidf_params``: apply INFOG normalisation
         inline during chunk iteration instead of materialising a layer.
+        Computed in Python (the engine has no INFOG transform).
     hvg_indices_override : ndarray, optional
         Explicit column indices to run SVD on, bypassing
-        ``selected_feature_col_name`` entirely. Used by callers that have
+        ``selected_feature_col_name`` (and, on an AnnData, a
+        ``tfidf_params['col_mask']``) entirely. Used by callers that have
         already selected features by another route.
     auto_tfidf : bool, optional
-        Cytome only. Apply TF-IDF on the fly: load the statistics from
-        ``ds.metadata['{modality}_tfidf_params']`` (or compute and cache them
-        in one pass), with the column mask from ``selected_feature_col_name``.
-        Left unset it is on for ``modality='ATAC'`` or ``'tiles'`` reading raw
-        counts with no ``tfidf_params`` -- an SVD of raw peak or tile counts is
-        never the intended analysis -- and off otherwise. Pass ``False`` to
-        factorise raw counts anyway.
+        Apply TF-IDF on the fly, with the column mask from
+        ``selected_feature_col_name``. On a cytome the statistics are loaded
+        from ``ds.metadata['{modality}_tfidf_params']`` (or computed and
+        cached in one pass); on an AnnData they are computed from the
+        matrix the same way (each cell's depth over every feature, the IDF
+        from the feature sums), so the same counts give the same embedding
+        in memory and in a store. Left unset it is on for a cytome's
+        ``modality='ATAC'`` or ``'tiles'`` raw counts with no
+        ``tfidf_params`` -- an SVD of raw peak or tile counts is never the
+        intended analysis -- and off otherwise, including for every
+        AnnData. Pass ``False`` to factorise raw counts anyway.
     method : {'auto', 'power', 'krylov'}, default 'auto'
-        The randomized solver. ``'auto'`` stops when the leading singular
-        values have converged (``tol=1e-3``), using block Lanczos when its
-        basis fits in memory and power iteration otherwise. ``'power'`` is
+        The randomized solver. ``'auto'`` stops on a tolerance (``tol``, on
+        what ``stop_on`` names), using block Lanczos when its basis fits in
+        memory and power iteration otherwise. ``'power'`` is
         subspace iteration and ``'krylov'`` block Lanczos regardless of
         memory; **both run exactly** ``n_iter`` **rounds** unless ``tol`` is
         set, which is the way to benchmark the effect of the round count.
-        A round is two passes over the store, plus one pass for the sketch
-        and one for the final projection: ``2 + 2 * n_iter`` in all. For
-        in-memory AnnData the solver is scikit-learn's and this only sets
-        the default ``n_iter``.
+        A round is two passes over the matrix, plus one pass for the sketch
+        and one for the final projection: ``2 + 2 * n_iter`` in all. The
+        same for an AnnData and a cytome.
     tol : float, optional
-        Stop when the leading singular values change by less than this in
-        relative terms, rather than always running ``n_iter`` rounds. Guarded
-        by Aitken extrapolation of the remaining change, so a slowly
-        converging run is not mistaken for a converged one. ``None`` (the
-        default) runs the full ``n_iter``. With a tolerance set, ``n_iter``
-        becomes the cap rather than the count.
+        Stop when every computed component's relative residual is below this
+        (``stop_on='residuals'``, the default) or when the leading
+        ``n_components`` singular values change by less than this between
+        rounds, in relative terms (``stop_on='singular_values'``, guarded by
+        Aitken extrapolation of the remaining change, so a slowly converging
+        run is not mistaken for a converged one), rather than always running
+        ``n_iter`` rounds. Left unset, ``'auto'`` uses ``1e-2`` on the
+        residuals (``1e-3`` on the singular values) and ``'power'`` and
+        ``'krylov'`` run the full ``n_iter``. With a tolerance set,
+        ``n_iter`` becomes the cap rather than the count.
+    stop_on : {'residuals', 'singular_values'}, default 'residuals'
+        What ``tol`` bounds. ``'residuals'``: every computed component's
+        relative residual ``||X X^T u - s^2 u|| / s^2``, how far the singular
+        vector ``u`` itself is from an exact one. ``'singular_values'``: the
+        change of the leading singular values between rounds, the rule of
+        1.2.6 and earlier. Singular values settle before their vectors, so the
+        residual rule runs more rounds where the vectors need them, and the
+        embedding then no longer depends on ``random_state``: on nine ATAC
+        peak matrices, components 2 to 31 of three seeds agreed at 0.9995 or
+        better (mean squared cosine of the principal angles) at ``1e-2``,
+        where the singular-value rule at ``1e-3`` left three of the nine
+        below 0.999 (its residuals were 0.007 to 0.020). The residuals cost
+        no pass with block Lanczos (they come from its block tridiagonal
+        matrix) and one with power iteration (the round it stops in ends with
+        a product the singular-value rule skips); on those matrices the rule
+        took 0 to 3 more passes with block Lanczos and 5 to 7 with power
+        iteration. Pass ``'singular_values'`` to reproduce an embedding made
+        with 1.2.6 or earlier.
     n_threads : int, default 0
-        Threads for the Rust SVD pass engine. ``0`` uses every core this
+        Threads for the Rust SVD pass engine (a cytome or an in-memory
+        AnnData). ``0`` uses every core this
         process is allowed -- on a cluster, the cores the job was allocated
         (e.g. Slurm ``--cpus-per-task``), not the node's. More threads than
         allocated cores only makes them take turns.
     use_engine : bool, default True
-        Use the Rust pass engine for cytome input, which reads the matrix and
-        applies TF-IDF in one fused pass. Set False to force the Python path,
-        which is the one to compare against when a result looks wrong.
+        Use the Rust pass engine, which reads the matrix (a store's chunks,
+        or an AnnData's matrix in memory), applies TF-IDF and multiplies in
+        one fused, multithreaded pass. Set False to compute the same
+        products in Python, one chunk at a time on one core: the same
+        solver, equal to rounding, and the one to compare against when a
+        result looks wrong. Python also computes them when the extension
+        is missing or ``infog_params`` is given.
     compute_on_fly : bool, default True
         Apply the normalisation inline while streaming rather than requiring a
         materialised layer on disk.
     cell_mask : ndarray, optional
-        Boolean mask / sorted indices to run SVD on a cell subset (streaming /
-        cytome paths only; returns the embedding for the masked cells).
+        Boolean mask / sorted indices to run SVD on a cell subset, on any
+        input. Returns ``(embeddings, S, Vt)`` for the masked cells and
+        writes nothing: the subset is not aligned with the data's cells.
+        On an AnnData it equals ``runSVD(adata[mask])`` without the copy.
     return_svd : bool, default False
-        Cytome input only: by default the embedding is written to the cytome and
-        ``None`` is returned. Pass ``return_svd=True`` to also get the in-memory
-        ``(embeddings, S, Vt)`` tuple back.
+        Also return ``(embeddings, S, Vt)``. By default a cytome's embedding
+        is written to the cytome and ``None`` returned, and an AnnData's is
+        written to ``obsm`` and ``None`` returned (unless ``streaming=True``).
+    drop_first_component : bool, default False
+        Leave out the first singular component. ``n_components + 1``
+        components are computed and components 2 to ``n_components + 1`` are
+        kept: the embedding still has ``n_components`` columns, but its first
+        column is the **second** singular component, not the first, and the
+        top component is not in it. Meant for non-negative, uncentred inputs
+        such as TF-IDF of ATAC peak or tile counts (LSI): for those the first
+        singular vector is the axis of the mean profile (a non-negative matrix
+        has a non-negative top singular vector, Perron-Frobenius), so it
+        follows each nucleus's total signal, its depth, more than its cell
+        type. No threshold is involved. On nine ATAC datasets leaving it out
+        lowered clustering accuracy on none, raised it on three, and removed
+        most of the depth signal; the workflow does it for its final ATAC
+        embedding. Not for INFOG or other RNA inputs, whose first component
+        is not depth. The choice is recorded with the embedding
+        (``adata.uns[key_added + '_params']``; on a cytome, the embedding's
+        provenance, with the left-out component's singular value), and a
+        returned ``S`` and ``Vt`` hold the same components.
+    unit_length : bool, optional
+        Scale each cell's embedding vector (of the components kept, so after
+        ``drop_first_component``) to length 1 before it is stored or
+        returned, so that the stored embedding itself is in the cosine
+        geometry: Euclidean distances between unit vectors are a monotone
+        function of their cosine, and ``neighbors``, ``leiden`` and ``umap``
+        on it work in that geometry. Left unset it is on for the TF-IDF of
+        ATAC peaks or tiles (``modality='ATAC'`` or ``'tiles'``, or TF-IDF
+        applied in the call through ``tfidf_params`` or ``auto_tfidf``),
+        whose embedding vector's length follows the cell's depth: shallow
+        cells then sit near the origin and bridge cell types in the neighbor
+        graph. There, on nine ATAC datasets, kNN purity rose on all nine and
+        the ARI at the number of labels on six. It is off for anything else,
+        as for INFOG of RNA, where it was measured too and gave no consistent
+        gain. An AnnData whose matrix already holds TF-IDF values has
+        nothing that says so: pass ``modality='ATAC'`` or ``unit_length=True``.
+        Each cell's length before the scaling is kept (``adata.obs[key_added
+        + '_length']``; on a cytome, the cells table's ``<embedding>_length``
+        column, named in the embedding's provenance), so the scaling can be
+        undone and the length compared with depth. ``S`` and ``Vt`` are the
+        decomposition's, unchanged. 1.2.6 and earlier never scaled: pass
+        ``unit_length=False`` to reproduce an ATAC embedding made with them.
 
     Returns
     -------
-    AnnData, tuple, or None
-        AnnData input: returns the AnnData with ``obsm[key_added]`` set (or the
-        SVD tuple for the streaming-array path). Cytome input: writes the
-        embedding to the cytome and returns **None** (self-contained); returns
-        the ``(emb, S, Vt)`` tuple when ``cell_mask`` is set or
-        ``return_svd=True``.
+    tuple or None
+        AnnData input: writes ``obsm[key_added]`` and returns **None**, or the
+        ``(emb, S, Vt)`` tuple with ``streaming=True`` or ``return_svd=True``.
+        Cytome input: writes the embedding to the cytome and returns **None**
+        (self-contained). Either returns only the tuple, writing nothing,
+        when ``cell_mask`` is set.
 
     Other Parameters
     ----------------
@@ -1073,8 +1474,8 @@ def runSVD(
 
     Notes
     -----
-    On a cytome the cost is passes over the matrix, so the solver choice is
-    the lever. Power iteration with ``n_iter=k`` costs ``2k + 3`` passes;
+    The cost is passes over the matrix, so the solver choice is the lever.
+    Power iteration with ``n_iter=k`` costs ``2k + 3`` passes;
     ``method='auto'`` (the default) stops on a tolerance instead and typically
     converges in 8-12 rounds on ATAC peak matrices. The engine uses every
     allocated core; ``PIASO_SVD_PROFILE=1`` in the environment prints, per
@@ -1087,6 +1488,12 @@ def runSVD(
     disk -- so on a cluster copy the cytome to local scratch (``$TMPDIR``)
     first and open the copy. The engine reads without file locks, which
     removes the worst of it, but not the data transfer itself.
+
+    An in-memory AnnData is read by the same engine, without the store's
+    reads and decompression; each pass copies its chunks once, a batch at a
+    time (``cache_chunks=True`` keeps the copies). Earlier releases computed
+    an AnnData's embedding with scikit-learn's randomized SVD (seven fixed
+    rounds, one core), so such an embedding changes once.
     """
     # A store that cannot be written fails here, not after the work.
     from ..utils._cytome_compat import require_writable as _require_writable
@@ -1097,6 +1504,10 @@ def runSVD(
     # 7 rounds for power and "let the tolerance decide" for auto; given a
     # value it is honoured by both. Before this, method='auto' silently
     # replaced an explicit n_iter with 30.
+    if method not in ("auto", "power", "krylov"):
+        raise ValueError(f"runSVD: method must be 'auto', 'power' or 'krylov', got {method!r}")
+    if stop_on not in ("singular_values", "residuals"):
+        raise ValueError(f"runSVD: stop_on must be 'singular_values' or 'residuals', got {stop_on!r}")
     if n_iter is _UNSET:
         n_iter = None if method == "auto" else 7
     is_cytome = isinstance(source, str) or _is_cytome_dataset(source)
@@ -1111,16 +1522,28 @@ def runSVD(
             and layer in (None, "counts")
         )
 
-    if is_cytome or streaming:
+    if unit_length is None:
+        # On where it was measured, the TF-IDF of ATAC peaks or tiles, whose
+        # embedding vector's length follows the cell's depth: an ATAC or tiles
+        # modality, or TF-IDF applied in this call. Off otherwise (INFOG of
+        # RNA, where it gave no gain).
+        unit_length = bool(modality in _LEGACY_FALLBACK_MODALITIES
+                           or tfidf_params is not None or auto_tfidf)
+
+    # With the first component left out, one more is computed and dropped
+    # before anything is stored or returned.
+    n_fit = int(n_components) + (1 if drop_first_component else 0)
+    if is_cytome:
         return _runSVD_streaming(
             source, use_highly_variable=use_highly_variable,
-            n_components=n_components, n_iter=n_iter,
+            n_components=n_fit, n_iter=n_iter,
             random_state=random_state, scale_data=scale_data,
             oversampling=oversampling, batch_size=batch_size,
             key_added=key_added, layer=layer,
             measurement=measurement, modality=modality,
             verbosity=verbosity, cache_chunks=cache_chunks,
-            tol=tol, method=method, n_threads=n_threads, use_engine=use_engine,
+            tol=tol, method=method, stop_on=stop_on,
+            n_threads=n_threads, use_engine=use_engine,
             tfidf_params=tfidf_params,
             infog_params=infog_params,
             hvg_indices_override=hvg_indices_override,
@@ -1130,28 +1553,30 @@ def runSVD(
             cell_mask=cell_mask,
             return_svd=return_svd,
             compute_on_fly=compute_on_fly,
+            drop_first_component=drop_first_component,
+            unit_length=unit_length,
         )
-    else:
-        if auto_tfidf:
-            raise ValueError(
-                "auto_tfidf=True is cytome-only; got an in-memory AnnData. "
-                "Either pass a cytome path / Dataset, or call "
-                "piaso.tl.run_TFIDF on the AnnData first."
-            )
-        if cell_mask is not None:
-            raise NotImplementedError(
-                "cell_mask= is only supported by runSVD's streaming "
-                "(cytome) and in-memory streaming paths. For in-memory "
-                "AnnData, slice the AnnData first: runSVD(adata[mask])."
-            )
-        return _runSVD_original(
-            source, use_highly_variable=use_highly_variable,
-            n_components=n_components, random_state=random_state,
-            scale_data=scale_data, n_iter=7 if n_iter is None else n_iter,
-            key_added=key_added, layer=layer, verbosity=verbosity,
-            selected_feature_col_name=selected_feature_col_name,
-            modality=modality,
-        )
+    if not isinstance(source, AnnData):
+        raise TypeError(
+            f"runSVD: data must be an AnnData, a cytome Dataset or a path to a "
+            f".cytome file, got {type(source).__name__}")
+    # An in-memory AnnData: the solver a store gets, its products from the same
+    # engine reading the matrix in memory. streaming=True keeps its old meaning,
+    # returning (embeddings, S, Vt); the computation is the same either way.
+    return _runSVD_anndata(
+        source, use_highly_variable=use_highly_variable,
+        n_components=n_fit, n_iter=n_iter, random_state=random_state,
+        scale_data=scale_data, oversampling=oversampling, batch_size=batch_size,
+        key_added=key_added, layer=layer, modality=modality, verbosity=verbosity,
+        cache_chunks=cache_chunks, tfidf_params=tfidf_params,
+        infog_params=infog_params, hvg_indices_override=hvg_indices_override,
+        selected_feature_col_name=selected_feature_col_name,
+        auto_tfidf=auto_tfidf, tol=tol, method=method, stop_on=stop_on,
+        n_threads=n_threads, use_engine=use_engine, cell_mask=cell_mask,
+        return_tuple=bool(streaming or return_svd),
+        drop_first_component=drop_first_component,
+        unit_length=unit_length,
+    )
 
 
 # ============================================================================

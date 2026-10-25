@@ -131,11 +131,14 @@ class EngineOps:
         after :func:`snapshot_store` has emptied the write-ahead log and
         returned True; an immutable reader cannot see the log. The bytes
         read are the same either way, so the result is identical.
+    batch_bytes
+        Bucketed-chunk memory one batch of handed-over chunks may hold
+        (``0``: the engine's 512 MB). Speed and memory only, never the result.
     """
 
     def __init__(self, path, matrix_name, n_rows_matrix, n_cols_matrix,
                  col_mask=None, row_keep=None, tfidf=None,
-                 n_threads=0, snapshot=False, source=None):
+                 n_threads=0, snapshot=False, source=None, batch_bytes=0):
         from .. import _piaso
         self._pass = _piaso.svd_pass
         self._pass_source = getattr(_piaso, "svd_pass_source", None)
@@ -185,6 +188,7 @@ class EngineOps:
             if self.depth.shape[0] != n_rows_matrix or self.idf.shape[0] != n_cols_matrix:
                 raise ValueError("tfidf cell_depth / idf do not match the matrix shape")
         self.n_threads = int(n_threads)
+        self.batch_bytes = int(batch_bytes)
         #: Wall seconds spent inside the engine's passes, summed, so a
         #: caller can say how much of a run was the store and how much
         #: the numpy between passes.
@@ -208,7 +212,7 @@ class EngineOps:
                 self.remap, self.n_cols,
                 self.row_map, self.n_rows,
                 self.depth, self.idf, self.scale,
-                self.n_threads,
+                self.n_threads, batch_bytes=self.batch_bytes,
             )
         return self._pass(
             self.path, self.matrix_name, mode,
@@ -234,6 +238,15 @@ class EngineOps:
 AUTO_KRYLOV_QMAX = 30
 AUTO_KRYLOV_BLOCK_BYTES = 1 << 30
 AUTO_TOL = 1e-3
+# The tolerance of stop_on='residuals': the largest relative residual
+# ||X X^T u - s^2 u|| / s^2 of the components computed (benchmark/svd_stop/).
+AUTO_RESIDUAL_TOL = 1e-2
+STOP_RULES = ("singular_values", "residuals")
+
+
+def _relative_residuals(R, theta):
+    """Column norms of ``R`` over ``theta`` (the Ritz values of ``X X^T``)."""
+    return np.linalg.norm(R, axis=0) / np.maximum(np.abs(theta), np.finfo(float).tiny)
 
 
 def _converged(hist, tol):
@@ -274,7 +287,8 @@ def _block_tridiagonal(A_blocks, B_blocks):
     return T
 
 
-def _block_lanczos(ops, n_components, k, q_max, rng, tol, log, verbosity):
+def _block_lanczos(ops, n_components, k, q_max, rng, tol, log, verbosity,
+                   stop_on="residuals"):
     """Randomized block Lanczos on ``X X^T``: the Krylov subspace, with structure.
 
     Each round applies ``X^T`` then ``X`` to the newest block only (two passes
@@ -285,6 +299,14 @@ def _block_lanczos(ops, n_components, k, q_max, rng, tol, log, verbosity):
     subspace -- so the stopping test costs no pass. At the end the singular
     vectors come from ``T`` too, and the right ones from one pass of
     ``n_components`` columns.
+
+    ``stop_on='residuals'`` stops instead when every computed Ritz pair's
+    relative residual ``||X X^T u - s^2 u|| / s^2`` is below ``tol``. The
+    residual costs no pass either: the block Lanczos relation
+    ``X X^T Q = Q T + V_next B E^T`` makes it ``||B y_last||``, with ``y_last``
+    the last block of the pair's eigenvector of ``T`` and ``B`` the triangular
+    factor of the next block, which the next round needs anyway. Singular
+    values converge before vectors do, so this is the stricter rule.
     """
     n_rows, n_cols = ops.n_rows, ops.n_cols
     Omega = rng.standard_normal((n_cols, k)).astype(np.float64)
@@ -312,14 +334,24 @@ def _block_lanczos(ops, n_components, k, q_max, rng, tol, log, verbosity):
                 W -= Vj @ (Vj.T @ W)
         A_blocks.append(A)
         rounds = i + 1
-        theta = np.linalg.eigvalsh(_block_tridiagonal(A_blocks, B_blocks))[::-1][:n_components]
-        hist.append(np.sqrt(np.maximum(theta, 0.0)))
-        converged, crit = _converged(hist, tol)
+        V_next, B = np.linalg.qr(W)
+        if stop_on == "residuals":
+            theta_all, Y_T = np.linalg.eigh(_block_tridiagonal(A_blocks, B_blocks))
+            order = np.argsort(theta_all)[::-1][:n_components]
+            theta = theta_all[order]
+            hist.append(np.sqrt(np.maximum(theta, 0.0)))
+            if tol is not None:
+                rel = _relative_residuals(B @ Y_T[-k:, order], theta)
+                crit = float(rel.max())
+                converged = crit < tol
+        else:
+            theta = np.linalg.eigvalsh(_block_tridiagonal(A_blocks, B_blocks))[::-1][:n_components]
+            hist.append(np.sqrt(np.maximum(theta, 0.0)))
+            converged, crit = _converged(hist, tol)
         if verbosity > 1 and crit is not None:
             print(f"    round {i + 1}: convergence criterion {crit:.2e}")
         if converged or i == q_max - 1:
             break
-        V_next, B = np.linalg.qr(W)
         if np.linalg.norm(B) < 1e-12 * max(1.0, float(np.abs(hist[-1][0]))):
             converged = True     # invariant subspace found: nothing left to add
             break
@@ -334,13 +366,14 @@ def _block_lanczos(ops, n_components, k, q_max, rng, tol, log, verbosity):
     log("V = X^T U / S")
     Vt = (ops.xty(U) / np.maximum(S, np.finfo(float).tiny)).T
     info = {"iterations": rounds, "converged": converged if tol is not None else None,
-            "method": "krylov", "criterion": crit, "basis_columns": int(Q.shape[1])}
+            "method": "krylov", "criterion": crit, "basis_columns": int(Q.shape[1]),
+            "stop_on": stop_on}
     return U * S, S, Vt, info
 
 
 
 def rsvd_core(ops, n_components, n_iter, random_state, oversampling=10,
-              tol=None, method="power", verbosity=0):
+              tol=None, method="power", verbosity=0, stop_on="residuals"):
     """Randomized SVD of the operator; returns ``(U*S, S, Vt, info)``.
 
     ``info`` reports the passes taken and, under ``tol``, whether and when
@@ -348,12 +381,20 @@ def rsvd_core(ops, n_components, n_iter, random_state, oversampling=10,
     ``AUTO_KRYLOV_Q`` iterations when its block fits ``AUTO_KRYLOV_BLOCK_BYTES``,
     and power iteration with ``tol`` (default ``AUTO_POWER_TOL``) and
     ``n_iter`` as the ceiling otherwise.
+
+    ``stop_on`` chooses what ``tol`` bounds: ``'singular_values'`` (the
+    extrapolated change of the leading singular values between rounds) or
+    ``'residuals'`` (every computed pair's relative residual
+    ``||X X^T u - s^2 u|| / s^2``; under ``'auto'`` its default tolerance is
+    ``AUTO_RESIDUAL_TOL``).
     """
+    if stop_on not in STOP_RULES:
+        raise ValueError(f"stop_on must be one of {STOP_RULES}, got {stop_on!r}")
     n_rows, n_cols = ops.n_rows, ops.n_cols
     k = n_components + oversampling
     if method == "auto":
         if tol is None:
-            tol = AUTO_TOL
+            tol = AUTO_RESIDUAL_TOL if stop_on == "residuals" else AUTO_TOL
         block = n_rows * k * (AUTO_KRYLOV_QMAX + 1) * 8
         if block <= AUTO_KRYLOV_BLOCK_BYTES:
             # AUTO_KRYLOV_QMAX is a *default* ceiling for when the caller
@@ -370,7 +411,7 @@ def rsvd_core(ops, n_components, n_iter, random_state, oversampling=10,
         if verbosity > 0:
             label = ("block Lanczos" if method == "krylov" else "power iteration")
             print(f"  Solver: {label} chosen by method='auto' "
-                  f"(tol={tol}, at most {n_iter} rounds = "
+                  f"(tol={tol} on the {stop_on.replace('_', ' ')}, at most {n_iter} rounds = "
                   f"{2 + 2 * n_iter} passes)")
     elif verbosity > 0 and method == "krylov":
         # Said for every solver, so a log always names what ran. A pass is
@@ -388,7 +429,7 @@ def rsvd_core(ops, n_components, n_iter, random_state, oversampling=10,
         if verbosity > 0:
             print(f"  SVD pass {n_pass}: {desc}")
 
-    info = {"passes": 0, "iterations": 0, "converged": None, "method": method}
+    info = {"passes": 0, "iterations": 0, "converged": None, "method": method, "stop_on": stop_on}
 
     def _report(info):
         if verbosity > 0:
@@ -400,7 +441,8 @@ def rsvd_core(ops, n_components, n_iter, random_state, oversampling=10,
                   f"{info['passes']} passes ({stopped})")
 
     if method == "krylov":
-        emb, S, Vt, info = _block_lanczos(ops, n_components, k, n_iter, rng, tol, log, verbosity)
+        emb, S, Vt, info = _block_lanczos(ops, n_components, k, n_iter, rng, tol, log, verbosity,
+                                          stop_on=stop_on)
         info["passes"] = n_pass
         _report(info)
         return emb, S, Vt, info
@@ -416,7 +458,7 @@ def rsvd_core(ops, n_components, n_iter, random_state, oversampling=10,
             Q, _ = np.linalg.qr(Y)
             log(f"Z = X^T Q (power iter {i + 1})")
             Z = ops.xty(Q)
-            if tol is not None:
+            if tol is not None and stop_on == "singular_values":
                 hist.append(np.linalg.svd(Z, compute_uv=False)[:n_components])
                 converged, crit = _converged(hist, tol)
                 if verbosity > 1 and crit is not None:
@@ -427,6 +469,21 @@ def rsvd_core(ops, n_components, n_iter, random_state, oversampling=10,
                     break
             log(f"Y = X Z (power iter {i + 1})")
             Y = ops.xb(Z)
+            if tol is not None and stop_on == "residuals":
+                # The Ritz pairs of span(Q): Z^T = U_B S Vt, u = Q U_B. The pass
+                # just made gives X X^T u = Y U_B, so their residuals cost no
+                # pass: Y U_B - Q U_B S^2.
+                U_B, S_r, _ = np.linalg.svd(Z.T, full_matrices=False)
+                U_B, S_r = U_B[:, :n_components], S_r[:n_components]
+                rel = _relative_residuals(Y @ U_B - Q @ (U_B * S_r ** 2), S_r ** 2)
+                crit = float(rel.max())
+                if verbosity > 1:
+                    print(f"    iteration {i + 1}: largest relative residual {crit:.2e}")
+                if crit < tol:
+                    converged = True
+                    info["iterations"] = i + 1
+                    info["criterion"] = crit
+                    break
         if not converged:
             Q, _ = np.linalg.qr(Y)
             log("B = Q^T X")

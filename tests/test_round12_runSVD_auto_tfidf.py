@@ -91,9 +91,10 @@ def test_runSVD_auto_tfidf_parity_with_manual_tfidf_params(tmp_path):
     )
 
 
-def test_runSVD_auto_tfidf_on_anndata_raises_clear_error():
-    """auto_tfidf=True is cytome-only — using it on AnnData should raise
-    a ValueError that names auto_tfidf."""
+def test_runSVD_auto_tfidf_on_anndata_refuses_values_that_are_not_counts():
+    """auto_tfidf=True on an AnnData computes the statistics from the matrix
+    (tests/test_runsvd_inmemory_engine.py); on values that are not counts it
+    raises a ValueError that names auto_tfidf, as on a store."""
     import piaso
     from anndata import AnnData
 

@@ -50,13 +50,15 @@ def test_tile_gives_many_units_of_work_to_many_threads():
 
 
 def test_every_kernel_call_site_derives_its_tile():
-    """Three call sites now: streaming fused, in-memory fused, score_complete."""
+    """Two call sites: streaming fused and in-memory fused. The kernel
+    `score_complete` (it drew its own controls) is no longer called, 2026-10-22."""
     import pathlib
     import re
 
     src = (pathlib.Path(__file__).resolve().parents[1]
            / "piaso" / "tools" / "_normalization.py").read_text()
-    assert src.count("_kernel_tile_rows(") >= 4        # 1 def + 3 call sites
+    assert src.count("_kernel_tile_rows(") >= 3        # 1 def + 2 call sites
+    assert "score_complete(" not in src
     # score_complete used to receive the raw chunk_size
     assert "n_ctrl_set, random_seed, chunk_size," not in src
 

@@ -115,14 +115,17 @@ def _ensure_tfidf_params(ds, modality, use_cached_stats=True, batch_size=2048):
     # for, so a payload built for ATAC peaks (idf ~n_peaks) must NOT be returned
     # for a 'tiles' request (idf ~n_tiles); the feature-count guard routes it to
     # recompute instead of broadcasting a wrong-length idf.
-    from ..tools._runTFIDF import _hydrate_tfidf_params
+    from ..tools._runTFIDF import _hydrate_tfidf_params, _tfidf_cache_matrix
 
     def _hydrated(stored):
         """The cached payload with its arrays in place, or None if it cannot be
         read back. Newer cytomes store `cell_depth` and `idf` as table columns
         and keep only their names in metadata; the guards below are written
         against the arrays, so hydrate before checking rather than let a
-        column-name payload pass every check vacuously."""
+        column-name payload pass every check vacuously. A payload computed
+        from a matrix other than the main one is not this function's."""
+        if _tfidf_cache_matrix(stored, modality) != f"{modality}_counts":
+            return None
         try:
             out = _hydrate_tfidf_params(ds, stored, modality)
         except Exception:

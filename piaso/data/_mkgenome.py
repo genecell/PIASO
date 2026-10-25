@@ -18,12 +18,19 @@ The promoter window matches what the shipped mm10 and hg38 files use, which
 was measured rather than assumed: 400 bp upstream and 200 bp downstream of
 each transcript start, strand-aware, and overlapping promoters of one gene
 merged.
+
+The annotation is read by cytome's GTF reader (``cytome.read_gtf``), the one
+behind ``cytome.import_gtf``, so a genome built here and a store's imported
+annotation see the same genes: one per ``gene_id``, from its ``gene`` line or
+spanning its transcripts. Genes used to be keyed by name, which merged every
+gene sharing a name on one chromosome into a single span: in the Cell Ranger
+ARC Mmul_10 reference the copies of TRNAN-GUU became one 118.6 Mb "gene"
+across chr1, and 19 such spans exceeded 10 Mb.
 """
 from __future__ import annotations
 
 import gzip
 import os
-import re
 from typing import Dict, List, Optional, Tuple
 
 __all__ = ["makeGenomeFiles"]
@@ -32,11 +39,26 @@ __all__ = ["makeGenomeFiles"]
 PROMOTER_UPSTREAM = 400
 PROMOTER_DOWNSTREAM = 200
 
-_ATTR = re.compile(r'(\S+)\s+"([^"]*)"')
+
+def _read_annotation(gtf: str, keep):
+    """The genes and transcripts of ``gtf``, read the way cytome reads every GTF."""
+    try:
+        from cytome.io.gtf_import import read_gtf
+    except ImportError as exc:                       # cytome < 0.3.7
+        raise ImportError(
+            "makeGenomeFiles reads the annotation with cytome.read_gtf, new in "
+            "cytome 0.3.7. Upgrade cytome: pip install -U cytome") from exc
+    genes, feats = read_gtf(gtf, feature_filter=("gene", "transcript"))
+    tx = feats[feats["feature"] == "transcript"]
+    if keep:
+        genes = genes[genes["chrom"].isin(keep)]
+        tx = tx[tx["chrom"].isin(keep)]
+    return genes, tx
 
 
-def _attrs(field: str) -> Dict[str, str]:
-    return {k: v for k, v in _ATTR.findall(field)}
+def _text(value) -> str:
+    """A GTF attribute as read, or '' where the file had none (None or NaN)."""
+    return value if isinstance(value, str) else ""
 
 
 def _open(path: str):
@@ -110,6 +132,11 @@ def makeGenomeFiles(
 
     Notes
     -----
+    The GTF is read by ``cytome.read_gtf`` (cytome 0.3.7 or later): one gene
+    per ``gene_id``, from its ``gene`` line or spanning its transcripts, named
+    by ``gene_name``, else ``gene``, else ``Name``, else written under its ID.
+    Genes that share a name stay separate rows, as in the shipped files.
+
     No cCRE file is produced: SCREEN publishes candidate cis-regulatory
     elements for human and mouse only, so ``splitby='ccre'`` is unavailable
     for other species. That is a gap in the source data, not in this
@@ -142,57 +169,42 @@ def makeGenomeFiles(
             out.write(f"{name}\t{length}\n")
             n_chrom += 1
 
-    # --- one pass over the annotation ------------------------------------
-    genes: Dict[Tuple[str, str], List] = {}
-    tss_rows: List[Tuple] = []
-    with _open(gtf) as fh:
-        for line in fh:
-            if not line or line[0] == "#":
-                continue
-            f = line.rstrip("\n").split("\t")
-            if len(f) < 9:
-                continue
-            chrom, feature, start, end, strand = f[0], f[2], int(f[3]), int(f[4]), f[6]
-            if keep and chrom not in keep:
-                continue
-            if feature not in ("gene", "transcript"):
-                continue
-            a = _attrs(f[8])
-            name = a.get("gene") or a.get("gene_name") or a.get("gene_id") or ""
-            if not name:
-                continue
-            # Gene bodies come from BOTH `gene` and `transcript` features,
-            # unioned. A `gene` line is not reliably present: this macaque
-            # annotation carries 2,799 of them against 34,204 distinct genes
-            # named on its transcripts, so trusting `gene` alone would have
-            # shipped a file with 8% of the genes in it. Aggregating
-            # transcripts is what cellranger does for its own
-            # regions/transcripts.bed, and it degrades gracefully.
-            # BED is half-open and 0-based; GTF is closed and 1-based.
-            key = (chrom, name)
-            span = genes.get(key)
-            if span is None:
-                genes[key] = [start - 1, end, strand]
-            else:
-                span[0] = min(span[0], start - 1)
-                span[1] = max(span[1], end)
-            if feature == "transcript":
-                tss = start - 1 if strand != "-" else end - 1
-                tss_rows.append((
-                    chrom, tss, name, strand,
-                    a.get("transcript_biotype") or a.get("gene_biotype") or "",
-                    a.get("db_xref") or a.get("gene_id") or "",
-                    a.get("transcript_id") or "",
-                ))
+    # --- the annotation ---------------------------------------------------
+    # One gene per gene_id, from its `gene` line or spanning its transcripts:
+    # this macaque annotation has `gene` lines for 2,799 of its 34,643 genes,
+    # so trusting them alone would ship 8% of the genes. Coordinates are
+    # already BED's 0-based half-open. A BED row needs a name, so a gene
+    # without one (common in Ensembl annotations of non-model species) is
+    # written under its ID.
+    genes_df, tx_df = _read_annotation(gtf, keep)
+    name_of: Dict[str, Tuple[str, str]] = {}
+    gene_rows: List[Tuple] = []
+    for gid, chrom, s, e, strand, gname, gtype in zip(
+            genes_df["gene_id"], genes_df["chrom"], genes_df["start"],
+            genes_df["end"], genes_df["strand"], genes_df["gene_name"],
+            genes_df["gene_type"]):
+        name = _text(gname) or gid
+        name_of[gid] = (name, _text(gtype))
+        gene_rows.append((chrom, int(s), int(e), name, strand))
 
     # --- gene bodies ------------------------------------------------------
+    gene_rows.sort(key=lambda r: (_chrom_key(r[0]), r[1]))
     genes_path = os.path.join(outdir, f"{genome}_genes.bed")
     with open(genes_path, "w") as out:
-        for (chrom, name), (s, e, strand) in sorted(
-                genes.items(), key=lambda kv: (_chrom_key(kv[0][0]), kv[1][0])):
+        for chrom, s, e, name, strand in gene_rows:
             out.write(f"{chrom}\t{s}\t{e}\t{name}\t.\t{strand}\n")
 
     # --- transcript start sites ------------------------------------------
+    # Column 8 is the gene ID, as in the shipped hg38 and mm10 files.
+    tss_rows: List[Tuple] = []
+    for gid, tid, chrom, s, e, strand, ttype in zip(
+            tx_df["gene_id"], tx_df["transcript_id"], tx_df["chrom"],
+            tx_df["start"], tx_df["end"], tx_df["strand"],
+            tx_df["transcript_type"]):
+        name, gtype = name_of.get(gid, (gid, ""))
+        tss = int(s) if strand != "-" else int(e) - 1
+        tss_rows.append((chrom, tss, name, strand, _text(ttype) or gtype,
+                         gid, _text(tid)))
     tss_rows.sort(key=lambda r: (_chrom_key(r[0]), r[1]))
     tss_path = os.path.join(outdir, f"{genome}_transcript_tss.bed")
     with open(tss_path, "w") as out:
@@ -203,17 +215,17 @@ def makeGenomeFiles(
     # --- promoters --------------------------------------------------------
     # Per gene, because the shipped files merge a gene's overlapping promoters
     # into one interval but keep two genes' promoters separate even where they
-    # overlap.
-    by_gene: Dict[Tuple[str, str], List[Tuple[int, int]]] = {}
-    for chrom, tss, name, strand, _b, _g, _t in tss_rows:
+    # overlap; two genes that share a name are two genes.
+    by_gene: Dict[Tuple[str, str], Tuple[str, List[Tuple[int, int]]]] = {}
+    for chrom, tss, name, strand, _b, gid, _t in tss_rows:
         if strand == "-":
             s, e = tss - PROMOTER_DOWNSTREAM, tss + PROMOTER_UPSTREAM + 1
         else:
             s, e = tss - PROMOTER_UPSTREAM, tss + PROMOTER_DOWNSTREAM + 1
-        by_gene.setdefault((chrom, name), []).append((max(0, s), e))
+        by_gene.setdefault((chrom, gid), (name, []))[1].append((max(0, s), e))
     prom_path = os.path.join(outdir, f"{genome}_promoterSet.bed")
     prom_rows = []
-    for (chrom, name), iv in by_gene.items():
+    for (chrom, _gid), (name, iv) in by_gene.items():
         for s, e in _merge(iv):
             prom_rows.append((chrom, s, e, name))
     prom_rows.sort(key=lambda r: (_chrom_key(r[0]), r[1]))
@@ -222,7 +234,7 @@ def makeGenomeFiles(
             out.write(f"{chrom}\t{s}\t{e}\t{name}\n")
 
     if verbose:
-        print(f"  {genome}: {n_chrom:,} sequences, {len(genes):,} genes, "
+        print(f"  {genome}: {n_chrom:,} sequences, {len(gene_rows):,} genes, "
               f"{len(tss_rows):,} transcript TSSes, {len(prom_rows):,} promoters")
         print(f"  written to {outdir}")
     return {"chrom_sizes": sizes_path, "gene_boundary": genes_path,

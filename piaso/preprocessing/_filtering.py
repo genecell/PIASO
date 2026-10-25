@@ -614,6 +614,7 @@ def filter_cells(
     batch_size: int = 2048,
     include_fragments: bool = True,
     include_embeddings: bool = True,
+    check_integrity: bool = False,
     verbose: int = 1,
 ):
     """Filter cells. Polymorphic on AnnData / cytome inputs.
@@ -673,6 +674,11 @@ def filter_cells(
         Streaming batch size for QC threshold pass on cytome.
     include_fragments, include_embeddings
         Forwarded to ``ds.filter_cells`` / ``ds.subset``.
+    check_integrity
+        Cytome-only. Also run SQLite's integrity check on the filtered store
+        (cytome 0.3.7 or later; default False). cytome's own consistency checks
+        run either way; SQLite's reads every page of the new file, which takes
+        hours for a large store that no longer fits in the page cache.
     verbose
         0 silent, 1 (default) prints summary, 2 prints mask sources.
 
@@ -717,6 +723,7 @@ def filter_cells(
             modality=modality, batch_size=batch_size,
             include_fragments=include_fragments,
             include_embeddings=include_embeddings,
+            check_integrity=check_integrity,
             verbose=verbose,
         )
     return _filter_cells_anndata(
@@ -790,10 +797,27 @@ def _filter_cells_anndata(
 # Cytome backend
 # ---------------------------------------------------------------------------
 
+def _integrity_kw(ds, check_integrity):
+    """``check_integrity`` for cytome's writers, passed only when asked, so the default runs on any
+    cytome; asked of a cytome older than 0.3.7 (no such argument), a clear error instead of a TypeError
+    deep in the call."""
+    if not check_integrity:
+        return {}
+    import inspect
+    if "check_integrity" not in inspect.signature(type(ds).filter_cells).parameters:
+        import cytome
+        raise ValueError(
+            f"filter_cells(check_integrity=True) needs cytome 0.3.7 or later; this is cytome "
+            f"{getattr(cytome, '__version__', '?')}. Upgrade cytome, or run ds.validate() on the "
+            f"filtered store, which runs the same check.")
+    return {"check_integrity": True}
+
+
 def _filter_cells_cytome(
     ds, *, min_counts, max_counts, min_features, max_features,
     mask, inplace, output, overwrite,
     modality, batch_size, include_fragments, include_embeddings, verbose,
+    check_integrity=False,
 ):
     if inplace and output is not None:
         raise TypeError(
@@ -853,6 +877,7 @@ def _filter_cells_cytome(
             keep, output=out_path,
             include_fragments=include_fragments,
             include_embeddings=include_embeddings,
+            **_integrity_kw(ds, check_integrity),
         )
         # Provenance on the new dataset (the source is read-only here).
         _write_provenance(
@@ -867,6 +892,7 @@ def _filter_cells_cytome(
         keep,
         include_fragments=include_fragments,
         include_embeddings=include_embeddings,
+        **_integrity_kw(ds, check_integrity),
     ))
     _write_provenance(
         ds, n_before=n_cells, n_after=n_after,

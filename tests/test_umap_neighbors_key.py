@@ -44,12 +44,32 @@ def test_neighbors_key_selects_the_named_graph(adata):
         "neighbors_key was ignored")
 
 
-def test_explicit_use_rep_is_not_overridden(adata):
+def _rust_layout():
+    from piaso.tools import _umap_rust
+    return _umap_rust.available()
+
+
+@pytest.mark.skipif(not _rust_layout(), reason="the extension has no umap_layout_csr: tl.umap uses umap-learn")
+def test_explicit_use_rep_is_not_overridden(adata, monkeypatch):
     """The stored graph says X_svd; the call says X_gdr. The call wins."""
+    from piaso.tools import _umap_rust
     piaso.tl.neighbors(adata, use_rep="X_svd", n_neighbors=10)
+    seen = {}
+    real = _umap_rust.embed
+
+    def spy(data, *args, **kwargs):
+        seen["X"] = np.asarray(data)
+        return real(data, *args, **kwargs)
+
+    monkeypatch.setattr(_umap_rust, "embed", spy)
     piaso.tl.umap(adata, use_rep="X_gdr", key_added="U_a", random_state=0)
-    piaso.tl.umap(adata, use_rep="X_svd", key_added="U_b", random_state=0)
-    assert not np.allclose(adata.obsm["U_a"], adata.obsm["U_b"])
+    assert np.array_equal(seen["X"], adata.obsm["X_gdr"])
+    # umap-learn, given a stored kNN with fewer columns than its n_neighbors
+    # (15), computes its own neighbors from the array, so there the
+    # representation shows in the picture
+    piaso.tl.umap(adata, use_rep="X_gdr", key_added="U_c", random_state=0, backend="umap-learn")
+    piaso.tl.umap(adata, use_rep="X_svd", key_added="U_d", random_state=0, backend="umap-learn")
+    assert not np.allclose(adata.obsm["U_c"], adata.obsm["U_d"])
 
 
 def test_unknown_neighbors_key_raises(adata):

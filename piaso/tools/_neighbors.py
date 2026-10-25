@@ -3,6 +3,8 @@
 Supports both AnnData and cytome.Dataset as input.
 """
 
+import warnings
+
 import numpy as np
 from scipy.sparse import coo_matrix, csr_matrix
 
@@ -175,6 +177,7 @@ def neighbors(
     random_state=42,
     key_added=None,
     cell_mask=None,
+    graph_backend='umap-learn',
 ):
     """Build kNN graph and compute fuzzy simplicial set connectivities.
 
@@ -206,6 +209,11 @@ def neighbors(
     cell_mask : ndarray, optional
         Cytome only: boolean mask or sorted indices of the cells to build the
         graph on; the result covers those cells only.
+    graph_backend : {'umap-learn', 'rust'}, default 'umap-learn'
+        Who builds the connectivities (UMAP's fuzzy simplicial set) from the
+        kNN: umap-learn's ``fuzzy_simplicial_set``, or PIASO's extension, in
+        parallel, equal to it to float32 rounding (each cell's sigma and rho
+        identical).
 
     Returns
     -------
@@ -229,8 +237,9 @@ def neighbors(
         from ._normalization import _open_cytome
         data = _open_cytome(data)
 
+    if graph_backend not in ('umap-learn', 'rust'):
+        raise ValueError(f"neighbors(graph_backend={graph_backend!r}): use 'umap-learn' or 'rust'")
     from pynndescent import NNDescent
-    from umap.umap_ import fuzzy_simplicial_set
 
     # Accept an in-memory ndarray as ``data`` for masked / per-batch
     # use (e.g. runGDR multi-batch path). When ndarray, no cytome / obsm
@@ -260,10 +269,30 @@ def neighbors(
         X = X[cell_mask_arr]
 
     n_cells = X.shape[0]
+    if n_cells < 2:
+        raise ValueError(f"piaso.tl.neighbors: a kNN graph needs at least 2 cells, got {n_cells}.")
+    # Each cell's list holds the cell itself, so a set of n cells has at most n
+    # neighbors per cell. NNDescent asked for more fills the rest with -1, and
+    # the graph below then fails with "negative axis 1 index" (a 10-cell batch
+    # of runGDR(batch_key=...), for one).
+    if n_neighbors > n_cells:
+        warnings.warn(
+            f"piaso.tl.neighbors: {n_cells} cells, fewer than n_neighbors={n_neighbors}; "
+            f"using {n_cells} neighbors (every cell).", stacklevel=2)
+        n_neighbors = n_cells
 
     # kNN search
     index = NNDescent(X, n_neighbors=n_neighbors, metric=metric, random_state=random_state)
     knn_indices, knn_dists = index.neighbor_graph
+    # NNDescent can leave -1 where its search found fewer than n_neighbors
+    # (a few hundred cells or fewer, or points far apart); an exact search
+    # then gives the graph it approximates. Inputs without a -1 are unchanged.
+    if (np.asarray(knn_indices) < 0).any():
+        from sklearn.neighbors import NearestNeighbors
+        nn = NearestNeighbors(n_neighbors=n_neighbors, metric=metric, algorithm="brute").fit(X)
+        knn_dists, knn_indices = nn.kneighbors(X)
+        knn_indices = knn_indices.astype(np.int64)
+        knn_dists = knn_dists.astype(np.float32)
 
     # Build sparse distance matrix (n_cells x n_cells)
     rows = np.repeat(np.arange(n_cells), n_neighbors)
@@ -274,14 +303,19 @@ def neighbors(
     )
 
     # Fuzzy simplicial set (UMAP connectivities)
-    connectivities, _sigmas, _rhos = fuzzy_simplicial_set(
-        X,
-        n_neighbors=n_neighbors,
-        random_state=random_state,
-        metric=metric,
-        knn_indices=knn_indices,
-        knn_dists=knn_dists,
-    )
+    if graph_backend == 'rust':
+        from ._umap_rust import fuzzy_graph
+        connectivities, _sigmas, _rhos = fuzzy_graph(knn_indices, knn_dists)
+    else:
+        from umap.umap_ import fuzzy_simplicial_set
+        connectivities, _sigmas, _rhos = fuzzy_simplicial_set(
+            X,
+            n_neighbors=n_neighbors,
+            random_state=random_state,
+            metric=metric,
+            knn_indices=knn_indices,
+            knn_dists=knn_dists,
+        )
     connectivities = connectivities.tocsr()
 
     result = {

@@ -80,6 +80,50 @@ def _score_complete():
     return float(np.asarray(out[0]).sum())
 
 
+def _umap_knn(n=40_000, k=9):
+    """A kNN result (each node first, at distance 0), above the size the UMAP code runs on one thread."""
+    i = np.arange(n, dtype=np.int64)[:, None]
+    idx = np.hstack([i, (i + np.arange(1, k)[None, :] * 7) % n])
+    dst = np.hstack([np.zeros((n, 1)), 0.5 + np.arange(1, k)[None, :] * 0.1 + (i % 5) * 0.01]).astype(np.float32)
+    return idx, dst
+
+
+def _umap_graph():
+    idx, dst = _umap_knn()
+    ip, ix, d, _, _ = _piaso.umap_fuzzy_graph(idx, dst, n_threads=4)
+    return np.asarray(ip), np.asarray(ix), np.asarray(d)
+
+
+def _umap_fuzzy():
+    return float(np.asarray(_umap_graph()[2], dtype=np.float64).sum())
+
+
+def _umap_matmat():
+    ip, ix, d = _umap_graph()
+    n = len(ip) - 1
+    x = np.random.default_rng(12).standard_normal((n, 3))
+    y = _piaso.umap_graph_matmat(ip, ix, d.astype(np.float64), np.ones(n), x, 1.0, n_threads=4)
+    return float(np.asarray(y).sum())
+
+
+def _umap_filter():
+    ip, ix, d = _umap_graph()
+    n = len(ip) - 1
+    x = np.random.default_rng(13).standard_normal((n, 3))
+    y = _piaso.umap_chebyshev_filter(ip, ix, d.astype(np.float64), np.ones(n), x, 0.5 * x, 0.2, 0.2, 0.3, 4,
+                                     n_threads=4)
+    return float(np.asarray(y).sum())
+
+
+def _umap_layout():
+    ip, ix, d = _umap_graph()
+    n = len(ip) - 1
+    t = np.arange(n, dtype=np.float64)
+    init = np.ascontiguousarray(np.stack([np.sin(t), np.cos(0.3 * t)], 1) * 5 + 5, dtype=np.float32)
+    out = _piaso.umap_layout_csr(ip, ix, d, init, 3, 1.577, 0.895, n_threads=4)
+    return float(np.asarray(out, dtype=np.float64).sum())
+
+
 def _svd_store(tmp):
     import anndata as ad
     import cytome
@@ -137,6 +181,10 @@ CALLS = {
     "svd_layout_rule": lambda p, X: str(_piaso.svd_layout_rule(1000, 500, True, True)),
     "chrom_sizes": lambda p, X: len(_piaso.chrom_sizes("hg38")),
     "known_genomes": lambda p, X: len(_piaso.known_genomes()),
+    "umap_fuzzy_graph": lambda p, X: _umap_fuzzy(),
+    "umap_graph_matmat": lambda p, X: _umap_matmat(),
+    "umap_layout_csr": lambda p, X: _umap_layout(),
+    "umap_chebyshev_filter": lambda p, X: _umap_filter(),
     # Built only with --features internal. Each builds its pool per call
     # through threads::count and needs a fragment store.
     "call_peaks_pyo3": "needs a fragment store; pool per call (threads::count)",

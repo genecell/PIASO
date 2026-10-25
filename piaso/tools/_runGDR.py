@@ -645,10 +645,10 @@ def runGDR(
         # back, so runGDR costs nothing extra.
         if save_reference:
             try:
-                from ._projectGDR import _make_reference_recipe
+                from ._projectGDR import _make_reference_recipe, _set_state
                 _blk = batch_n_groups_indices if (
                     nbatches > 1 and 'batch_n_groups_indices' in dir()) else None
-                adata.uns['gdr_reference'] = _make_reference_recipe(
+                _set_state(adata, _make_reference_recipe(
                     marker_gene,
                     block_indices=_blk,
                     layer=score_layer if score_layer is not None else layer,
@@ -657,7 +657,7 @@ def runGDR(
                     random_seed=random_seed,
                     denovo_labels=('gdr_local' if groupby == 'gdr_local_TMP_GDR' else None),
                     modality=modality,
-                )
+                ))
                 if verbosity > 0:
                     print("Reference state saved to adata.uns['gdr_reference'] "
                           "(use piaso.tl.projectGDR to map new cells into this space)")
@@ -964,6 +964,7 @@ def calculateScoreParallel(
     gene_weights=None,
     score_method: Literal["scanpy", "piaso"] = "piaso",
     random_seed: int = 1927,
+    exclude_set_genes: bool = True,
     score_layer: Optional[str] = None,
     max_workers: Optional[int] = None,
     return_pvals: bool = False,
@@ -1011,6 +1012,9 @@ def calculateScoreParallel(
           depth variations and provides p-values.
     random_seed : int, default 1927
         Random seed for reproducibility.
+    exclude_set_genes : bool, default True
+        With ``score_method='piaso'``, draw each gene's controls from its
+        nearest genes outside its own set (see :func:`piaso.tl.score`).
     score_layer : str or None, default None
         Layer of the AnnData object to use. If None, `adata.X` is used.
     max_workers : int or None, default None
@@ -1102,7 +1106,8 @@ def calculateScoreParallel(
             adata, gene_list=gene_set, gene_weights=gene_weights,
             compute_pvalues=return_pvals,
             layer=_score_layer, random_seed=random_seed,
-            n_ctrl_set=100, max_workers=max_workers if max_workers is not None else 1,
+            n_ctrl_set=100, exclude_set_genes=exclude_set_genes,
+            max_workers=max_workers if max_workers is not None else 1,
             precomputed_knn=precomputed_knn,
             verbosity=verbosity,
             modality=modality, batch_size=batch_size,
@@ -1586,7 +1591,14 @@ def _runCOSGParallel_single_batch(
     batch_mask = shared_data['obs'][batch_key] == batch_i
     adata = AnnData(matrix[batch_mask.to_numpy()])
     adata.obs = shared_data['obs'][batch_mask.to_numpy()].copy()
-    
+
+    # A batch with fewer cells than one cell's neighbor list (15 neighbors and
+    # itself) cannot be clustered here: it gives no markers of its own, and its
+    # cells are scored on the other batches' markers (runCOSGParallel drops the
+    # empty block and says which batches gave none).
+    if groupby is None and adata.n_obs < _MIN_CELLS_LOCAL_CLUSTERS:
+        return batch_i, pd.DataFrame()
+
     try:
         # Extract marker gene signatures
         if groupby is None:
@@ -1668,6 +1680,10 @@ def _runCOSGParallel_single_batch(
         return batch_i, marker_gene
     except Exception as e:
         raise e
+
+# The smallest batch runCOSGParallel clusters on its own: one cell and the 15
+# neighbors of its kNN graph.
+_MIN_CELLS_LOCAL_CLUSTERS = 16
 
 ### To record the progress
 from concurrent.futures import as_completed
@@ -1835,6 +1851,18 @@ def runCOSGParallel(
                 
         # Sort results based on the original batch_list order
         raw_results.sort(key=lambda x: batch_order_map[x[0]])
+
+        # A batch too small to cluster gave no markers: it adds no block
+        skipped = [(b, int((adata.obs[batch_key] == b).sum())) for b, mg in raw_results if mg.shape[1] == 0]
+        if skipped:
+            warnings.warn(
+                f"runGDR: {len(skipped)} batch(es) with fewer than {_MIN_CELLS_LOCAL_CLUSTERS} cells give no "
+                f"markers of their own (their cells are embedded on the other batches' markers): "
+                + ", ".join(f"{b} ({n})" for b, n in skipped), stacklevel=2)
+        raw_results = [x for x in raw_results if x[1].shape[1] > 0]
+        if not raw_results:
+            raise ValueError(f"runGDR: every batch of '{batch_key}' has fewer than "
+                             f"{_MIN_CELLS_LOCAL_CLUSTERS} cells; nothing to find markers in.")
 
         # Unpack in the correct order
         for _, marker_gene in raw_results:

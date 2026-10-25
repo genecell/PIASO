@@ -495,6 +495,7 @@ where
 mod svd_pass;
 pub mod threads;
 mod leiden;
+mod umap;
 
 
 /// Chromosome sizes of a genome known by name, or of a chrom.sizes file, as
@@ -521,6 +522,10 @@ fn _piaso(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(svd_pass::svd_pass_source, m)?)?;
     m.add_function(wrap_pyfunction!(svd_pass::svd_layout_rule, m)?)?;
     m.add_function(wrap_pyfunction!(leiden::leiden_csr, m)?)?;
+    m.add_function(wrap_pyfunction!(umap::umap_fuzzy_graph, m)?)?;
+    m.add_function(wrap_pyfunction!(umap::umap_graph_matmat, m)?)?;
+    m.add_function(wrap_pyfunction!(umap::umap_layout_csr, m)?)?;
+    m.add_function(wrap_pyfunction!(umap::umap_chebyshev_filter, m)?)?;
     m.add_function(wrap_pyfunction!(chrom_sizes, m)?)?;
     m.add_function(wrap_pyfunction!(known_genomes, m)?)?;
         Ok(())

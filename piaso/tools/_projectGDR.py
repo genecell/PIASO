@@ -247,8 +247,12 @@ def _infog_apply_cytome(ds, stats, *, modality="RNA", counts_layer="counts",
 
 
 def _reference_knn(matrix, n_nearest_neighbors=30, leaf_size=40):
+    """The reference's frozen control-gene neighbours: twice ``n_nearest_neighbors`` per gene, as
+    ``score`` queries them when it excludes a set's own genes (the default), so the projection draws
+    the reference's controls whether the exclusion is on (the extra columns replace members) or off
+    (the first ``n_nearest_neighbors`` columns)."""
     from ._normalization import _precompute_stats
-    return np.asarray(_precompute_stats(matrix, n_nearest_neighbors=n_nearest_neighbors,
+    return np.asarray(_precompute_stats(matrix, n_nearest_neighbors=2 * n_nearest_neighbors,
                                         leaf_size=leaf_size))
 
 
@@ -421,11 +425,51 @@ def _decode_state_cytome(ds, enc, modality=None):
     return st
 
 
+# --------------------------------------------------------------------------------------------
+# An AnnData keeps the state in `uns`, which an h5ad file stores key by key, and anndata >= 0.13
+# refuses a "/" in a key (`anndata.settings.disallow_forward_slash_in_h5ad`; zarr never allows
+# one). The marker sets are a DataFrame named by cell type, so a label such as "L2/3 IT" left the
+# whole AnnData unwritable after runGDR. Such names are stored with "/" written as "%2F" and the
+# exact names beside them, and reading restores them. Names without "/" are stored as before.
+# --------------------------------------------------------------------------------------------
+_MARKER_NAMES_KEY = "marker_gene_names"
+
+
+def _uns_state(state):
+    """The state as stored in ``uns``: no "/" in the marker sets' names."""
+    mg = state.get("marker_gene") if isinstance(state, dict) else None
+    if not isinstance(mg, pd.DataFrame) or not any("/" in str(c) for c in mg.columns):
+        return state
+    names = [str(c) for c in mg.columns]
+    safe = mg.copy()
+    safe.columns = [n.replace("/", "%2F") for n in names]
+    out = dict(state)
+    out["marker_gene"] = safe
+    out[_MARKER_NAMES_KEY] = np.asarray(names, dtype=object)
+    return out
+
+
+def _from_uns_state(state):
+    """The state read from ``uns``, the marker sets under their own names again."""
+    if not isinstance(state, dict) or _MARKER_NAMES_KEY not in state:
+        return state
+    st = dict(state)
+    names = [str(x) for x in np.asarray(st.pop(_MARKER_NAMES_KEY), dtype=object).ravel()]
+    mg = st.get("marker_gene")
+    mg = mg.copy() if isinstance(mg, pd.DataFrame) else pd.DataFrame(mg)
+    if len(names) != mg.shape[1]:
+        raise ValueError(f"gdr_reference: {len(names)} marker-set names for {mg.shape[1]} marker "
+                         f"sets; the reference state is inconsistent. Re-run runGDR.")
+    mg.columns = names
+    st["marker_gene"] = mg
+    return st
+
+
 def _get_state(obj):
     try:
         if _is_cytome(obj):
             return _decode_state_cytome(obj, obj.metadata[GDR_REFERENCE_KEY])
-        return obj.uns[GDR_REFERENCE_KEY]
+        return _from_uns_state(obj.uns[GDR_REFERENCE_KEY])
     except (KeyError, TypeError):
         return None
 
@@ -436,7 +480,7 @@ def _set_state(obj, state):
             obj, state, modality=state.get("modality", "RNA"))
         obj.flush()          # metadata writes are buffered like matrices
     else:
-        obj.uns[GDR_REFERENCE_KEY] = state
+        obj.uns[GDR_REFERENCE_KEY] = _uns_state(state)
 
 
 def _counts_matrix(obj, layer):

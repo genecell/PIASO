@@ -131,10 +131,8 @@ def _adata(n=400, g=120, dtype=np.float32, seed=0):
 def test_taking_the_f32_path_changes_nothing(dtype, monkeypatch):
     """Isolate the dispatch: same data, f32 entry point vs f64 entry point.
 
-    Not "float32 input scores the same as float64 input" — that is false, and
-    was false before this change too: `_precompute_stats` derives per-feature
-    means and variances from the matrix, so the two dtypes round differently
-    and pick different control neighbours. That is upstream of the kernel.
+    Whether float32 and float64 inputs score the same is a separate question,
+    upstream of the kernel: it depends on `_precompute_stats` (next test).
     """
     import piaso.tools._normalization as norm
 
@@ -149,13 +147,19 @@ def test_taking_the_f32_path_changes_nothing(dtype, monkeypatch):
     assert np.array_equal(np.asarray(with_f32), np.asarray(forced_f64))
 
 
-def test_input_dtype_changing_the_neighbours_is_pre_existing():
-    """Pinned so nobody 'fixes' it by rounding inside the kernel dispatch."""
+def test_input_dtype_no_longer_changes_the_neighbours_or_the_scores():
+    """The gene means and variances are summed in float64 whatever the input's
+    dtype (2026-10-22). Before, a float32 matrix's statistics were computed in
+    float32 and picked different control neighbours than the same values held
+    as float64; the fix is in the statistics, not in the kernel dispatch."""
     from piaso.tools._normalization import _precompute_stats
 
-    k32 = _precompute_stats(_adata(dtype=np.float32).X, 30, 40)
-    k64 = _precompute_stats(_adata(dtype=np.float64).X, 30, 40)
-    assert not np.array_equal(k32, k64)
+    a32, a64 = _adata(dtype=np.float32), _adata(dtype=np.float64)
+    assert np.array_equal(_precompute_stats(a32.X, 30, 40), _precompute_stats(a64.X, 30, 40))
+    kw = dict(gene_list=_sets(), layer=None, random_seed=1927, max_workers=2, verbosity=0)
+    s32, _, _ = piaso.tl.score(a32, **kw)
+    s64, _, _ = piaso.tl.score(a64, **kw)
+    assert np.array_equal(np.asarray(s32), np.asarray(s64))
 
 
 def test_non_representable_float64_still_scores():

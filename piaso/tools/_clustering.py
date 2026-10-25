@@ -42,8 +42,9 @@ from typing import Sequence
 
 def _leiden_local_group(ds, gmask, g, sub, *, modality, measurement, select,
                         max_nnz_percentile, n_components, svd_method, n_iter, tol,
+                        stop_on="residuals",
                         n_neighbors, batch_size, random_state, resolution, n_threads=0,
-                        backend='auto'):
+                        backend='auto', unit_length=None):
     """Cluster one coarse group in its own space.
 
     ``sub`` is the group's own store (from ``ds.split``), holding only its
@@ -66,8 +67,9 @@ def _leiden_local_group(ds, gmask, g, sub, *, modality, measurement, select,
     try:
         svd_kw = dict(modality=modality, measurement=measurement, streaming=True,
                       key_added="X_svd", method=svd_method, n_iter=n_iter, tol=tol,
+                      stop_on=stop_on,
                       random_state=random_state, batch_size=batch_size, verbosity=0,
-                      n_threads=n_threads)
+                      n_threads=n_threads, unit_length=unit_length)
         if select and peak_like and selectPeaks is not None:
             # 1) per-group peak selection (20% cumulative-nnz, as the pipeline)
             selectPeaks(sub,
@@ -138,6 +140,7 @@ def _leiden_local_cytome_streaming_svd(
     svd_method: str = "auto",
     n_iter=None,
     tol=None,
+    stop_on: str = "residuals",
     n_neighbors: int = 15,
     batch_size: int = 1024,
     random_state: int = 10,
@@ -145,6 +148,8 @@ def _leiden_local_cytome_streaming_svd(
     verbose: bool = True,
     n_threads: int = 0,
     backend: str = 'auto',
+    tmp_dir=None,
+    unit_length: Optional[bool] = None,
 ):
     """Streaming, RAM-bounded `leiden_local` on a cytome, one group at a time.
 
@@ -164,9 +169,11 @@ def _leiden_local_cytome_streaming_svd(
     fewer than ``min_cells`` cells, or one whose chain fails, is kept as
     one sub-cluster ``<group>-0`` (the failure with a ``RuntimeWarning``).
 
-    All groups' stores are written in one scan of the matrix (``ds.split``);
-    the groups are then clustered one at a time, each store removed when its
-    group is done.
+    All groups' stores are written in one scan of the matrix (``ds.split``)
+    to a new folder under ``tmp_dir``; the groups are then clustered one at a
+    time, each store removed when its group is done. When the folder's disk
+    has room for only some of the stores, the groups are split in batches
+    that fit, in their order, one scan each (``_split_batches``).
     """
     import tempfile
     import warnings
@@ -190,9 +197,10 @@ def _leiden_local_cytome_streaming_svd(
     result = coarse.astype(object)
     params = dict(modality=modality, measurement=measurement, select=bool(select),
                   max_nnz_percentile=max_nnz_percentile, n_components=n_components,
-                  svd_method=svd_method, n_iter=n_iter, tol=tol, n_neighbors=n_neighbors,
+                  svd_method=svd_method, n_iter=n_iter, tol=tol, stop_on=stop_on,
+                  n_neighbors=n_neighbors,
                   batch_size=batch_size, random_state=random_state, resolution=resolution,
-                  n_threads=n_threads, backend=backend)
+                  n_threads=n_threads, backend=backend, unit_length=unit_length)
 
     todo = []
     for g in groups:
@@ -224,40 +232,82 @@ def _leiden_local_cytome_streaming_svd(
                 print(f"  [leiden_local] group {g}: {n_g} cells, {n_sel} features -> "
                       f"{len(set(labels))} sub-clusters")
 
-    tmpdir = tempfile.mkdtemp(prefix="leiden_local_")
+    import os
+    import shutil
+    if tmp_dir is not None:
+        os.makedirs(tmp_dir, exist_ok=True)
+    tmpdir = tempfile.mkdtemp(prefix="leiden_local_", dir=tmp_dir)
     try:
-        import os
-        # Every group's store in one scan of the matrix (``split``); older
-        # cytomes without it make them one at a time.
+        # Every group's store in one scan of the matrix (``split``), in
+        # batches when the disk is short of them all; older cytomes without
+        # ``split`` make them one at a time.
         outputs = {g: os.path.join(tmpdir, f"g{gi}.cytome") for gi, (g, _n) in enumerate(todo)}
         matrix = f"{modality}_{measurement}"
         if hasattr(ds, "split") and todo:
-            stores = ds.split(coarse, outputs, [matrix], include_fragments=False,
-                                 include_embeddings=False)
+            batches = _split_batches(ds, todo, matrix, tmpdir, verbose)
         else:
-            stores = None
-        for g, _n in todo:
-            try:
-                sub = stores.pop(g) if stores is not None else ds.subset(
-                    coarse == g, output=outputs[g], matrices=[matrix],
-                    include_fragments=False, include_embeddings=False)
-                labels, n_sel = _leiden_local_group(ds, coarse == g, g, sub, **params)
-                on_done(g, labels, n_sel, None)
-            except Exception as exc:  # one bad group must not kill the run
-                on_done(g, None, 0, f"{type(exc).__name__}: {exc}")
-            finally:
-                for suf in ("", "-wal", "-shm"):
-                    try:
-                        os.remove(outputs[g] + suf)
-                    except OSError:
-                        pass
+            batches = [[g for g, _n in todo]]
+        for batch in batches:
+            stores = (ds.split(coarse, {g: outputs[g] for g in batch}, [matrix],
+                               include_fragments=False, include_embeddings=False)
+                      if hasattr(ds, "split") and batch else None)
+            for g in batch:
+                try:
+                    sub = stores.pop(g) if stores is not None else ds.subset(
+                        coarse == g, output=outputs[g], matrices=[matrix],
+                        include_fragments=False, include_embeddings=False)
+                    labels, n_sel = _leiden_local_group(ds, coarse == g, g, sub, **params)
+                    on_done(g, labels, n_sel, None)
+                except Exception as exc:  # one bad group must not kill the run
+                    on_done(g, None, 0, f"{type(exc).__name__}: {exc}")
+                finally:
+                    for suf in ("", "-wal", "-shm"):
+                        try:
+                            os.remove(outputs[g] + suf)
+                        except OSError:
+                            pass
     finally:
-        import shutil
         shutil.rmtree(tmpdir, ignore_errors=True)
 
     ds.cells[key_added] = result
     ds.flush()
     return None
+
+def _split_batches(ds, todo, matrix, directory, verbose):
+    """The groups of ``todo`` in batches whose stores fit in ``directory``'s free space.
+
+    One batch when they all fit, or when the store's cytome cannot estimate a
+    split's size (before 0.3.7). Otherwise batches in the groups' order, each
+    within the free space less the split's own margin; a group too large for
+    the disk on its own is a batch of one, which ``split`` then refuses with
+    both numbers. The free space is measured once: each batch's stores are
+    removed before the next is written.
+    """
+    import shutil
+    groups = [g for g, _n in todo]
+    try:
+        from cytome.io.subset import _split_bytes_to_write as estimate
+    except ImportError:
+        return [groups]
+    n = max(int(ds.n_cells), 1)
+    need = [estimate(ds, [n_g / n], [matrix], False) for _g, n_g in todo]
+    free = shutil.disk_usage(directory).free - (320 << 20)   # split keeps 256 MB in hand
+    if sum(need) <= free:
+        return [groups]
+    batches, cur, used = [], [], 0
+    for g, b in zip(groups, need):
+        if cur and used + b > free:
+            batches.append(cur)
+            cur, used = [], 0
+        cur.append(g)
+        used += b
+    batches.append(cur)
+    if verbose:
+        print(f"  [leiden_local] the {len(groups)} group stores need about {sum(need) / 1e9:.1f} GB "
+              f"and {directory} has {max(free, 0) / 1e9:.1f} GB free: writing them in "
+              f"{len(batches)} batches, one scan of {matrix} each")
+    return batches
+
 
 def _read_selected_mask(ds, modality_or_table):
     """The boolean 'highly_variable' column of a modality's feature table.
@@ -300,7 +350,8 @@ _DR_METHODS = ('X_svd', 'X_svd_full', 'X_pca', 'X_gdr', 'X_pca_harmony', 'X_svd_
 
 
 def _embed_group(adata_i, dr_method, n_components, batch_key, gdr_resolution,
-                 svd_method, n_iter, svd_tol, random_state, verbosity, said):
+                 svd_method, n_iter, svd_tol, random_state, verbosity, said, n_threads=0,
+                 unit_length=None, svd_stop_on="residuals"):
     """Embed one group's AnnData by ``dr_method``; return the ``obsm`` key."""
     if dr_method == 'X_svd':
         hv = 'highly_variable' in adata_i.var.columns and bool(np.asarray(adata_i.var['highly_variable']).any())
@@ -309,11 +360,15 @@ def _embed_group(adata_i, dr_method, n_components, batch_key, gdr_resolution,
                   "(dr_method='X_svd'); run selectFeatures/infog first to select.")
             said['all_features'] = True
         runSVD(adata_i, use_highly_variable=hv, n_components=n_components, random_state=random_state,
-               scale_data=False, method=svd_method, n_iter=n_iter, tol=svd_tol, key_added='X_svd')
+               scale_data=False, method=svd_method, n_iter=n_iter, tol=svd_tol, stop_on=svd_stop_on,
+               key_added='X_svd',
+               n_threads=n_threads, unit_length=unit_length)
         return 'X_svd'
     if dr_method in ('X_svd_full', 'X_svd_full_harmony'):
         runSVD(adata_i, use_highly_variable=False, n_components=n_components, random_state=random_state,
-               scale_data=False, method=svd_method, n_iter=n_iter, tol=svd_tol, key_added='X_svd_full')
+               scale_data=False, method=svd_method, n_iter=n_iter, tol=svd_tol, stop_on=svd_stop_on,
+               key_added='X_svd_full',
+               n_threads=n_threads, unit_length=unit_length)
         if dr_method == 'X_svd_full':
             return 'X_svd_full'
         _piaso_harmony(adata_i, batch_key=batch_key, use_rep='X_svd_full', key_added='X_svd_full_harmony')
@@ -350,6 +405,8 @@ def leiden_local(
     svd_method: str = "auto",
     n_iter: Optional[int] = None,
     svd_tol: Optional[float] = None,
+    svd_stop_on: str = "residuals",
+    svd_unit_length: Optional[bool] = None,
     n_neighbors: int = 15,
     batch_size: int = 1024,
     random_state: int = 10,
@@ -357,6 +414,7 @@ def leiden_local(
     verbosity: int = 1,
     n_threads: int = 0,
     backend: str = 'auto',
+    tmp_dir: Optional[str] = None,
 ):
     """Leiden clustering within each group of a coarse clustering.
 
@@ -428,6 +486,18 @@ def leiden_local(
         ``runSVD``.
     svd_tol : float, optional
         Convergence tolerance passed to ``runSVD``.
+    svd_stop_on : {'residuals', 'singular_values'}, default 'residuals'
+        What ``svd_tol`` bounds in each group's SVD; see ``runSVD``'s
+        ``stop_on``. ``'singular_values'`` gives the groups of 1.2.6 and
+        earlier.
+    svd_unit_length : bool, optional
+        Passed to each group's ``runSVD`` as ``unit_length``: with True every
+        cell's vector in the group's own embedding is scaled to length 1
+        before the group's neighbors and Leiden (``dr_method`` 'X_svd' and
+        'X_svd_full'). Left unset, each group's ``runSVD`` decides by what it
+        factorises, as ``runSVD`` does: on for an ATAC or tiles store's groups,
+        off for RNA. On an AnnData the groups' SVDs see no modality, so pass
+        True there for ATAC.
     n_neighbors : int, default 15
         Neighbours for the per-group graph (capped below the group size).
     batch_size : int, default 1024
@@ -444,6 +514,16 @@ def leiden_local(
         process may use. The labels do not depend on it.
     backend : {'auto', 'rust', 'igraph'}, default 'auto'
         The Leiden of every group, as in :func:`piaso.tl.leiden`.
+    tmp_dir : str, optional
+        Cytome streaming only: where the groups' temporary stores are
+        written, in a new folder removed at the end. Together they hold
+        about one copy of the matrix clustered; each is removed when its
+        group is done. ``None`` uses Python's temporary folder
+        (``$TMPDIR``, else ``/tmp``), which on a cluster node or a small
+        system disk may be far smaller than the store, so for a large
+        store name a folder on a disk with room (the store's own, say).
+        When the disk has room for only some of the stores, the groups are
+        written in batches that fit, one scan of the matrix each.
 
     Returns
     -------
@@ -479,8 +559,10 @@ def leiden_local(
             modality=modality if modality is not None else "ATAC", measurement=cytome_layer,
             select=(dr_method == 'X_svd'), max_nnz_percentile=max_nnz_percentile,
             n_components=n_components, svd_method=svd_method, n_iter=n_iter, tol=svd_tol,
+            stop_on=svd_stop_on,
             n_neighbors=n_neighbors, batch_size=batch_size, random_state=random_state,
             min_cells=min_cells, verbose=verbose, n_threads=n_threads, backend=backend,
+            tmp_dir=tmp_dir, unit_length=svd_unit_length,
         )
 
     # --- Cytome, other methods: convert, run, write back ---
@@ -502,7 +584,9 @@ def leiden_local(
         sqrt_ncells = int(np.sqrt(adata_i.shape[0]))
         nc = n_components if sqrt_ncells > n_components else sqrt_ncells
         use_rep = _embed_group(adata_i, dr_method, nc, batch_key, gdr_resolution,
-                               svd_method, n_iter, svd_tol, random_state, verbosity, said)
+                               svd_method, n_iter, svd_tol, random_state, verbosity, said,
+                               n_threads=n_threads, unit_length=svd_unit_length,
+                               svd_stop_on=svd_stop_on)
         knn = _piaso_neighbors(adata_i, use_rep=use_rep, n_neighbors=n_neighbors, random_state=random_state)
         _piaso_leiden(adata_i, resolution=resolution, key_added='leiden_local', knn_result=knn,
                       random_state=random_state, backend=backend, n_threads=n_threads)

@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "piaso-tools"
-version = "1.2.6"
+version = "1.2.7"
 description = "Precise Integrative Analysis of Single-cell Omics."
 requires-python = ">=3.9"
 license = {text = "BSD-3-Clause"}
@@ -80,7 +80,10 @@ dependencies = [
     # in one pass, ds.split for leiden_local, and the chunk source runSVD
     # computes on. PIASO still runs on an older cytome (each of these falls
     # back), but slower, and a read-only store would not open.
-    "cytome>=0.3.6,<1.0",
+    # Floor 0.3.7: piaso.data.makeGenomeFiles reads the reference's GTF with
+    # cytome.read_gtf, new in 0.3.7 (one reader for GENCODE, Ensembl, NCBI
+    # RefSeq and plain GTF 2.2), and raises ImportError on an older cytome.
+    "cytome>=0.3.7,<1.0",
 ]
 
 # https://docs.pypi.org/project_metadata/#project-urls

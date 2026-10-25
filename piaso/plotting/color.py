@@ -273,6 +273,12 @@ d_color20 = ['#ffd567ff', '#fc9eecff', '#d17cfeff', '#84f8f3ff', '#33cb64ff', '#
              '#f9aa7dff', '#3b9f9aff', '#b2e683ff', '#f030dbff', '#abc032ff', '#5cfdacff', '#29d0f3ff', '#03bd82ff',
              '#8268a3ff', '#181a7fff', '#c21e3aff', '#7a7890ff', '#d9d5f7ff', '#f25f26ff', '#c6bc89ff', '#94a3f5ff']
 
+# Eight colors that stay distinct under the common color-vision deficiencies:
+# Steel Blue, Sky Blue, Periwinkle, Vermillion, Teal, Rose, Amber, Gold (Okabe-Ito's
+# sky blue, bluish green, vermillion, reddish purple and orange, with Tableau's steel
+# blue and gold and a periwinkle). Gray (#999999) stays free for "other" or masks.
+d_color21 = ['#4E79A7', '#56B4E9', '#7D80DA', '#D55E00', '#009E73', '#CC79A7', '#E69F00', '#EDC948']
+
 
 
 ### Continous colors

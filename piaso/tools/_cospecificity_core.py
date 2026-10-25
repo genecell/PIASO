@@ -82,19 +82,22 @@ def _filter_top_n_per_group(
 
 def _derive_cosg_cache_key(
     *, cosg_mu: float, cosg_expressed_pct: float, cosg_layer: str,
-    groupby: str, modality: str,
+    groupby: str, modality: str, cosg_remove_lowly_expressed: bool = True,
 ) -> str:
     """Auto-derive the cache key from parameters that change the COSG
     output. ``n_genes_user`` is NOT part of the key because we always
     compute at ``ds.n_peaks`` internally and filter at usage time;
     different ``n_genes_user`` values share the same cache.
 
-    Format: ``cospec_cosg_dense__<groupby>_<modality>_mu=<>_pct=<>_layer=<>``
+    Format: ``cospec_cosg_dense__<groupby>_<modality>_mu=<>_pct=<>_layer=<>``,
+    with ``_filter=off`` appended when COSG's detection filter is off (the
+    default keeps the key it always had, so existing caches still match).
     """
     return (
         f"cospec_cosg_dense__"
         f"{groupby}_{modality}_"
         f"mu={cosg_mu}_pct={cosg_expressed_pct}_layer={cosg_layer}"
+        + ("" if cosg_remove_lowly_expressed else "_filter=off")
     )
 
 
@@ -131,6 +134,7 @@ def _ensure_cosg_dense(
     cosg_batch_size: int | None,
     use_cached: bool, cache_key: str | None,
     verbose: int,
+    cosg_remove_lowly_expressed: bool = True,
 ) -> pd.DataFrame:
     """Load cached COSG dense scores or compute + cache them.
 
@@ -152,6 +156,7 @@ def _ensure_cosg_dense(
             cosg_mu=cosg_mu, cosg_expressed_pct=cosg_expressed_pct,
             cosg_layer=cosg_layer,
             groupby=groupby, modality=modality,
+            cosg_remove_lowly_expressed=cosg_remove_lowly_expressed,
         )
 
     if use_cached:
@@ -181,6 +186,7 @@ def _ensure_cosg_dense(
         output_format="dense",
         n_genes_user=feature_count,
         mu=cosg_mu, expressed_pct=cosg_expressed_pct,
+        remove_lowly_expressed=cosg_remove_lowly_expressed,
         layer=cosg_layer, verbose=bool(verbose),
     )
     if cosg_batch_size is not None:
@@ -193,6 +199,7 @@ def _ensure_cosg_dense(
         "cosg_mu": cosg_mu, "cosg_expressed_pct": cosg_expressed_pct,
         "cosg_n_genes_user": feature_count,
         "layer": cosg_layer,
+        "cosg_remove_lowly_expressed": bool(cosg_remove_lowly_expressed),
     }
     _save_cosg_cache(ds, cache_key, scores_df, params)
     if verbose:
@@ -266,11 +273,17 @@ def _specificity_matrix(
     cosg_mu: float = 1.0, cosg_expressed_pct: float = 0.1,
     cosg_layer: str = "counts", cosg_batch_size=None,
     use_cached: bool = True, cosg_cache_key: str | None = _COSG_CACHE_KEY_DEFAULT,
-    verbose: int = 1,
+    verbose: int = 1, cosg_remove_lowly_expressed: bool = True,
 ) -> pd.DataFrame:
     """COSG λ specificity matrix ``S`` [features × cell_types], for AnnData or
     cytome. Cytome reuses the cached :func:`_ensure_cosg_dense`; AnnData runs
     ``cosg.cosg`` at full ``n_genes_user`` and pivots ``uns`` into a dense frame.
+
+    ``cosg_remove_lowly_expressed``: COSG's detection filter. With the default
+    ``True``, a feature expressed in under ``cosg_expressed_pct`` of a group's
+    cells is scored −1 in that group, as cytorete's regulon assembly expects.
+    For :func:`piaso.tl.runSCALAR` pass ``False``: SCALAR refuses negative
+    entries (two −1 multiply to +1) and applies its own detection floor.
     """
     if _is_cytome(data):
         return _ensure_cosg_dense(
@@ -278,6 +291,7 @@ def _specificity_matrix(
             cosg_mu=cosg_mu, cosg_expressed_pct=cosg_expressed_pct,
             cosg_layer=cosg_layer, cosg_batch_size=cosg_batch_size,
             use_cached=use_cached, cache_key=cosg_cache_key, verbose=verbose,
+            cosg_remove_lowly_expressed=cosg_remove_lowly_expressed,
         )
     # ---- AnnData path ----
     import cosg as _cosg
@@ -289,6 +303,7 @@ def _specificity_matrix(
     _cosg.cosg(
         adata, groupby=groupby, mu=cosg_mu,
         expressed_pct=cosg_expressed_pct,
+        remove_lowly_expressed=cosg_remove_lowly_expressed,
         n_genes_user=int(adata.n_vars), key_added=key,
     )
     res = adata.uns[key]

@@ -206,6 +206,7 @@ class PIASOmarkerDB:
         self.base_url = (base_url or self.DEFAULT_BASE_URL).rstrip('/')
         self.timeout = timeout or self.DEFAULT_TIMEOUT
         self._session = requests.Session()
+        self._aliases = None            # {former study name: current name}, read once (studyAliases)
         
         # Set up cache directory
         if cache_dir:
@@ -555,6 +556,55 @@ class PIASOmarkerDB:
                     studies.append(study_name)
         
         return studies
+
+    def studyAliases(self) -> Dict[str, str]:
+        """
+        Former study names and the names the studies carry now.
+
+        PIASOmarkerDB renames a study whose name breaks its naming rules and keeps the former name answering on the
+        server. This returns ``{former name: current name}``, read once per client (empty from a server that keeps
+        no aliases). ``analyzeGenes`` and ``analyzeMarkers`` resolve study names through it before checking them,
+        so code written with a former name keeps working.
+
+        Returns
+        -------
+        dict
+            Former name to current name.
+
+        Examples
+        --------
+        >>> client.studyAliases()['SEAAD2024_MTG_Subclass']
+        'SEAAD2024_MTG_subclass'
+        """
+        if self._aliases is None:
+            try:
+                data = self._extract_data(self._request('GET', 'study-aliases'))
+            except APIError as e:
+                if e.status_code != 404:            # a server from before the aliases has no such endpoint
+                    raise
+                data = []
+            self._aliases = {str(d['old_name']): str(d['new_name']) for d in data
+                             if isinstance(d, dict) and d.get('old_name') and d.get('new_name')}
+        return dict(self._aliases)
+
+    def _resolve_studies(self, names: Optional[List[str]]) -> Optional[List[str]]:
+        """Each study name as the study is called now: a former name (in any case) becomes its current name, with a
+        warning; other names are returned as given."""
+        if not names:
+            return names
+        aliases = self.studyAliases()
+        if not aliases:
+            return list(names)
+        folded = {k.lower(): v for k, v in aliases.items()}
+        out = []
+        for s in names:
+            new = aliases.get(s) or folded.get(str(s).lower())
+            if new and new != s:
+                warnings.warn(f"Study '{s}' was renamed to '{new}' in PIASOmarkerDB; using '{new}'.",
+                              UserWarning, stacklevel=3)
+                s = new
+            out.append(s)
+        return out
     
     def getCellTypes(
         self,
@@ -696,7 +746,8 @@ class PIASOmarkerDB:
         studies : str or list of str, optional
             Study/studies to include in analysis. Only cell types from these
             studies will be considered. Study names are validated against
-            PIASOmarkerDB. Cannot overlap with exclude_studies.
+            PIASOmarkerDB; a renamed study's former name is resolved to its
+            current name, with a warning (``studyAliases``). Cannot overlap with exclude_studies.
             Default: None (use all studies).
         min_genes : int, optional
             Minimum number of genes that must match a cell type. Default: 1.
@@ -755,6 +806,8 @@ class PIASOmarkerDB:
                 studies_list = [studies]
             else:
                 studies_list = list(studies)
+            # a renamed study's former name is resolved to its current name (studyAliases)
+            studies_list = self._resolve_studies(studies_list)
             
             # Validate study names against database
             available_studies = self.listStudies(species=species)
@@ -765,6 +818,10 @@ class PIASOmarkerDB:
                     f"Use piaso.tl.queryPIASOmarkerDB(list_studies=True) to see available studies."
                 )
         
+        if exclude_studies is not None:
+            exclude_studies = self._resolve_studies(
+                [exclude_studies] if isinstance(exclude_studies, str) else list(exclude_studies))
+
         # Check for conflicts between studies and exclude_studies
         if studies_list is not None and exclude_studies is not None:
             overlap = set(studies_list) & set(exclude_studies)
@@ -1411,7 +1468,8 @@ def analyzeMarkers(
     studies : str or list of str, optional
         Study/studies to include in analysis. Only cell types from these
         studies will be considered. Study names are validated against
-        PIASOmarkerDB. Cannot overlap with exclude_studies.
+        PIASOmarkerDB; a renamed study's former name is resolved to its
+        current name, with a warning (``PIASOmarkerDB.studyAliases``). Cannot overlap with exclude_studies.
         Default: None (use all studies).
     min_genes : int, optional
         Minimum number of genes that must match a cell type. Default: 1.

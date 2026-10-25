@@ -41,6 +41,8 @@ def umap(
     knn_result=None,
     neighbors_key='neighbors',
     modality='RNA',
+    backend='auto',
+    n_threads=0,
 ):
     """Compute UMAP embedding from precomputed kNN graph.
 
@@ -53,15 +55,17 @@ def umap(
         If AnnData: reads kNN from uns, stores UMAP in obsm.
         If cytome.Dataset: reads embedding, stores UMAP embedding in cytome.
     use_rep : str
-        Name of the representation whose ARRAY is fed to umap-learn. What it
+        Name of the representation whose ARRAY goes with the graph. What it
         controls depends on whether a stored kNN graph is being reused:
 
         - cytome, or AnnData with a stored piaso kNN: neighbors are **not**
           re-run — the embedding's topology comes wholly from the stored
           graph, and ``use_rep`` only selects the data array (umap-learn's
-          API requires one even with ``precomputed_knn``). Naming a different
-          representation than the graph was built on raises, because it
-          would change nothing while implying it had.
+          API requires one even with ``precomputed_knn``; both backends use
+          it only to place the pieces of a graph in several connected
+          components). Naming a different representation than the graph was
+          built on raises, because it would change nothing while implying it
+          had.
         - AnnData with **no** stored kNN: umap-learn computes its own
           neighbors from this array (its defaults, not ours) — announced
           with a warning. Run :func:`piaso.tl.neighbors` first to control
@@ -73,7 +77,9 @@ def umap(
     n_components : int
         Number of UMAP dimensions.
     random_state : int
-        Random seed for reproducibility.
+        Random seed for reproducibility. With the Rust backend it sets the
+        layout's negative samples and the start's noise of 1e-4; the spectral
+        start itself does not depend on it, as umap-learn's does not.
     key_added : str
         Key/name for the UMAP coordinates.
     knn_result : dict, optional
@@ -90,6 +96,37 @@ def umap(
     modality : str, default 'RNA'
         Cytome only: the modality the graph was stored under, and the one the
         embedding is written under.
+    backend : {'auto', 'rust', 'umap-learn'}, default 'auto'
+        Who computes the embedding from the stored kNN.
+
+        - ``'rust'``: umap-learn's graph, curve, spectral start and schedule,
+          computed by PIASO's extension, in parallel and deterministically:
+          one graph and one ``random_state`` give one embedding at any
+          ``n_threads``. Each epoch runs as a schedule of node blocks in
+          which no two threads touch one node at a time (see
+          ``piaso.tools._umap_rust``). Its coordinates differ from
+          umap-learn's as two umap-learn seeds do. It needs a stored kNN
+          (run :func:`piaso.tl.neighbors` first) and does not import
+          umap-learn.
+        - ``'umap-learn'``: umap-learn's ``UMAP``, single-threaded whenever
+          ``random_state`` is set (its documentation: a seed turns off its
+          multi-threading). The embeddings of PIASO 1.2.6 and earlier. It
+          takes the stored kNN as umap-learn takes a precomputed one, at its
+          own ``n_neighbors`` (15): a kNN of more columns is cut to its first
+          15, and one of fewer is set aside for neighbors umap-learn computes
+          from the array, with umap-learn's warning. The Rust backend uses
+          every column stored.
+        - ``'auto'``: ``'rust'`` when a kNN is stored or passed and the
+          extension has it, else ``'umap-learn'`` (which then computes its
+          own neighbors, with a warning).
+
+        *Changed in 1.2.7*: the default was ``'umap-learn'``. Pass
+        ``backend='umap-learn'`` to reproduce an embedding of an earlier
+        version.
+    n_threads : int, default 0
+        Threads for the Rust backend (0: RAYON_NUM_THREADS, else the
+        process's cores; one thread below 4,096 cells). The embedding does
+        not depend on it. Ignored by umap-learn.
 
     Returns
     -------
@@ -116,7 +153,10 @@ def umap(
         from ._normalization import _open_cytome
         data = _open_cytome(data)
 
-    import umap as umap_module
+    if backend not in ('auto', 'rust', 'umap-learn'):
+        raise ValueError(f"umap(backend={backend!r}): use 'auto', 'rust' or 'umap-learn'")
+    if not isinstance(n_threads, (int, np.integer)) or n_threads < 0:
+        raise ValueError("umap(n_threads=...): a non-negative integer (0: all the process may use)")
 
     # Get kNN data
     precomputed_knn = None
@@ -190,12 +230,14 @@ def umap(
             # silently running a second, differently-parameterised kNN is how
             # "why does tl.umap have use_rep, is it re-running neighbors?"
             # becomes a reasonable question with no discoverable answer.
-            warnings.warn(
-                f"umap: no stored kNN found for "
-                f"neighbors_key='{uns_key}' — umap-learn will compute its own "
-                f"neighbors from use_rep='{use_rep or 'X_svd'}' with its "
-                f"internal defaults. Run piaso.tl.neighbors first to control "
-                f"and reuse the graph.", stacklevel=2)
+            # (backend='rust' refuses below instead: it computes no kNN.)
+            if backend != 'rust':
+                warnings.warn(
+                    f"umap: no stored kNN found for "
+                    f"neighbors_key='{uns_key}' — umap-learn will compute its own "
+                    f"neighbors from use_rep='{use_rep or 'X_svd'}' with its "
+                    f"internal defaults. Run piaso.tl.neighbors first to control "
+                    f"and reuse the graph.", stacklevel=2)
         # Fall back to the representation the graph was built on, but never
         # override one the caller passed explicitly -- doing so silently
         # embedded X_svd when the call said use_rep='X_gdr'.
@@ -220,6 +262,25 @@ def umap(
     else:
         X = data.obsm[use_rep]
 
+    from . import _umap_rust
+    if backend == 'auto':
+        backend = 'rust' if (precomputed_knn is not None and _umap_rust.available()) else 'umap-learn'
+    if backend == 'rust':
+        if precomputed_knn is None:
+            raise ValueError("umap(backend='rust') needs a stored kNN graph: run piaso.tl.neighbors first, "
+                             "or pass knn_result")
+        if random_state is not None and (not isinstance(random_state, (int, np.integer)) or random_state < 0):
+            raise ValueError("umap(backend='rust'): random_state must be a non-negative integer or None")
+        embedding = _umap_rust.embed(
+            X, np.asarray(precomputed_knn[0]), np.asarray(precomputed_knn[1]), n_components=n_components,
+            min_dist=min_dist, spread=spread, random_state=random_state, n_threads=int(n_threads))
+    else:
+        embedding = _umap_learn_embedding(X, precomputed_knn, n_components, min_dist, spread, random_state)
+    return _store_umap(data, embedding, key_added, use_rep, modality, backend)
+
+
+def _umap_learn_embedding(X, precomputed_knn, n_components, min_dist, spread, random_state):
+    import umap as umap_module
     # umap-learn's default for precomputed_knn is the sentinel (None, None,
     # None), not None — passing None crashes inside fit at
     # `self.precomputed_knn[0]`. The no-stored-kNN fallback always hit this,
@@ -256,7 +317,10 @@ def umap(
                 "Nothing else needs to change; this is an upstream "
                 "incompatibility between those two packages."
             ) from exc
+    return embedding
 
+
+def _store_umap(data, embedding, key_added, use_rep, modality, backend):
     # Store results
     if _is_cytome_dataset(data):
         # Writes the caller's key verbatim, so one cytome can hold RNA_svd
@@ -277,7 +341,7 @@ def umap(
             key_added, embedding,
             dtype=_resolve_layer_dtype(None),
             provenance={"modality": modality, "function": "piaso.tl.umap",
-                        "use_rep": use_rep, "key_added": key_added},
+                        "use_rep": use_rep, "key_added": key_added, "backend": backend},
         )
         data.flush()
         # Strict / self-contained: embedding lives on the cytome.

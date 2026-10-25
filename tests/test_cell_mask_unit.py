@@ -94,18 +94,22 @@ def test_score_cell_mask_equals_subset_then_score():
 
 
 # ---------------------------------------------------------------------
-# runSVD() cell_mask (cytome path; AnnData raises)
+# runSVD() cell_mask (AnnData and cytome)
 # ---------------------------------------------------------------------
 
-def test_runSVD_anndata_cell_mask_raises_NotImplementedError():
-    """AnnData runSVD doesn't support cell_mask (use adata[mask] instead)."""
+def test_runSVD_anndata_cell_mask_returns_the_subset_and_writes_nothing():
+    """AnnData runSVD with cell_mask returns (n_masked, n_components), the
+    embedding of adata[mask], and leaves obsm alone."""
     import piaso
     adata = _make_adata()
     adata.var["highly_variable"] = True
     mask = np.ones(adata.n_obs, dtype=bool)
     mask[:5] = False
-    with pytest.raises(NotImplementedError, match="cell_mask"):
-        piaso.tl.runSVD(adata, cell_mask=mask, n_components=5)
+    emb, S, Vt = piaso.tl.runSVD(adata, cell_mask=mask, n_components=5)
+    assert emb.shape == (int(mask.sum()), 5) and "X_svd" not in adata.obsm
+    sub = adata[mask].copy()
+    piaso.tl.runSVD(sub, n_components=5)
+    assert np.array_equal(emb, sub.obsm["X_svd"])
 
 
 def test_runSVD_cytome_cell_mask_returns_n_masked_rows(tmp_path):
