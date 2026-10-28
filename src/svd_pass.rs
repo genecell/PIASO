@@ -401,6 +401,29 @@ fn split_batches(chunks: &[ChunkMeta], budget: usize, min_len: usize) -> Vec<&[C
     out
 }
 
+/// A map from stored to output positions: kept entries (>= 0) numbered
+/// 0, 1, 2, ... in order, `n_kept` of them; -1 elsewhere.
+fn check_map(m: &[i32], n_kept: usize) -> Result<(), String> {
+    let mut next: usize = 0;
+    for (p, &v) in m.iter().enumerate() {
+        if v < 0 {
+            if v != -1 {
+                return Err(format!("entry {} is {}, neither kept (>= 0) nor -1", p, v));
+            }
+            continue;
+        }
+        if v as usize != next {
+            return Err(format!("entry {} maps to {}, where the kept entries before it make {}: \
+                                the kept entries must be numbered 0, 1, 2, ... in order", p, v, next));
+        }
+        next += 1;
+    }
+    if next != n_kept {
+        return Err(format!("it keeps {} entries, and the output has {}", next, n_kept));
+    }
+    Ok(())
+}
+
 /// The TF-IDF transform of one stored value, in the precision numpy used.
 ///
 /// `_normalize_chunk_tfidf` on float32 data: `np.divide(f32, f64, out=f32)`
@@ -673,10 +696,30 @@ fn pass_impl<'py>(
         }
     }
     let n_out = n_out_rows.unwrap_or(n_rows as usize);
+    // The maps are what EngineOps builds: kept entries numbered 0, 1, 2, ...
+    // in stored order, as many as the output has. A chunk's output rows are a
+    // slice taken from the kept counts before it, so a map out of order or out
+    // of range wrote outside its slice (a panic) or into another chunk's rows.
+    check_map(remap, n_selected).map_err(|e| PyValueError::new_err(format!("col_remap: {}", e)))?;
+    match &row_map_owned {
+        Some(m) => check_map(m, n_out).map_err(|e| PyValueError::new_err(format!("row_map: {}", e)))?,
+        None if n_out != n_rows as usize => return Err(PyValueError::new_err(format!(
+            "n_out_rows is {} without a row_map, and the matrix has {} rows", n_out, n_rows))),
+        None => {}
+    }
+    // A scale of 0 is no scaling, as in the Python transform (which skips the
+    // multiply for it); multiplied in, it made every value 0.
+    let scale = if scale == 0.0 { 1.0 } else { scale };
     let tfidf = match (&depth_owned, &idf_owned) {
         (Some(d), Some(i)) if !d.is_empty() => {
             if d.len() != n_rows as usize || i.len() != n_cols as usize {
                 return Err(PyValueError::new_err("cell_depth / idf length mismatch"));
+            }
+            // The Python transform turned a NaN into 0 and this pass carried
+            // it into the solver; statistics that are not finite describe no
+            // matrix, so both refuse them.
+            if d.iter().any(|x| !x.is_finite()) || i.iter().any(|x| !x.is_finite()) || !scale.is_finite() {
+                return Err(PyValueError::new_err("cell_depth / idf / scale hold values that are not finite"));
             }
             Some(Tfidf { depth: d, idf: i, scale })
         }
@@ -912,6 +955,16 @@ fn pass_impl<'py>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_maps_must_number_their_kept_entries_in_order() {
+        assert!(super::check_map(&[0, -1, 1, 2, -1], 3).is_ok());
+        assert!(super::check_map(&[-1, -1], 0).is_ok());
+        assert!(super::check_map(&[1, 0], 2).is_err());          // out of order
+        assert!(super::check_map(&[0, 2], 2).is_err());          // a gap
+        assert!(super::check_map(&[0, 1], 3).is_err());          // fewer than the output
+        assert!(super::check_map(&[0, -2], 1).is_err());         // neither kept nor -1
+    }
 
     #[test]
     fn block_rows_fits_the_cache_and_spreads_small_matrices() {

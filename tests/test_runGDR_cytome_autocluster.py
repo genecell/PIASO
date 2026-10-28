@@ -73,9 +73,13 @@ def test_runGDR_cytome_groupby_none_does_not_crash(tmp_path, monkeypatch):
         n_svd_dims=10, n_svd_iter=5, resolution=1.0,
         max_workers=1, verbosity=0,
     )
-    # The derived labels must have been written (no KeyError thrown above).
-    assert "gdr_local_TMP_GDR" in list(ds.cells.columns)
-    labels = np.asarray(ds.cells["gdr_local_TMP_GDR"])
+    # The derived labels must have been written (no KeyError thrown above),
+    # under the name the reference recipe gives them, as on AnnData (audit
+    # 2026-10-27: the temporary column was left in the store and the recipe
+    # named a `gdr_local` column that did not exist).
+    assert "gdr_local" in list(ds.cells.columns)
+    assert "gdr_local_TMP_GDR" not in list(ds.cells.columns)
+    labels = np.asarray(ds.cells["gdr_local"])
     assert len(labels) == ds.n_cells and len(np.unique(labels)) >= 1
     ds.close()
 

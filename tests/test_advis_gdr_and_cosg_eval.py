@@ -14,16 +14,16 @@ import numpy as np
 import pandas as pd
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-sys.path.insert(0, "/path/to/project")
-sys.path.insert(0, "/path/to/project/COSG")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-ADVIS_CYTOME = "/path/to/project/results/snakemake/advis_35/pipeline.cytome"
+from conftest import pipeline_store, results_path  # noqa: E402
+ADVIS_CYTOME = pipeline_store("advis_35")
 # Standalone benchmark script: import the canonical E18 path from conftest
 # (this file is also runnable directly with `python tests/test_advis_gdr_and_cosg_eval.py`,
 # in which case Python finds conftest.py via the sys.path.insert above).
-from conftest import E18_CYTOME  # noqa: E402
-RADC_CYTOME = "/path/to/project/results/brain_7M/RADC_694K.cytome"
-FIG_DIR = "/path/to/project/results/figures/streaming_cosg_eval"
+from conftest import E18_SOURCE as E18_CYTOME  # noqa: E402
+RADC_CYTOME = results_path("brain_7M", "RADC_694K.cytome")
+FIG_DIR = results_path("figures", "streaming_cosg_eval")
 
 
 def get_rss_mb():

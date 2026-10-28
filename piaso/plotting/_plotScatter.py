@@ -14,7 +14,7 @@ from functools import wraps
 
 
 from ..utils._cytome_compat import is_cytome_input as _is_cytome_input
-from ..utils._cytome_compat import read_cells_column as _read_cells_column
+from ._store_io import read_cells_column as _read_cells_column  # read-only
 
 
 def _get_feature_vector(data, feature, layer=None, use_raw=None,
@@ -62,7 +62,15 @@ def _get_feature_vector(data, feature, layer=None, use_raw=None,
 def _get_color_values(data, color,
                       modality=None, cytome_layer="counts",
                       compute_on_fly=True, use_cached_stats=True):
-    """Get color column values and determine if categorical."""
+    """Get color column values and determine if categorical.
+
+    One rule with the embedding plot (``_is_numeric_dtype``): a column is
+    continuous when its dtype is numeric, booleans excepted. A store's
+    ``leiden`` column is text, so it is categorical; it used to be parsed as
+    numbers ("0", "1", ...) and drawn on a colorbar here while the embedding
+    beside it drew categories.
+    """
+    from ._plotEmbedding import _is_numeric_dtype
     if color is None:
         return None, False
 
@@ -71,12 +79,11 @@ def _get_color_values(data, color,
         from ._plotEmbedding import _resolve_cytome_feature_values
         with _open_cytome(data, mode="r") as ds:
             cells_cols = set(ds.cells.columns)
-        if color in cells_cols:
-            vals = pd.Series(_read_cells_column(data, color))
-            numeric = pd.to_numeric(vals, errors='coerce')
-            if numeric.notna().sum() > 0.5 * len(vals):
-                return numeric.values, False
-            return vals.values, True
+            if color in cells_cols:
+                vals = np.asarray(ds.cells[color])
+                if _is_numeric_dtype(vals):
+                    return np.asarray(vals, dtype=float), False
+                return vals, True
         # Resolve via modality registry (gene/peak/tile name)
         with _open_cytome(data, mode="r") as ds:
             vals, _ = _resolve_cytome_feature_values(
@@ -89,13 +96,10 @@ def _get_color_values(data, color,
 
     adata = data
     if color in adata.obs.columns:
-        vals = adata.obs[color].values
-        if hasattr(vals, 'categories') or vals.dtype == object:
-            return vals, True
-        try:
-            return np.asarray(vals, dtype=float), False
-        except (ValueError, TypeError):
-            return vals, True
+        col = adata.obs[color]
+        if _is_numeric_dtype(col):
+            return col.to_numpy(dtype=float, na_value=np.nan), False
+        return col.values, True
     # Try as gene
     try:
         return np.asarray(adata.obs_vector(color), dtype=float), False
@@ -103,40 +107,50 @@ def _get_color_values(data, color,
         raise ValueError(f"'{color}' not found in obs columns or var_names.")
 
 
+def _store_entity_table(ds, entity):
+    """The store table ``on=entity`` names, through cytome's public accessors.
+
+    ``ds.features(modality)`` for a feature table (``genes``, ``GA_genes``,
+    ``peaks``, ``tiles``, from cytome's own modality registry) and
+    ``ds.samples`` for the samples. A table the store lacks has no columns.
+    """
+    import cytome
+    getters = {table: (lambda m=modality: ds.features(m))
+               for modality, (table, _id) in cytome.MODALITY_VAR_ENTITY.items()}
+    getters['samples'] = lambda: ds.samples
+    table = getters[entity]() if entity in getters else None
+    if table is None or not table.columns:
+        have = sorted(name for name, get in getters.items() if get().columns)
+        raise ValueError(f"on={entity!r}: no such feature table (have: {have}).")
+    return table
+
+
 def _get_entity_column(data, entity, col):
     """Per-FEATURE values for ``on != 'cells'`` — one value per row of a
-    feature entity (``peaks`` / ``genes`` / ``tiles`` / ``GA_genes`` for a
-    cytome; ``adata.var`` for AnnData). ``'width'`` is derived from
-    ``end_ - start`` (cytome) or ``end - start`` (AnnData) when present.
+    feature entity (``peaks`` / ``genes`` / ``tiles`` / ``GA_genes``, or
+    ``samples``, for a cytome; ``adata.var`` for AnnData). ``'width'`` is
+    derived from ``end_ - start`` (cytome) or ``end - start`` (AnnData) when
+    present.
 
-    Returns ``(values, is_categorical)``.
+    Returns ``(values, is_categorical)``; a categorical's missing values stay
+    missing (drawn in ``na_color`` as NA, as for ``on='cells'``).
     """
     if _is_cytome_input(data):
         from ..utils._cytome_compat import open_cytome as _open_cytome
         with _open_cytome(data, mode="r") as ds:
-            tbls = {r[0] for r in ds._conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
-            if entity not in tbls:
-                raise ValueError(
-                    f"on={entity!r}: no such feature table (have: "
-                    f"{sorted(t for t in tbls if not t.startswith('_'))}).")
-            cols = {r[1] for r in ds._conn.execute(
-                f'PRAGMA table_info("{entity}")').fetchall()}
-            if col == 'width' and {'start', 'end_'} <= cols:
-                rows = ds._conn.execute(
-                    f'SELECT end_ - start FROM "{entity}" ORDER BY rowid').fetchall()
-                return np.array([r[0] for r in rows], dtype=float), False
-            if col not in cols:
+            table = _store_entity_table(ds, entity)
+            if col == 'width' and 'start' in table and 'end_' in table:
+                return (np.asarray(table['end_'], dtype=float)
+                        - np.asarray(table['start'], dtype=float)), False
+            if col not in table:
                 raise ValueError(
                     f"on={entity!r}: column {col!r} not found "
-                    f"(have: {sorted(cols)}; or 'width' if start/end_ exist).")
-            rows = ds._conn.execute(
-                f'SELECT "{col}" FROM "{entity}" ORDER BY rowid').fetchall()
-        s = pd.Series([r[0] for r in rows])
+                    f"(have: {sorted(table.columns)}; or 'width' if start/end_ exist).")
+            s = pd.Series(table[col], dtype=object)
         numeric = pd.to_numeric(s, errors='coerce')
         if numeric.notna().sum() > 0.5 * len(s):
             return numeric.values, False
-        return s.astype(str).values, True
+        return np.array([None if pd.isna(v) else str(v) for v in s], dtype=object), True
 
     # AnnData: features live in .var
     var = data.var
@@ -201,7 +215,7 @@ def scatter(
     frameon: Optional[bool] = True,  # Scatter axes ARE meaningful (unlike UMAP); show by default.
     vmin: Optional[float] = None,
     vmax: Optional[float] = None,
-    show: bool = True,
+    show: Optional[bool] = None,
     save: Optional[str] = None,
     ax: Optional[plt.Axes] = None,
     return_fig: bool = False,
@@ -211,6 +225,8 @@ def scatter(
     use_cached_stats: bool = True,
     linewidths: float = 0.0,
     edgecolors="none",
+    na_color="lightgray",
+    sort_order="category",
 ):
     """Scatter plot of two features colored by a third variable.
 
@@ -230,7 +246,14 @@ def scatter(
     use_raw : bool, optional
         Use raw attribute. Ignored for cytome.
     palette : list or dict, optional
-        Colors for categorical data.  Falls back to PIASO default.
+        Colors for categorical data. Without it, the column's stored colours
+        (by name, as the embedding plot uses them), then the PIASO default.
+    na_color : str, default ``'lightgray'``
+        Colour of points whose colour value is missing; a categorical colour
+        lists them as ``"NA"`` (they used to be left out of the plot).
+    sort_order : {'category', 'size', 'random'}, default ``'category'``
+        Drawing order of a categorical colour; ``'size'`` puts rare
+        categories on top. See ``plotEmbedding``.
     cmap : str, optional
         Colormap. Defaults to ``'magma_r'`` when ``color`` is continuous
         (sequential, perceptually uniform, colourblind-safe) and to PIASO's
@@ -265,10 +288,11 @@ def scatter(
     on : str, default ``'cells'``
         What each point is. ``'cells'`` → one point per cell, ``x``/``y`` are
         per-cell features (gene/peak/tile name or a ``cells`` column). A feature
-        entity (``'peaks'`` / ``'genes'`` / ``'tiles'`` / ``'GA_genes'`` for a
-        cytome, or ``'var'``/any for AnnData) → one point per feature, ``x``/``y``
-        are columns of that entity's table (e.g. ``'neg_log10_pvalue'``,
-        ``'score'``, or the derived ``'width'`` = ``end_ - start``).
+        entity (``'peaks'`` / ``'genes'`` / ``'tiles'`` / ``'GA_genes'``, or
+        ``'samples'``, for a cytome, or ``'var'``/any for AnnData) → one point
+        per row of that table, ``x``/``y`` are its columns (e.g.
+        ``'neg_log10_pvalue'``, ``'score'``, or the derived ``'width'`` =
+        ``end_ - start``).
     density : ``'auto'`` | ``'scatter'`` | ``'hexbin'``
         ``'auto'`` switches to a log-count hexbin above ``density_threshold``
         points (unless colour is categorical). ``'scatter'`` forces points;
@@ -285,21 +309,29 @@ def scatter(
     vlines, hlines : list of float, optional
         Vertical / horizontal reference lines (e.g. a ``min_length`` or
         ``score_cutoff`` threshold).
-    show, save, ax, return_fig
-        Output options.
+    show : bool, optional
+        Call ``plt.show()``; ``None`` (default) shows unless ``ax`` is given.
+    save, ax, return_fig
+        Output options. Without ``return_fig`` the figure is returned when it
+        is not shown.
     linewidths : float, default 0.0
         Marker edge width.
     edgecolors : str, default 'none'
         Marker edge colour.
     modality : str, optional
-        Cytome only: which modality the data was stored under (``'RNA'``,
-        ``'ATAC'``, ``'tiles'``, ``'GA'``). ``None`` takes the store's first
-        modality.
+        Cytome only: the modality whose features to read (``'RNA'``,
+        ``'ATAC'``, ``'tiles'``, ``'GA'``). ``None`` finds the modality that
+        holds the feature, and raises if several do.
     cytome_layer : str, default 'counts'
-        Cytome only: the layer to read the values from.
+        Cytome only: the layer to read the values from. The default is the
+        raw counts -- unlike AnnData's ``.X``, which is usually normalised, so
+        the same data can read differently; pass ``'log1p'`` or ``'infog'``
+        (RNA) or ``'tfidf'`` (ATAC) for normalised values.
     compute_on_fly : bool, default True
-        Cytome only: normalise the raw layer while streaming (INFOG for RNA,
-        TF-IDF for ATAC) instead of requiring a materialised layer.
+        Cytome only: when ``cytome_layer`` names a normalised layer the store
+        does not hold (``'log1p'``, ``'infog'``, ``'tfidf'``), compute it per
+        feature from the counts. It does not normalise the default
+        ``'counts'``.
     use_cached_stats : bool, default True
         Cytome only: reuse normalisation statistics already stored in the
         cytome's metadata rather than recomputing them.
@@ -310,9 +342,12 @@ def scatter(
     """
     from . import color as _color_mod
     from .. import settings as _settings
+    from . import _figure
 
     if frameon is None:
         frameon = _settings._frameon
+    _created = ax is None
+    show = _figure.resolve_show(show, ax)
 
     _cytome_kwargs = dict(
         modality=modality, cytome_layer=cytome_layer,
@@ -398,59 +433,46 @@ def scatter(
                            mincnt=1, xscale=xscale, yscale=yscale, rasterized=rasterized)
             _attach_colorbar(fig, ax, hb, label='log10 count', side_ax=ax_right)
     elif color is not None and is_cat:
-        str_vals = np.array([str(v) for v in color_vals])
-        present = set(str(v) for v in color_vals if pd.notna(v))
-
-        # Honor the shared category store (order + colors) — same resolver the
-        # embedding/dotplot use — but only for per-cell colours (`on='cells'`);
-        # feature-table categoricals have no set_categories entry (#12, #13).
-        category_order = None
-        if on == 'cells':
-            from ._plotEmbedding import _resolve_categorical_style
-            palette, category_order = _resolve_categorical_style(
-                data, color, user_palette=palette)
-        if palette is None:
-            if not _is_cytome_input(data) and hasattr(data, 'uns'):
-                key = f'{color}_colors'
-                if key in data.uns:
-                    palette = list(data.uns[key])
-            if palette is None:
-                palette = _color_mod.d_color4
-
-        if category_order:
-            ordered = [str(c) for c in category_order if str(c) in present]
-            categories = ordered + sorted(present - set(ordered),
-                                          key=natural_key)
+        from ._categories import (resolve_category_style, label_strings,
+                                  draw_sequence, NA_LABEL)
+        # Order and colours by name over the whole column -- the resolver the
+        # embedding uses -- but the stored style only for per-cell colours
+        # (`on='cells'`); feature-table categoricals have no stored style.
+        style = resolve_category_style(
+            data if on == 'cells' else None, color if on == 'cells' else None,
+            color_vals, palette=palette, na_color=na_color,
+            read_stored=(on == 'cells'))
+        labels = label_strings(color_vals)
+        missing = np.asarray(pd.isna(labels), dtype=bool)
+        categories = style.present(labels)
+        kw = dict(s=point_size, alpha=alpha, rasterized=rasterized,
+                  linewidths=linewidths, edgecolors=edgecolors)
+        if missing.any():
+            # drawn first, behind the categories; they used to be dropped
+            ax.scatter(x_vals[missing], y_vals[missing], c=[na_color],
+                       label=NA_LABEL, **kw)
+        if sort_order == 'random':
+            sel = np.flatnonzero(~missing)
+            np.random.default_rng(0).shuffle(sel)
+            ax.scatter(x_vals[sel], y_vals[sel], c=style.rgba(labels[sel]),
+                       label='_nolegend_', **kw)
         else:
-            categories = sorted(present, key=natural_key)
-
-        _pal_is_dict = isinstance(palette, dict)
-
-        def _color_for(cat, i):
-            if _pal_is_dict:
-                return palette.get(str(cat),
-                                   _color_mod.d_color4[i % len(_color_mod.d_color4)])
-            return palette[i % len(palette)]
-
-        for i, cat in enumerate(categories):
-            mask = str_vals == cat
-            ax.scatter(x_vals[mask], y_vals[mask],
-                       c=[_color_for(cat, i)],
-                       s=point_size, alpha=alpha, label=cat,
-                       rasterized=rasterized,
-                       linewidths=linewidths, edgecolors=edgecolors)
+            for cat in draw_sequence(style, labels, sort_order, categories=categories):
+                mask = labels == cat
+                ax.scatter(x_vals[mask], y_vals[mask], c=[style.color(cat)],
+                           label=cat, **kw)
 
         if legend_loc == 'right':
             from matplotlib.lines import Line2D
             # Fixed legend-dot size, independent of point_size.
-            _handles = [
-                Line2D([0], [0], marker='o', linestyle='None',
-                       markersize=legend_marker_size,
-                       markerfacecolor=_color_for(cat, i),
-                       markeredgecolor='none', label=cat)
-                for i, cat in enumerate(categories)
-            ]
-            ncol = max(1, -(-len(categories) // 12))
+            def _h(colour, label):
+                return Line2D([0], [0], marker='o', linestyle='None',
+                              markersize=legend_marker_size,
+                              markerfacecolor=colour, markeredgecolor='none', label=label)
+            _handles = [_h(style.color(cat), cat) for cat in categories]
+            if missing.any():
+                _handles.append(_h(na_color, NA_LABEL))
+            ncol = max(1, -(-len(_handles) // 12))
             if leg_ax is not None:
                 # Dedicated legend panel keeps the scatter square (#12).
                 leg_ax.legend(handles=_handles, loc='center left',
@@ -474,12 +496,18 @@ def scatter(
             # Pass cmap='Spectral_r' or 'RdBu_r' for the diverging look, or
             # cmap='viridis' for the matplotlib default.
             cmap = 'magma_r'
-        order = np.argsort(color_vals)
-        sc = ax.scatter(x_vals[order], y_vals[order],
-                        c=np.asarray(color_vals)[order], cmap=cmap,
-                        s=point_size, alpha=alpha, rasterized=rasterized,
-                        vmin=vmin, vmax=vmax,
-                        linewidths=linewidths, edgecolors=edgecolors)
+        cv = np.asarray(color_vals, dtype=float)
+        finite = np.isfinite(cv)
+        kw = dict(s=point_size, alpha=alpha, rasterized=rasterized,
+                  linewidths=linewidths, edgecolors=edgecolors)
+        if (~finite).any():
+            # NaN maps to a transparent colour; draw those points visibly
+            ax.scatter(x_vals[~finite], y_vals[~finite], c=[na_color],
+                       label='_nolegend_', **kw)
+        order = np.flatnonzero(finite)
+        order = order[np.argsort(cv[order], kind="stable")]
+        sc = ax.scatter(x_vals[order], y_vals[order], c=cv[order], cmap=cmap,
+                        vmin=vmin, vmax=vmax, **kw)
         _attach_colorbar(fig, ax, sc, label=color, side_ax=ax_right)
     else:
         ax.scatter(x_vals, y_vals, c='grey', s=point_size, alpha=alpha,
@@ -536,23 +564,11 @@ def scatter(
     # tight_layout emits a UserWarning when a right-margin legend +
     # colorbar can't both fit. The figure still renders correctly;
     # silence the warning rather than spamming the notebook.
-    import warnings as _warnings
-    with _warnings.catch_warnings():
-        _warnings.simplefilter("ignore", UserWarning)
-        try:
-            plt.tight_layout()
-        except Exception:
-            pass
-
-    from ..settings import _savefig
-    _savefig(fig, save, writekey='scatter')
-    if show:
-        plt.show()
-    else:
-        plt.close(fig)
-
+    _figure.layout(fig)
+    out = _figure.finish(fig, created=_created, show=show, save=save, writekey='scatter')
     if return_fig:
         return fig, ax
+    return out
 
 
 @wraps(scatter)

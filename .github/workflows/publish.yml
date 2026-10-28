@@ -5,6 +5,12 @@ name: Build and publish wheels to PyPI
 # missing the extension. We build manylinux wheels per Python version with
 # maturin. The extension is version-specific (rust-numpy does not support
 # abi3 here), so we run a cp310/cp311/cp312 matrix.
+#
+# What is published: the manylinux x86_64 wheels for CPython 3.10 to 3.12 and
+# the sdist, each wheel installed and tested first (test-wheels). The jobs in
+# untested-platforms build macOS, Windows and Linux aarch64 wheels as artifacts
+# only: they have not yet been exercised on those platforms, so they are never
+# uploaded (the publish job downloads the wheels-py* and sdist artifacts alone).
 
 on:
   release:
@@ -25,12 +31,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # --locked: the crates of Cargo.lock, the ones the test suite ran with; a lock that
+      # no longer matches Cargo.toml fails the build instead of being re-resolved.
       - name: Build manylinux wheel
         uses: PyO3/maturin-action@v1
         with:
           command: build
           args: >-
             --release
+            --locked
             --interpreter python${{ matrix.python-version }}
             --out dist
           manylinux: "2014"
@@ -70,6 +79,46 @@ jobs:
           name: wheels-py${{ matrix.python-version }}
           path: dist/*.whl
 
+  # Install each wheel in a fresh Python with the newest dependencies pip resolves (numpy 2;
+  # pandas 3 on Python 3.11 and later) and run the fast tests against the installed package.
+  # The tests come from the checkout, the package from the wheel: conftest imports piaso
+  # first and stops if it comes from the checkout (PIASO_TEST_INSTALLED=1).
+  test-wheels:
+    name: Test wheel (py${{ matrix.python-version }})
+    needs: build-wheels
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: wheels-py${{ matrix.python-version }}
+          path: dist
+      - name: Install the wheel
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install dist/*.whl pytest
+          python -m pip list 2>/dev/null | grep -iE "^(numpy|pandas|scipy|anndata|cytome|cosg|scikit-learn|matplotlib) "
+      - name: The extension imports from the installed package
+        working-directory: ${{ runner.temp }}
+        run: |
+          python -c "import piaso, piaso._piaso; print(piaso.__version__, piaso.__file__); assert 'site-packages' in piaso.__file__"
+      - name: Fast tests against the installed package
+        env:
+          PIASO_TEST_INSTALLED: "1"
+          MPLBACKEND: Agg
+          NUMBA_THREADING_LAYER: workqueue
+        run: |
+          pytest tests -m "not slow and not data and not network and not snakemake" -q -p no:cacheprovider
+          pytest --pyargs piaso.tests -q -p no:cacheprovider
+
   build-sdist:
     name: Build sdist
     runs-on: ubuntu-latest
@@ -85,9 +134,72 @@ jobs:
           name: sdist
           path: dist/*.tar.gz
 
+  # NOT YET EXERCISED. Wheels for other platforms (and CPython 3.13), built and checked like the Linux ones and
+  # smoke-tested (the extension imports, one score runs), but never published: nobody has
+  # run PIASO on them yet. Run with workflow_dispatch and download the artifacts to try them;
+  # publish them only after the suite has passed there. The Rust code builds on each (its
+  # two Linux-only calls are behind cfg), which is all that has been checked.
+  untested-platforms:
+    name: Untested wheel (${{ matrix.os }}, py${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      # include entries only: each is a job of its own (with a base value such as
+      # python-version, GitHub merges entries into that one combination, each overwriting
+      # the os the previous one added)
+      matrix:
+        include:
+          - {os: macos-13, interpreter: python, python-version: "3.12"}            # Intel
+          - {os: macos-14, interpreter: python, python-version: "3.12"}            # Apple Silicon
+          - {os: windows-latest, interpreter: python, python-version: "3.12"}
+          - {os: ubuntu-24.04-arm, interpreter: python3.12, python-version: "3.12"}  # aarch64
+          - {os: ubuntu-latest, interpreter: python3.13, python-version: "3.13"}     # CPython 3.13
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Build wheel
+        uses: PyO3/maturin-action@v1
+        with:
+          command: build
+          args: --release --locked --interpreter ${{ matrix.interpreter }} --out dist
+          manylinux: auto
+      - name: Wheel must not contain gated kernels
+        shell: bash
+        run: |
+          python - <<'EOF'
+          import glob, zipfile, sys
+          for whl in glob.glob("dist/*.whl"):
+              for name in zipfile.ZipFile(whl).namelist():
+                  if name.endswith((".so", ".pyd")):
+                      blob = zipfile.ZipFile(whl).read(name)
+                      if b"call_peaks_pyo3" in blob or b"quantify_peaks_pyo3" in blob:
+                          sys.exit(f"::error::{whl}:{name} exports a gated kernel")
+              print(f"{whl}: clean")
+          EOF
+      - name: Smoke test
+        shell: bash
+        working-directory: ${{ runner.temp }}
+        run: |
+          python -m pip install "$(ls $GITHUB_WORKSPACE/dist/*.whl)"
+          python - <<'EOF'
+          import numpy as np, scipy.sparse as sp, anndata as ad, piaso, piaso._piaso
+          print(piaso.__version__, piaso.__file__)
+          a = ad.AnnData(sp.random(60, 40, density=0.3, format="csr", random_state=0, dtype=np.float32))
+          piaso.tl.score(a, gene_list=list(a.var_names[:5]), layer=None, key_added="s",
+                         n_ctrl_set=10, n_nearest_neighbors=5)
+          print("score ok", float(a.obs["s"].mean()))
+          EOF
+      - uses: actions/upload-artifact@v4
+        with:
+          name: untested-wheels-${{ matrix.os }}-py${{ matrix.python-version }}
+          path: dist/*.whl
+
   publish:
     name: Publish to PyPI
-    needs: [build-wheels, build-sdist]
+    needs: [build-wheels, test-wheels, build-sdist]
     runs-on: ubuntu-latest
     permissions:
       id-token: write        # OIDC identity for PyPI Trusted Publishing
@@ -95,11 +207,18 @@ jobs:
     # Only publish on an actual release (not manual dispatch test runs)
     if: github.event_name == 'release'
     steps:
-      - name: Download all artifacts
+      # Only the tested Linux wheels and the sdist: never the untested-wheels-* artifacts
+      - name: Download the wheels
         uses: actions/download-artifact@v4
         with:
+          pattern: wheels-py*
           path: dist
           merge-multiple: true
+      - name: Download the sdist
+        uses: actions/download-artifact@v4
+        with:
+          name: sdist
+          path: dist
 
       - name: Tag must match the package version
         if: github.event_name == 'release'

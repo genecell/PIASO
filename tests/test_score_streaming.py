@@ -17,11 +17,11 @@ from conftest import E18_CYTOME
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'external', 'cytome'))
 
-MTG_H5AD = "/path/to/project/mtg_full.h5ad"
+from conftest import MTG_H5AD
 # E18_CYTOME comes from conftest.py; @pytest.mark.requires_e18 applies the skip
 
 
-@pytest.mark.skipif(not os.path.exists(MTG_H5AD), reason="MTG h5ad not available")
+@pytest.mark.data(MTG_H5AD)
 def test_score_knn_consistency_rna():
     """Test that precomputed KNN gives identical scores for both paths."""
     import scanpy as sc
@@ -112,7 +112,7 @@ def test_score_e18_cytome_rna():
     sm_cytome, names_cytome, _ = score(
         ds, gene_sets, random_seed=42,
         use_rust=False, verbosity=1,
-        modality="RNA", cytome_layer="counts", batch_size=1024,
+        modality="RNA", layer="counts", batch_size=1024,
     )
     print(f"Cytome score: {sm_cytome.shape}")
 
@@ -157,7 +157,7 @@ def test_score_cytome_shape_and_finite():
     sm, names, pm = score(
         ds, gene_sets, random_seed=42,
         use_rust=False, verbosity=0,
-        modality="RNA", cytome_layer="counts", batch_size=1024,
+        modality="RNA", layer="counts", batch_size=1024,
     )
 
     assert sm.shape == (ds.n_cells, 1)

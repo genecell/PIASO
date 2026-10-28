@@ -5,6 +5,30 @@ import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 import matplotlib.patches as mpatches
 
+
+def _select_pair_rows(interactions_df, pair, *, col_cell_type_pair, col_interaction_score,
+                      col_ligand_receptor_pair, col_ligand, col_receptor,
+                      ligand_receptor_sep, specificity_df, top_n, preserve_input_order):
+    """The rows one panel draws: its top ``top_n`` interactions (by score, or
+    the first ``top_n`` in input order), split into ligand and receptor, with
+    only the pairs whose two genes are in ``specificity_df``.
+
+    One function for the panel and for the shared colour scale. The scale
+    used to be taken from the ``nlargest`` rows even with
+    ``preserve_input_order=True``, so a drawn value above it was clipped to
+    the top colour without notice.
+    """
+    rows = interactions_df[interactions_df[col_cell_type_pair] == pair]
+    rows = rows.head(top_n) if preserve_input_order else rows.nlargest(top_n, col_interaction_score)
+    if rows.empty:
+        return rows
+    rows = rows.copy()
+    rows[[col_ligand, col_receptor]] = rows[col_ligand_receptor_pair].str.split(
+        ligand_receptor_sep, expand=True)
+    keep = rows[col_ligand].isin(specificity_df.index) & rows[col_receptor].isin(specificity_df.index)
+    return rows[keep]
+
+
 def plotLigandReceptorInteraction(
     interactions_df: pd.DataFrame,
     specificity_df: pd.DataFrame,
@@ -33,7 +57,8 @@ def plotLigandReceptorInteraction(
     barplot_palette: str = 'Paired',
     sort_by_category: bool = False,
     category_agg_method: str = 'sum',
-    preserve_input_order: bool = False
+    preserve_input_order: bool = False,
+    show: bool = None,
 ):
     """
     Generates plots with a bar plot of top interactions and a heatmap showing 
@@ -69,6 +94,9 @@ def plotLigandReceptorInteraction(
         sort_by_category (bool): If True, sort interactions by category first, then by interaction score within category.
         category_agg_method (str): Method to aggregate interaction scores by category ('sum' or 'mean') when sort_by_category=True.
         preserve_input_order (bool): If True, preserve the original order from interactions_df without any sorting.
+        show (bool, optional): Call ``plt.show()`` (default). When not shown,
+            the figure is returned (and closed if it was saved). Saved figures
+            embed TrueType fonts.
     
     Examples:
         # Preserve original input order
@@ -246,41 +274,36 @@ def plotLigandReceptorInteraction(
             palette_colors = sns.color_palette('Paired', len(all_annotations))
             color_palette = dict(zip(all_annotations, palette_colors))
     
+    _select = dict(
+        col_cell_type_pair=col_cell_type_pair, col_interaction_score=col_interaction_score,
+        col_ligand_receptor_pair=col_ligand_receptor_pair, col_ligand=col_ligand,
+        col_receptor=col_receptor, ligand_receptor_sep=ligand_receptor_sep,
+        specificity_df=specificity_df, top_n=top_n, preserve_input_order=preserve_input_order,
+    )
+
+    # The shared colour scale: the caller's heatmap_vmax, or the largest value
+    # any panel draws. The colorbar ticks are read from this one number in both
+    # layouts; they used to be read from the computed maximum alone, which is
+    # never computed when heatmap_vmax is given, so the ticks sat at -inf.
     global_vmax = float('-inf')
     if shared_legend and heatmap_vmax is None:
         for pair in cell_type_pairs:
             sender, receiver = pair.split(cell_type_sep)
-            top_interactions = interactions_df[interactions_df[col_cell_type_pair] == pair].nlargest(top_n, col_interaction_score)
-            if top_interactions.empty: continue
-            df_copy = top_interactions.copy()
-            df_copy[[col_ligand, col_receptor]] = df_copy[col_ligand_receptor_pair].str.split(ligand_receptor_sep, expand=True)
-            mask = (df_copy[col_ligand].isin(specificity_df.index)) & (df_copy[col_receptor].isin(specificity_df.index))
-            for _, row in df_copy[mask].iterrows():
+            rows = _select_pair_rows(interactions_df, pair, **_select)
+            for _, row in rows.iterrows():
                 l_score = specificity_df.loc[row[col_ligand], sender]
                 r_score = specificity_df.loc[row[col_receptor], receiver]
                 global_vmax = max(global_vmax, l_score, r_score)
+    shared_vmax = heatmap_vmax if heatmap_vmax is not None else global_vmax
 
     legend_handles, legend_labels, mappable = None, None, None
     mappable_ligand, mappable_receptor = None, None
+    vmax_actual = None
 
     for idx, cell_type_pair in enumerate(cell_type_pairs):
         sender_cell_type, receiver_cell_type = cell_type_pair.split(cell_type_sep)
-        
-        # CHANGE: Handle different sorting options
-        if preserve_input_order:
-            # Use original order from DataFrame, just filter by cell type pair and take top_n
-            pair_interactions = interactions_df[interactions_df[col_cell_type_pair] == cell_type_pair]
-            top_interactions = pair_interactions.head(top_n)  # Take first top_n in original order
-        else:
-            # Default behavior: sort by interaction score first
-            top_interactions = interactions_df[interactions_df[col_cell_type_pair] == cell_type_pair].nlargest(top_n, col_interaction_score)
-        
-        if top_interactions.empty: continue
-        
-        filtered_interactions = top_interactions.copy()
-        filtered_interactions[[col_ligand, col_receptor]] = filtered_interactions[col_ligand_receptor_pair].str.split(ligand_receptor_sep, expand=True)
-        valid_mask = (filtered_interactions[col_ligand].isin(specificity_df.index)) & (filtered_interactions[col_receptor].isin(specificity_df.index))
-        filtered_interactions = filtered_interactions[valid_mask]
+
+        filtered_interactions = _select_pair_rows(interactions_df, cell_type_pair, **_select)
         if filtered_interactions.empty: continue
         
         # CHANGE: Apply category sorting only if requested and not preserving input order
@@ -315,7 +338,8 @@ def plotLigandReceptorInteraction(
         
         heatmap_data = pd.DataFrame(np.array(heatmap_scores).T, index=['Ligand', 'Receptor'], columns=valid_ligand_receptors)
         N = len(filtered_interactions)
-        vmax_actual = heatmap_vmax if heatmap_vmax is not None else (global_vmax if shared_legend else heatmap_data.max().max())
+        vmax_actual = shared_vmax if shared_legend else (
+            heatmap_vmax if heatmap_vmax is not None else heatmap_data.max().max())
 
         # --- Plotting Area Setup ---
         bar_colors = filtered_interactions[col_annotation].map(color_palette)
@@ -438,47 +462,43 @@ def plotLigandReceptorInteraction(
                     x_pos = patch.get_x() + patch.get_width() / 2
                     ax_bar.text(x_pos, y_max * 0.95, '↑', ha='center', va='top', fontsize=12, fontweight='bold', color='red')
             
-            # Heatmap with different colormaps if specified - FIXED row order, heights and positioning
+            # One convention for both colormap modes: the ligand row is the top
+            # row, y in [1, 2], and the receptor row is y in [0, 1], with the
+            # y axis running up (ylim 0..2). imshow places an array's row 0 at
+            # the extent's *top* value, so every extent below is written
+            # (left, right, bottom, top) with bottom < top. The one-colormap
+            # branch had (..., 2.0, 0.0): with ylim(0, 2) that drew the ligand
+            # values in the BOTTOM row, under the "Ligand above Receptor"
+            # labels shared with the two-colormap branch.
             if different_cmaps:
                 ligand_data = heatmap_data.iloc[0:1, :].values
                 receptor_data = heatmap_data.iloc[1:2, :].values
-                
-                # FIXED: Correct row order (Ligand on top, Receptor on bottom) and equal heights
-                img_ligand = ax_hm.imshow(ligand_data, cmap=cmap_ligand, aspect='auto', 
-                                          interpolation='nearest', extent=[-0.5, N - 0.5, 2.0, 1.0], 
+                img_ligand = ax_hm.imshow(ligand_data, cmap=cmap_ligand, aspect='auto',
+                                          interpolation='nearest', extent=[-0.5, N - 0.5, 1.0, 2.0],
                                           vmin=0, vmax=vmax_actual)
-                img_receptor = ax_hm.imshow(receptor_data, cmap=cmap_receptor, aspect='auto', 
-                                            interpolation='nearest', extent=[-0.5, N - 0.5, 1.0, 0.0], 
+                img_receptor = ax_hm.imshow(receptor_data, cmap=cmap_receptor, aspect='auto',
+                                            interpolation='nearest', extent=[-0.5, N - 0.5, 0.0, 1.0],
                                             vmin=0, vmax=vmax_actual)
                 img = img_ligand  # For compatibility
                 if mappable_ligand is None: mappable_ligand = img_ligand
                 if mappable_receptor is None: mappable_receptor = img_receptor
-                
-                # Set axis limits to match the extents
-                ax_hm.set_ylim(0.0, 2.0)
             else:
-                img = ax_hm.imshow(heatmap_data, cmap=heatmap_cmap, aspect='auto', interpolation='nearest',
-                                   extent=[-0.5, N - 0.5, 2.0, 0.0], vmin=0, vmax=vmax_actual)
-                ax_hm.set_ylim(0.0, 2.0)
-            
+                # rows of heatmap_data: [Ligand, Receptor] -> top, bottom
+                img = ax_hm.imshow(heatmap_data.values, cmap=heatmap_cmap, aspect='auto',
+                                   interpolation='nearest', extent=[-0.5, N - 0.5, 0.0, 2.0],
+                                   vmin=0, vmax=vmax_actual)
+            ax_hm.set_ylim(0.0, 2.0)
+
             ax_hm.set_ylabel('')
             ax_hm.set_xlabel('')
-            
-            # FIXED: Position y-ticks at center of each row but remove labels (we'll add them manually)
-            if different_cmaps:
-                ax_hm.set_yticks([1.5, 0.5])  # Center of ligand row (top) and receptor row (bottom)
-                ax_hm.set_yticklabels([])  # Remove default labels, we'll position them manually
-            else:
-                ax_hm.set_yticks([1.5, 0.5])  # Center of each row
-                ax_hm.set_yticklabels([])  # Remove default labels, we'll position them manually
-            
-            # CHANGE: Manually position "Ligand" and "Receptor" labels with more downward spacing to avoid overlap
-            # Move "Ligand" further down to avoid overlap with "0" tick label
-            ax_hm.text(-0.7, 1.5 - 1.0, 'Ligand', rotation=45, va='center', ha='right', fontsize=12, 
-                       color='black', clip_on=False)
-            # Move "Receptor" even further down to create clear separation
-            ax_hm.text(-0.7, 0.5 - 1.3, 'Receptor', rotation=45, va='center', ha='right', fontsize=12, 
-                       color='black', clip_on=False)
+
+            # Each label at its own row's centre, as tick labels. They were
+            # text placed at y = 0.5 and y = -0.8 (shifted down, rotated, to
+            # clear the bar plot's "0" tick), which put both below the
+            # heatmap; only their stacking order said which row was which.
+            ax_hm.set_yticks([1.5, 0.5])
+            ax_hm.set_yticklabels(['Ligand', 'Receptor'], fontsize=10)
+            ax_hm.tick_params(axis='y', length=2, pad=2)
             
             ax_hm.set_xticks(np.arange(N))
             
@@ -513,6 +533,9 @@ def plotLigandReceptorInteraction(
         if legend_handles is None: legend_handles, legend_labels = current_handles, current_labels
     
     # --- Legend and Colorbar Area ---
+    # The colorbars' top tick is the scale every panel was drawn with.
+    _cbar_vmax = (shared_vmax if np.isfinite(shared_vmax)
+                  else (vmax_actual if vmax_actual is not None else 1.0))
     if vertical_layout and not shared_legend:
         pass 
     elif shared_legend and (legend_handles or mappable):
@@ -542,7 +565,7 @@ def plotLigandReceptorInteraction(
                     cax_l = cbar_ax_ligand_container.inset_axes([cbar_x_start, 0.3, max_cbar_width, 0.4])
                     cbar_ligand = fig.colorbar(mappable_ligand, cax=cax_l, orientation='horizontal')
                     cbar_ligand.set_label('Ligand Specificity', size=9, labelpad=4)
-                    vmax_to_use = global_vmax if global_vmax > 0 else vmax_actual
+                    vmax_to_use = _cbar_vmax
                     cbar_ligand.set_ticks([0, vmax_to_use])
                     cbar_ligand.set_ticklabels([f'0', f'{vmax_to_use:.1f}'])
                     cbar_ligand.ax.tick_params(labelsize=8)
@@ -567,7 +590,7 @@ def plotLigandReceptorInteraction(
                     cbar_ax_inner = cbar_ax_container.inset_axes([cbar_x_start, 0.4, max_cbar_width, 0.2])
                     cbar = fig.colorbar(mappable if mappable else mappable_ligand, cax=cbar_ax_inner, orientation='horizontal')
                     cbar.set_label('Specificity Score', size=10, labelpad=4)
-                    vmax_to_use = global_vmax if global_vmax > 0 else vmax_actual
+                    vmax_to_use = _cbar_vmax
                     cbar.set_ticks([0, vmax_to_use])
                     cbar.set_ticklabels([f'0.00', f'{vmax_to_use:.2f}'])
                     cbar.ax.tick_params(labelsize=8)
@@ -654,8 +677,8 @@ def plotLigandReceptorInteraction(
                     # CHANGE: Put label on top
                     cbar_ligand.set_label('Ligand Specificity', size=10)
                     cbar_ligand.ax.xaxis.set_label_position('top')
-                    cbar_ligand.set_ticks([0, global_vmax])
-                    cbar_ligand.set_ticklabels([f'0', f'{global_vmax:.1f}'])
+                    cbar_ligand.set_ticks([0, _cbar_vmax])
+                    cbar_ligand.set_ticklabels([f'0', f'{_cbar_vmax:.1f}'])
                     cbar_ligand.ax.tick_params(labelsize=8)
                     
                     # Receptor colorbar
@@ -664,8 +687,8 @@ def plotLigandReceptorInteraction(
                     # CHANGE: Put label on top
                     cbar_receptor.set_label('Receptor Specificity', size=10)
                     cbar_receptor.ax.xaxis.set_label_position('top')
-                    cbar_receptor.set_ticks([0, global_vmax])
-                    cbar_receptor.set_ticklabels([f'0', f'{global_vmax:.1f}'])
+                    cbar_receptor.set_ticks([0, _cbar_vmax])
+                    cbar_receptor.set_ticklabels([f'0', f'{_cbar_vmax:.1f}'])
                     cbar_receptor.ax.tick_params(labelsize=8)
                 else:
                     cbar_ax = fig.add_subplot(right_gs[colorbar_row])
@@ -675,15 +698,15 @@ def plotLigandReceptorInteraction(
                     # CHANGE: Put label on top
                     cbar.set_label('Specificity Score', size=12, labelpad=5)
                     cbar.ax.xaxis.set_label_position('top')
-                    cbar.set_ticks([0, global_vmax])
-                    cbar.set_ticklabels([f'0.00', f'{global_vmax:.2f}'])
+                    cbar.set_ticks([0, _cbar_vmax])
+                    cbar.set_ticklabels([f'0.00', f'{_cbar_vmax:.2f}'])
                     cbar.ax.tick_params(labelsize=10)
                     cbar_ax.axis('off')  # Hide the container frame
 
-    if save_path:
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
-    
-    plt.show()
+    from . import _figure
+    return _figure.finish(fig, created=True, show=_figure.resolve_show(show),
+                          save=save_path, writekey="ligand_receptor", dpi=300,
+                          literal=True)
 
     
     

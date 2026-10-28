@@ -980,20 +980,20 @@ def fetch_tf_list(
     dest_path = _tf_list_cache_path(species_lower, source, dest_dir=dest_dir)
     dest_path.parent.mkdir(parents=True, exist_ok=True)
 
+    from ._download import download
+
     last_error: Optional[Exception] = None
     for url in _TF_LIST_SOURCES[source][species_lower]:
-        try:
-            urllib.request.urlretrieve(url, str(dest_path))
-        except urllib.error.URLError as exc:
-            last_error = exc
-            continue
-        # Validate before the file counts as cached: a host that answers a
+        # Validated before the file counts as cached: a host that answers a
         # download with an error page does so with HTTP 200, and a cached
         # page is worse than no cache -- it silently shrinks the TF universe.
+        # The download goes to a temporary file and is renamed only once it
+        # passes, so an interrupted or truncated one is never taken for the
+        # catalogue (it used to be written under the final name).
         try:
-            _read_tf_list_file(str(dest_path), min_symbols=_MIN_CATALOGUE_SYMBOLS)
-        except ValueError as exc:
-            dest_path.unlink(missing_ok=True)
+            download(url, dest_path, check=lambda tmp: _read_tf_list_file(
+                str(tmp), min_symbols=_MIN_CATALOGUE_SYMBOLS))
+        except (OSError, ValueError) as exc:
             last_error = exc
             continue
         return str(dest_path)
@@ -1097,6 +1097,13 @@ def build_tf_motif_map(
     PWMs with ``tf_name`` matching multiple *gene_universe* entries (e.g. a DB
     uses ``"STAT3"`` but the universe has both ``"Stat3"`` and ``"STAT3"``) are
     mapped to the first (alphabetically sorted) match to remain deterministic.
+
+    A JASPAR heterodimer, ``tf_name`` ``"FOS::JUN"``, is the site the partners
+    bind together, so it is given to each partner that passes the filters, as
+    cisTarget's motif-to-TF tables do; its copies carry the complex's name in
+    ``meta['complex']``. Taken as one symbol it matched no gene, and 76 of
+    JASPAR 2024's 879 vertebrate motifs were lost (TAL1, AHR and DDIT3 kept no
+    motif at all).
     """
     # Build case-insensitive lookup dicts
     tf_upper: dict[str, str] = {}  # {TF_NAME_UPPER: exact_case_in_tf_list}
@@ -1115,41 +1122,58 @@ def build_tf_motif_map(
     result: dict[str, list[PWM]] = {}
 
     for pwm in pwms:
-        raw = pwm.tf_name
-        raw_upper = raw.upper()
+        partners = _motif_partners(pwm.tf_name)
+        is_complex = len(partners) > 1
+        for raw in partners:
+            raw_upper = raw.upper()
 
-        # --- tf_list filter (case-insensitive) --------------------------------
-        if tf_upper:
-            if raw_upper not in tf_upper:
+            # --- tf_list filter (case-insensitive) ----------------------------
+            if tf_upper:
+                if raw_upper not in tf_upper:
+                    continue
+                canonical = tf_upper[raw_upper]  # use the tf_list casing
+            else:
+                canonical = raw
+
+            # --- gene_universe filter + remap ---------------------------------
+            if gene_upper:
+                matched = harmonize_symbol(canonical, gene_upper)
+                if matched is None:
+                    continue
+                canonical = matched  # remap to expression-matrix casing
+
+            # a complex's partners can name one gene of the universe: once per TF
+            if is_complex and any(p.motif_id == pwm.motif_id for p in result.get(canonical, ())):
                 continue
-            canonical = tf_upper[raw_upper]  # use the tf_list casing
-        else:
-            canonical = raw
 
-        # --- gene_universe filter + remap ------------------------------------
-        if gene_upper:
-            matched = harmonize_symbol(canonical, gene_upper)
-            if matched is None:
-                continue
-            canonical = matched  # remap to expression-matrix casing
+            # --- Build output map ---------------------------------------------
+            # Attach a shallow-copy of the PWM with remapped tf_name so downstream
+            # lookups (e.g. COSG score by gene symbol) match without further effort.
+            if canonical != pwm.tf_name:
+                meta = dict(pwm.meta)
+                if is_complex:
+                    meta.setdefault("complex", pwm.tf_name)
+                remapped = PWM(
+                    motif_id=pwm.motif_id,
+                    tf_name=canonical,
+                    probs=pwm.probs,
+                    source=pwm.source,
+                    meta=meta,
+                )
+            else:
+                remapped = pwm
 
-        # --- Build output map ------------------------------------------------
-        # Attach a shallow-copy of the PWM with remapped tf_name so downstream
-        # lookups (e.g. COSG score by gene symbol) match without further effort.
-        if canonical != pwm.tf_name:
-            remapped = PWM(
-                motif_id=pwm.motif_id,
-                tf_name=canonical,
-                probs=pwm.probs,
-                source=pwm.source,
-                meta=dict(pwm.meta),
-            )
-        else:
-            remapped = pwm
-
-        result.setdefault(canonical, []).append(remapped)
+            result.setdefault(canonical, []).append(remapped)
 
     return result
+
+
+def _motif_partners(name: str) -> list[str]:
+    """The TF symbols a motif's ``tf_name`` names: each partner of a JASPAR
+    heterodimer (``'FOS::JUN'``, ``'Pou5f1::Sox2'``), else the name itself."""
+    parts = [p.strip() for p in str(name).split("::")]
+    parts = [p for p in dict.fromkeys(parts) if p]
+    return parts or [str(name)]
 
 
 # ---------------------------------------------------------------------------
@@ -1283,8 +1307,10 @@ def load_cistarget_motifs(cb_dir, motif2tf_path, tf_universe=None,
         Restrict to these TF symbols (upper-cased) — pass the dataset's expressed TFs to
         keep the scan small.
     max_per_tf : int or None
-        Keep at most this many motifs per TF (best motif-similarity q-value first). ``1``
-        gives one representative motif per TF (comparable in size to JASPAR/CIS-BP).
+        Keep at most this many motifs per TF, those with the best (lowest) motif-similarity
+        q-value, ties in the table's order. ``1`` gives one representative motif per TF
+        (comparable in size to JASPAR/CIS-BP). Each PWM carries its q-value in
+        ``meta['motif_similarity_qvalue']``.
     direct_only : bool
         Keep only motifs *directly* annotated to the TF (drop orthology-extended rows).
     """
@@ -1323,16 +1349,19 @@ def load_cistarget_motifs(cb_dir, motif2tf_path, tf_universe=None,
         for tf, q in tfs:
             if tf not in best or q < best[tf]:
                 best[tf] = q
-        for tf in best:
-            pwms.append(PWM(motif_id=mid, tf_name=tf, probs=probs, source="cistarget"))
+        for tf, q in best.items():
+            pwms.append(PWM(motif_id=mid, tf_name=tf, probs=probs, source="cistarget",
+                            meta={"motif_similarity_qvalue": q}))
     if max_per_tf:
+        # each TF's motifs by their q-value, ties in the table's order (the cap took
+        # them in the table's order alone, so it kept whichever came first)
         from collections import defaultdict
         bytf: dict[str, list] = defaultdict(list)
-        for p in pwms:
-            bytf[p.tf_name].append(p)
+        for i, p in enumerate(pwms):
+            bytf[p.tf_name].append((p.meta["motif_similarity_qvalue"], i, p))
         kept = []
         for tf, ps in bytf.items():
-            kept.extend(ps[:max_per_tf])     # already best-q-first within a motif; cap count
+            kept.extend(p for _q, _i, p in sorted(ps, key=lambda t: (t[0], t[1]))[:max_per_tf])
         pwms = kept
     return pwms
 

@@ -87,10 +87,8 @@ def fetch_lr_database(species: str = "human", dest_dir: Optional[str] = None,
     if os.path.exists(out) and not force:
         return out
 
-    import urllib.request
-    tmp = out + ".part"
-    urllib.request.urlretrieve(LR_URLS[species], tmp)
-    os.replace(tmp, out)
+    from ._download import download
+    download(LR_URLS[species], out)
     return out
 
 

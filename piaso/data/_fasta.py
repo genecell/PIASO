@@ -88,11 +88,8 @@ def fetch_2bit(genome: str, dest_dir: Optional[str] = None,
     out = os.path.join(d, f"{genome}.2bit")
     if os.path.exists(out) and not force:
         return out
-    import urllib.request
-    url = TWOBIT_URLS[genome]
-    tmp = out + ".part"
-    urllib.request.urlretrieve(url, tmp)
-    os.replace(tmp, out)
+    from ._download import download
+    download(TWOBIT_URLS[genome], out)
     return out
 
 

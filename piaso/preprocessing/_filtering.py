@@ -74,29 +74,49 @@ def _query_to_sql_where(query: str, valid_cols: set[str]) -> tuple[str, list]:
     - membership: ``col in [a, b, ...]``  (incl. ``not in``)
     - literals: int / float / str / bool / None
 
+    Missing values follow pandas, so a store and an AnnData keep the same
+    cells: a comparison with a missing value is False, except ``!=`` (and
+    ``not in``), which is True, and ``not`` / ``~`` then negate an ordinary
+    True or False. SQL's own rule (any comparison with NULL is unknown, and
+    an unknown row is dropped) made ``cell_type != 'Doublet'`` drop every
+    unlabelled cell on a store and keep it on AnnData -- and
+    ``sample_id != 'X'`` keep no cell of a store whose sample column is
+    empty. Each comparison is therefore wrapped in ``COALESCE(..., <its
+    pandas value for a missing operand>)``; a bare column used as a
+    condition is True only where it is non-zero (missing is False). A list
+    holding None, where pandas treats None as a value, goes to pandas.
+
     Raises :class:`_QueryTooComplex` for anything outside this subset;
     callers fall back to the streaming pandas path.
     """
     tree = ast.parse(query, mode="eval").body
     params: list[Any] = []
 
+    def cond(node: ast.AST) -> str:
+        """``node`` where a True/False is expected: a bare column is a condition there."""
+        if isinstance(node, ast.Name) and node.id not in ("True", "False"):
+            if node.id not in valid_cols:
+                raise _QueryTooComplex(f"unknown column: {node.id!r}")
+            return f"(COALESCE(CAST([{node.id}] AS REAL), 0) != 0)"
+        return emit(node)
+
     def emit(node: ast.AST) -> str:
         if isinstance(node, ast.BoolOp):
             join = " AND " if isinstance(node.op, ast.And) else " OR "
-            return "(" + join.join(emit(v) for v in node.values) + ")"
+            return "(" + join.join(cond(v) for v in node.values) + ")"
         if isinstance(node, ast.UnaryOp):
             if isinstance(node.op, ast.Not):
-                return f"(NOT {emit(node.operand)})"
+                return f"(NOT {cond(node.operand)})"
             if isinstance(node.op, ast.Invert):
-                return f"(NOT {emit(node.operand)})"
+                return f"(NOT {cond(node.operand)})"
             raise _QueryTooComplex(f"unary op: {type(node.op).__name__}")
         if isinstance(node, ast.BinOp):
             # pandas-query parser treats `a & b` and `a | b` as BinOp on
             # bool-ish nodes; map them to AND/OR so users can write either.
             if isinstance(node.op, ast.BitAnd):
-                return f"({emit(node.left)} AND {emit(node.right)})"
+                return f"({cond(node.left)} AND {cond(node.right)})"
             if isinstance(node.op, ast.BitOr):
-                return f"({emit(node.left)} OR {emit(node.right)})"
+                return f"({cond(node.left)} OR {cond(node.right)})"
             raise _QueryTooComplex(f"binop: {type(node.op).__name__}")
         if isinstance(node, ast.Compare):
             # We only handle single comparators (a < b), not chained
@@ -109,15 +129,17 @@ def _query_to_sql_where(query: str, valid_cols: set[str]) -> tuple[str, list]:
             if isinstance(op, (ast.In, ast.NotIn)):
                 if not isinstance(right_node, (ast.List, ast.Tuple, ast.Set)):
                     raise _QueryTooComplex("`in` rhs must be a literal list/tuple/set")
-                values = [_const(v) for v in right_node.elts]
+                values = _members(right_node.elts)
                 placeholders = ", ".join(["?"] * len(values))
                 params.extend(values)
-                op_sql = "IN" if isinstance(op, ast.In) else "NOT IN"
-                return f"({left} {op_sql} ({placeholders}))"
+                if isinstance(op, ast.In):
+                    return f"COALESCE(({left} IN ({placeholders})), 0)"
+                return f"COALESCE(({left} NOT IN ({placeholders})), 1)"
             op_sql = _CMP_OP_TO_SQL.get(type(op))
             if op_sql is None:
                 raise _QueryTooComplex(f"comparator: {type(op).__name__}")
-            return f"({left} {op_sql} {emit(right_node)})"
+            missing = 1 if isinstance(op, ast.NotEq) else 0
+            return f"COALESCE(({left} {op_sql} {emit(right_node)}), {missing})"
         if isinstance(node, ast.Call):
             # Support: col.isin([...]), col.between(lo, hi)
             func = node.func
@@ -130,17 +152,19 @@ def _query_to_sql_where(query: str, valid_cols: set[str]) -> tuple[str, list]:
                         node.args[0], (ast.List, ast.Tuple, ast.Set)
                     ):
                         raise _QueryTooComplex("isin arg must be a literal list")
-                    values = [_const(v) for v in node.args[0].elts]
+                    values = _members(node.args[0].elts)
                     placeholders = ", ".join(["?"] * len(values))
                     params.extend(values)
-                    return f"([{col}] IN ({placeholders}))"
+                    return f"COALESCE(([{col}] IN ({placeholders})), 0)"
                 if func.attr == "between":
                     if len(node.args) != 2:
                         raise _QueryTooComplex("between takes 2 args")
                     lo = _const(node.args[0])
                     hi = _const(node.args[1])
+                    if lo is None or hi is None:
+                        raise _QueryTooComplex("between with a None bound")
                     params.extend([lo, hi])
-                    return f"([{col}] >= ? AND [{col}] <= ?)"
+                    return f"COALESCE(([{col}] >= ? AND [{col}] <= ?), 0)"
             raise _QueryTooComplex(f"call: {ast.dump(node)}")
         if isinstance(node, ast.Name):
             if node.id == "True":
@@ -166,7 +190,149 @@ def _query_to_sql_where(query: str, valid_cols: set[str]) -> tuple[str, list]:
             return -n.operand.value
         raise _QueryTooComplex(f"non-literal in collection: {ast.dump(n)}")
 
-    return emit(tree), params
+    def _members(elts) -> list:
+        values = [_const(v) for v in elts]
+        if any(v is None for v in values):
+            # pandas' isin treats None as a value that matches a missing one;
+            # SQL's IN never matches NULL. Leave that reading to pandas.
+            raise _QueryTooComplex("None in a membership list")
+        return values
+
+    return cond(tree), params
+
+
+def _query_to_mask(query: str, df: pd.DataFrame) -> np.ndarray:
+    """Evaluate the same subset of pandas-query syntax as :func:`_query_to_sql_where`, on a DataFrame.
+
+    The two are one rule written twice, so an AnnData and a cytome keep the
+    same cells: a comparison with a missing value is False except ``!=`` /
+    ``not in`` (True); a bare column used as a condition is True only where it
+    is present and non-zero; ``not`` / ``~`` / ``and`` / ``or`` act on those
+    True / False values. ``df.eval`` gives the same answer on object and float
+    columns, but on pandas' nullable dtypes (``boolean``, ``Int64``,
+    ``string``) it returns missing values that no mask can hold -- which is
+    what Scrublet's ``is_doublet`` is when some cells are not scored.
+
+    Raises :class:`_QueryTooComplex` outside the subset; the caller then
+    falls back to ``df.eval``.
+    """
+    tree = ast.parse(query, mode="eval").body
+    n = len(df)
+
+    def missing(v) -> np.ndarray:
+        if isinstance(v, pd.Series):
+            return v.isna().to_numpy(dtype=bool)
+        return np.full(n, v is None or (isinstance(v, float) and np.isnan(v)))
+
+    def operand(node):
+        if isinstance(node, ast.Name):
+            if node.id in ("True", "False"):
+                return node.id == "True"
+            if node.id not in df.columns:
+                raise _QueryTooComplex(f"unknown column: {node.id!r}")
+            col = df[node.id]
+            # categories compare as their values, and nullable dtypes as plain ones
+            if isinstance(col.dtype, pd.CategoricalDtype):
+                col = col.astype(object)
+            elif pd.api.types.is_extension_array_dtype(col.dtype):
+                col = col.astype(object).where(col.notna(), None)
+            return col
+        if isinstance(node, ast.Constant):
+            return node.value
+        if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.USub) and isinstance(node.operand, ast.Constant):
+            return -node.operand.value
+        raise _QueryTooComplex(f"operand: {ast.dump(node)}")
+
+    def members(elts) -> list:
+        values = [operand(v) for v in elts]
+        if any(isinstance(v, pd.Series) for v in values):
+            raise _QueryTooComplex("non-literal in collection")
+        if any(v is None for v in values):
+            raise _QueryTooComplex("None in a membership list")
+        return values
+
+    def compare(op, left, right) -> np.ndarray:
+        miss = missing(left) | missing(right)
+        fn = {ast.Eq: np.equal, ast.NotEq: np.not_equal, ast.Lt: np.less, ast.LtE: np.less_equal,
+              ast.Gt: np.greater, ast.GtE: np.greater_equal}.get(type(op))
+        if fn is None:
+            raise _QueryTooComplex(f"comparator: {type(op).__name__}")
+        def arr(v):
+            if not isinstance(v, pd.Series):
+                return v
+            return v.to_numpy() if (pd.api.types.is_numeric_dtype(v.dtype) or pd.api.types.is_bool_dtype(v.dtype))                 else v.to_numpy(dtype=object)
+        lv, rv = arr(left), arr(right)
+        out = np.zeros(n, dtype=bool)
+        ok = ~miss
+        if ok.any():
+            lo = lv[ok] if isinstance(lv, np.ndarray) else lv
+            ro = rv[ok] if isinstance(rv, np.ndarray) else rv
+            try:
+                out[ok] = np.asarray(fn(lo, ro), dtype=bool)
+            except TypeError as exc:
+                raise _QueryTooComplex(f"comparison of mixed types: {exc}") from exc
+        out[miss] = isinstance(op, ast.NotEq)
+        return out
+
+    def cond(node) -> np.ndarray:
+        if isinstance(node, ast.Name) and node.id not in ("True", "False"):
+            col = operand(node)
+            num = pd.to_numeric(col, errors="coerce")
+            return (num.notna() & (num != 0)).to_numpy(dtype=bool)
+        return emit(node)
+
+    def emit(node) -> np.ndarray:
+        if isinstance(node, ast.BoolOp):
+            parts = [cond(v) for v in node.values]
+            return np.logical_and.reduce(parts) if isinstance(node.op, ast.And) else np.logical_or.reduce(parts)
+        if isinstance(node, ast.UnaryOp):
+            if isinstance(node.op, (ast.Not, ast.Invert)):
+                return ~cond(node.operand)
+            raise _QueryTooComplex(f"unary op: {type(node.op).__name__}")
+        if isinstance(node, ast.BinOp):
+            if isinstance(node.op, ast.BitAnd):
+                return cond(node.left) & cond(node.right)
+            if isinstance(node.op, ast.BitOr):
+                return cond(node.left) | cond(node.right)
+            raise _QueryTooComplex(f"binop: {type(node.op).__name__}")
+        if isinstance(node, ast.Compare):
+            if len(node.ops) != 1 or len(node.comparators) != 1:
+                raise _QueryTooComplex("chained comparison")
+            op, left, right_node = node.ops[0], operand(node.left), node.comparators[0]
+            if isinstance(op, (ast.In, ast.NotIn)):
+                if not isinstance(right_node, (ast.List, ast.Tuple, ast.Set)):
+                    raise _QueryTooComplex("`in` rhs must be a literal list/tuple/set")
+                values = members(right_node.elts)
+                if not isinstance(left, pd.Series):
+                    raise _QueryTooComplex("`in` on a constant")
+                hit = left.isin(values).to_numpy(dtype=bool) & ~missing(left)
+                return hit if isinstance(op, ast.In) else (~hit | missing(left))
+            return compare(op, left, operand(right_node))
+        if isinstance(node, ast.Call):
+            func = node.func
+            if isinstance(func, ast.Attribute) and isinstance(func.value, ast.Name):
+                left = operand(func.value)
+                if not isinstance(left, pd.Series):
+                    raise _QueryTooComplex("method on a constant")
+                if func.attr == "isin":
+                    if len(node.args) != 1 or not isinstance(node.args[0], (ast.List, ast.Tuple, ast.Set)):
+                        raise _QueryTooComplex("isin arg must be a literal list")
+                    return left.isin(members(node.args[0].elts)).to_numpy(dtype=bool) & ~missing(left)
+                if func.attr == "between":
+                    if len(node.args) != 2:
+                        raise _QueryTooComplex("between takes 2 args")
+                    lo, hi = operand(node.args[0]), operand(node.args[1])
+                    if lo is None or hi is None or isinstance(lo, pd.Series) or isinstance(hi, pd.Series):
+                        raise _QueryTooComplex("between with a non-literal or None bound")
+                    return compare(ast.GtE(), left, lo) & compare(ast.LtE(), left, hi)
+            raise _QueryTooComplex(f"call: {ast.dump(node)}")
+        if isinstance(node, ast.Name):            # True / False
+            return np.full(n, node.id == "True")
+        if isinstance(node, ast.Constant):
+            return np.full(n, bool(node.value))
+        raise _QueryTooComplex(f"unsupported: {ast.dump(node)}")
+
+    return cond(tree)
 
 
 def _as_range(val):
@@ -228,15 +394,28 @@ def _dict_to_sql_where(mask_dict: dict, valid_cols: set[str]) -> tuple[str, list
             else:
                 clauses.append(f"([{col}] <= ?)")
                 params.append(hi)
-        elif isinstance(val, (list, set, np.ndarray)):
+        elif isinstance(val, (list, set, tuple, np.ndarray)):
             values = list(val)
-            placeholders = ", ".join(["?"] * len(values))
-            clauses.append(f"([{col}] IN ({placeholders}))")
-            params.extend(values)
+            present = [v for v in values if not _is_missing(v)]
+            parts = []
+            if present:
+                parts.append(f"[{col}] IN ({', '.join(['?'] * len(present))})")
+                params.extend(present)
+            if len(present) < len(values):
+                parts.append(f"[{col}] IS NULL")
+            clauses.append("(" + " OR ".join(parts) + ")" if parts else "(0)")
+        elif _is_missing(val):
+            # None (or NaN) selects the cells where the column is missing, as on AnnData
+            clauses.append(f"([{col}] IS NULL)")
         else:
             clauses.append(f"([{col}] = ?)")
             params.append(val)
     return " AND ".join(clauses), params
+
+
+def _is_missing(v) -> bool:
+    """None or a float NaN: a dict mask's way to ask for the missing values."""
+    return v is None or (isinstance(v, (float, np.floating)) and np.isnan(v))
 
 
 # ---------------------------------------------------------------------------
@@ -266,27 +445,52 @@ def _resolve_mask_anndata(
                     f"mask dict: column {col!r} not found in obs. "
                     f"Available: {list(obs_df.columns)}"
                 )
-            col_vals = obs_df[col].values
+            series = obs_df[col]
+            isna = pd.isna(series).to_numpy(dtype=bool)
             rng = _as_range(val)
             if rng is not None:
                 lo, hi = rng
+                num = pd.to_numeric(series, errors="coerce")
                 if lo is not None:
-                    m &= (col_vals >= lo)
+                    m &= (num >= lo).to_numpy(dtype=bool, na_value=False) & ~isna
                 if hi is not None:
-                    m &= (col_vals <= hi)
-            elif isinstance(val, (list, set, np.ndarray)):
-                m &= np.isin(col_vals, list(val))
+                    m &= (num <= hi).to_numpy(dtype=bool, na_value=False) & ~isna
+            elif isinstance(val, (list, set, tuple, np.ndarray)):
+                values = list(val)
+                present = [v for v in values if not _is_missing(v)]
+                hit = (series.isin(present).to_numpy(dtype=bool, na_value=False) & ~isna if present
+                       else np.zeros(n_obs, dtype=bool))
+                if len(present) < len(values):
+                    hit |= isna
+                m &= hit
+            elif _is_missing(val):
+                m &= isna
             else:
-                m &= col_vals == val
+                m &= (series == val).to_numpy(dtype=bool, na_value=False) & ~isna
         return m, f"dict({list(mask.keys())})"
 
     if isinstance(mask, str):
-        m = obs_df.eval(mask)
-        if hasattr(m, "values"):
-            m = m.values
-        return _coerce_bool(m, n_obs), f"query: {mask!r}"
+        try:
+            return _query_to_mask(mask, obs_df), f"query: {mask!r}"
+        except _QueryTooComplex:
+            pass
+        return _as_condition(obs_df.eval(mask), n_obs), f"query (pandas): {mask!r}"
 
     return _coerce_bool(mask, n_obs), "array"
+
+
+def _as_condition(result, n_obs: int) -> np.ndarray:
+    """A pandas ``eval`` result as a keep-mask: booleans (a missing value of a
+    nullable result is not kept), never read as cell indices."""
+    dtype = getattr(result, "dtype", None)
+    if dtype is not None and pd.api.types.is_bool_dtype(dtype):
+        out = pd.array(result, dtype="boolean").to_numpy(dtype=bool, na_value=False)
+        if out.shape[0] != n_obs:
+            raise ValueError(f"mask length {out.shape[0]} != n_cells {n_obs}")
+        return out
+    raise TypeError(
+        f"mask: the query evaluates to {dtype}, not to True / False for each cell. "
+        f"Compare the column, e.g. 'col == 1'.")
 
 
 def _coerce_bool(value, n_obs: int) -> np.ndarray:
@@ -303,6 +507,9 @@ def _coerce_bool(value, n_obs: int) -> np.ndarray:
             )
         return arr
     if np.issubdtype(arr.dtype, np.integer):
+        if arr.size and (arr.min() < 0 or arr.max() >= n_obs):
+            raise ValueError(
+                f"mask: cell indices must lie in [0, {n_obs}); got {arr.min()} to {arr.max()}.")
         m = np.zeros(n_obs, dtype=bool)
         m[arr] = True
         return m
@@ -416,10 +623,7 @@ def _streaming_pandas_eval(
     """
     mask = np.zeros(n_cells, dtype=bool)
     for chunk_idx, df in _stream_cells_chunks(ds, chunk_size):
-        result = df.eval(query)
-        if hasattr(result, "values"):
-            result = result.values
-        mask[chunk_idx] = np.asarray(result, dtype=bool)
+        mask[chunk_idx] = _as_condition(df.eval(query), len(chunk_idx))
     return mask
 
 
@@ -441,12 +645,14 @@ def _streaming_callable_mask(
 # ---------------------------------------------------------------------------
 
 def _qc_threshold_mask_anndata(
-    adata, min_counts, max_counts, min_features, max_features,
+    adata, min_counts, max_counts, min_features, max_features, layer=None,
 ) -> tuple[np.ndarray | None, list[str]]:
-    """AnnData QC mask from the matrix. Returns (mask|None, source_descs)."""
+    """AnnData QC mask from the matrix (``.X``, or ``layers[layer]``). Returns (mask|None, source_descs)."""
     if all(v is None for v in (min_counts, max_counts, min_features, max_features)):
         return None, []
-    X = adata.X
+    if layer is not None and layer not in adata.layers:
+        raise KeyError(f"filter_cells: layer {layer!r} not in adata.layers ({list(adata.layers)}).")
+    X = adata.layers[layer] if layer is not None else adata.X
     keep = np.ones(adata.n_obs, dtype=bool)
     descs: list[str] = []
     if min_counts is not None or max_counts is not None:
@@ -473,25 +679,26 @@ def _qc_threshold_mask_anndata(
 
 def _qc_threshold_mask_cytome(
     ds, min_counts, max_counts, min_features, max_features,
-    modality: str, batch_size: int,
+    modality: str, batch_size: int, layer=None,
 ) -> tuple[np.ndarray | None, list[str]]:
-    """Cytome QC mask: one streaming pass over ``{modality}_counts``."""
+    """Cytome QC mask: one streaming pass over ``{modality}_{layer}`` (``counts`` by default)."""
     if all(v is None for v in (min_counts, max_counts, min_features, max_features)):
         return None, []
+    layer = "counts" if layer is None else layer
     n_cells = ds.n_cells
     # Three sources for per-cell totals, cheapest first: the importer's or
     # quantifier's own columns (guarded), then a walk over columns when the
     # matrix is stored column-major, then the row pass.
     from ..utils._importer_stats import read_cell_stats
     from ..utils._cytome_compat import column_major_layer
-    _cached = read_cell_stats(ds, modality, "counts")
+    _cached = read_cell_stats(ds, modality, layer)
     if _cached is not None:
         n_feat = _cached[0].astype(np.int64)
         counts = _cached[1].astype(np.float64)
     else:
         counts = np.zeros(n_cells, dtype=np.float64)
         n_feat = np.zeros(n_cells, dtype=np.int64)
-        _cm = column_major_layer(ds, modality, "counts")
+        _cm = column_major_layer(ds, modality, layer)
         if _cm is not None:
             for _cs, _ce, chunk in _cm.iter_columns():
                 counts += np.asarray(chunk.sum(axis=1)).ravel()
@@ -499,7 +706,7 @@ def _qc_threshold_mask_cytome(
         else:
             # ds.iter_chunks yields (chunk_csr, cell_indices_array) tuples.
             for chunk, cell_idx in ds.iter_chunks(
-                modality=modality, layer="counts", batch_size=batch_size,
+                modality=modality, layer=layer, batch_size=batch_size,
             ):
                 counts[cell_idx] = np.asarray(chunk.sum(axis=1)).ravel()
                 n_feat[cell_idx] = np.asarray((chunk != 0).sum(axis=1)).ravel()
@@ -616,6 +823,7 @@ def filter_cells(
     include_embeddings: bool = True,
     check_integrity: bool = False,
     verbose: int = 1,
+    layer: str | None = None,
 ):
     """Filter cells. Polymorphic on AnnData / cytome inputs.
 
@@ -650,6 +858,13 @@ def filter_cells(
     ``cell_idx`` values are materialised. Complex queries / callables
     fall back to chunked streaming over the cells table.
 
+    **Missing values are treated the same on both inputs, the pandas way.**
+    A comparison with a missing value is False, except ``!=`` and ``not
+    in`` (and the negation of a False), which are True: so
+    ``mask="cell_type != 'Doublet'"`` keeps the unlabelled cells on a
+    cytome as it does on AnnData. A dict value ``None`` selects the cells
+    where the column is missing, and ``None`` in a dict's list adds them.
+
     Parameters
     ----------
     data
@@ -670,6 +885,10 @@ def filter_cells(
         When ``output`` exists, replace it (default False raises).
     modality
         Cytome modality used to compute QC thresholds. Default 'RNA'.
+    layer
+        The matrix the QC thresholds are computed from: ``adata.layers[layer]``
+        on AnnData, ``{modality}_{layer}`` on a cytome. ``None`` (default) is
+        each input's main matrix, ``adata.X`` and ``{modality}_counts``.
     batch_size
         Streaming batch size for QC threshold pass on cytome.
     include_fragments, include_embeddings
@@ -724,13 +943,13 @@ def filter_cells(
             include_fragments=include_fragments,
             include_embeddings=include_embeddings,
             check_integrity=check_integrity,
-            verbose=verbose,
+            verbose=verbose, layer=layer,
         )
     return _filter_cells_anndata(
         data,
         min_counts=min_counts, max_counts=max_counts,
         min_features=min_features, max_features=max_features,
-        mask=mask, inplace=inplace, output=output, verbose=verbose,
+        mask=mask, inplace=inplace, output=output, verbose=verbose, layer=layer,
     )
 
 
@@ -745,7 +964,7 @@ subset_cells = filter_cells
 
 def _filter_cells_anndata(
     adata, *, min_counts, max_counts, min_features, max_features,
-    mask, inplace, output, verbose,
+    mask, inplace, output, verbose, layer=None,
 ):
     if output is not None:
         warnings.warn(
@@ -760,7 +979,7 @@ def _filter_cells_anndata(
     sources: list[str] = []
 
     qc_mask, qc_descs = _qc_threshold_mask_anndata(
-        adata, min_counts, max_counts, min_features, max_features,
+        adata, min_counts, max_counts, min_features, max_features, layer=layer,
     )
     if qc_mask is not None:
         keep &= qc_mask
@@ -817,7 +1036,7 @@ def _filter_cells_cytome(
     ds, *, min_counts, max_counts, min_features, max_features,
     mask, inplace, output, overwrite,
     modality, batch_size, include_fragments, include_embeddings, verbose,
-    check_integrity=False,
+    check_integrity=False, layer=None,
 ):
     if inplace and output is not None:
         raise TypeError(
@@ -833,7 +1052,7 @@ def _filter_cells_cytome(
 
     qc_mask, qc_descs = _qc_threshold_mask_cytome(
         ds, min_counts, max_counts, min_features, max_features,
-        modality=modality, batch_size=batch_size,
+        modality=modality, batch_size=batch_size, layer=layer,
     )
     if qc_mask is not None:
         keep &= qc_mask

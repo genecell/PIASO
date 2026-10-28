@@ -54,10 +54,8 @@ def fetch_screen(genome, dest_dir=None, force=False) -> str:
     out = os.path.join(d, f"{genome}_cCREs.bed")
     if os.path.exists(out) and not force:
         return out
-    import urllib.request
-    tmp = out + ".part"
-    urllib.request.urlretrieve(SCREEN_URLS[genome], tmp)
-    os.replace(tmp, out)
+    from ._download import download
+    download(SCREEN_URLS[genome], out)
     return out
 
 

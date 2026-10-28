@@ -13,7 +13,7 @@ from functools import wraps
 
 
 from ..utils._cytome_compat import is_cytome_input as _is_cytome_input
-from ..utils._cytome_compat import read_cells_columns as _read_cells_columns
+from ._store_io import read_cells_columns as _read_cells_columns  # read-only
 from ._group_order import resolve_group_order
 
 
@@ -53,6 +53,94 @@ def _resolve_features(features):
     return list(features), None, None
 
 
+def _feature_block(adata, feats, layer=None, use_raw=None):
+    """``(n_cells, len(feats))`` values of matrix features, sparse or dense."""
+    if use_raw and adata.raw is not None:
+        return adata.raw[:, feats].X
+    if layer is not None:
+        return adata[:, feats].layers[layer]
+    return adata[:, feats].X
+
+
+def _nan_group_means(block, indicator):
+    """Group means that skip NaN (as ``np.nanmean``): ``(means, n_finite)``.
+
+    One sparse product over all cells for all features at once; the per-group
+    string comparison it replaces was a Python loop over every cell, for every
+    group and every feature (5.2 s against 0.08 s at 50,000 cells).
+    """
+    import scipy.sparse as sp
+    sizes = np.asarray(indicator.sum(axis=1), dtype=float).ravel()[:, None]
+    if sp.issparse(block):
+        block = block.tocsr().astype(np.float64)
+        bad = ~np.isfinite(block.data)
+        if bad.any():
+            nanpart = block.copy()
+            nanpart.data = bad.astype(np.float64)
+            block = block.copy()
+            block.data[bad] = 0.0
+            n_bad = np.asarray((indicator @ nanpart).todense(), dtype=float)
+        else:
+            n_bad = 0.0
+        sums = np.asarray((indicator @ block).todense(), dtype=float)
+        counts = sizes - n_bad
+    else:
+        dense = np.asarray(block, dtype=np.float64)
+        if dense.ndim == 1:
+            dense = dense[:, None]
+        finite = np.isfinite(dense)
+        sums = np.asarray(indicator @ np.where(finite, dense, 0.0), dtype=float)
+        counts = np.asarray(indicator @ finite.astype(np.float64), dtype=float)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        means = np.where(counts > 0, sums / np.maximum(counts, 1), np.nan)
+    # a group with no cells reads 0, as before; one whose values are all NaN
+    # reads NaN, as np.nanmean gives
+    means = np.where(np.broadcast_to(sizes, means.shape) > 0, means, 0.0)
+    return means, counts
+
+
+def _anndata_group_means(adata, features, groupby, groups, layer=None, use_raw=None,
+                         skip_missing=False):
+    """Per-group mean of each feature (``obs`` column or gene) -> groups x features.
+
+    NaN values are left out of a group's mean; a group with no cells reads 0.
+    ``skip_missing`` drops features that are neither an ``obs`` column nor a
+    gene, instead of raising.
+    """
+    from ._plotDotplot import _group_indicator
+    labels = adata.obs[groupby].values
+    indicator = _group_indicator(labels, groups)
+    names = (adata.raw.var_names if (use_raw and adata.raw is not None)
+             else adata.var_names)
+    obs_feats = [f for f in features if f in adata.obs.columns]
+    mat_feats = [f for f in features if f not in adata.obs.columns]
+    if skip_missing:
+        mat_feats = [f for f in mat_feats if f in names]
+    blocks = {}
+    if mat_feats:
+        means, _ = _nan_group_means(_feature_block(adata, mat_feats, layer, use_raw),
+                                    indicator)
+        for j, f in enumerate(mat_feats):
+            blocks[f] = means[:, j]
+    if obs_feats:
+        vals = np.column_stack([pd.to_numeric(adata.obs[f], errors="coerce")
+                                .to_numpy(dtype=float, na_value=np.nan)
+                                for f in obs_feats])
+        means, _ = _nan_group_means(vals, indicator)
+        for j, f in enumerate(obs_feats):
+            blocks[f] = means[:, j]
+    keep = [f for f in features if f in blocks]
+    out = pd.DataFrame({f: blocks[f] for f in keep}, index=[str(g) for g in groups])
+    return out
+
+
+def _group_order(data, groupby, labels, categories_order=None):
+    """Groups present, in the caller's order, else the stored/categorical one."""
+    from ._categories import resolve_category_style
+    style = resolve_category_style(data, groupby, labels, order=categories_order)
+    return style.present(labels)
+
+
 def _get_mean_expression(data, features, groupby, layer=None, use_raw=None,
                          modality=None, cytome_layer="counts",
                          compute_on_fly=True, use_cached_stats=True):
@@ -74,33 +162,10 @@ def _get_mean_expression(data, features, groupby, layer=None, use_raw=None,
         return mean_df
 
     # AnnData
-    import scipy.sparse as sp
     adata = data
-    groups = resolve_group_order(adata.obs[groupby])
-    group_labels = adata.obs[groupby].values
-
-    result = {}
-    for feat in features:
-        if feat in adata.obs.columns:
-            vals = np.asarray(adata.obs[feat].values, dtype=float)
-        elif use_raw and adata.raw is not None:
-            v = adata.raw[:, feat].X
-            if sp.issparse(v):
-                v = v.toarray()
-            vals = np.asarray(v).flatten()
-        elif layer is not None:
-            vals = np.asarray(adata.obs_vector(feat, layer=layer), dtype=float)
-        else:
-            vals = np.asarray(adata.obs_vector(feat), dtype=float)
-
-        means = {}
-        for g in groups:
-            mask = np.array([str(x) == str(g) for x in group_labels])
-            gv = vals[mask]
-            means[str(g)] = np.nanmean(gv) if len(gv) > 0 else 0.0
-        result[feat] = means
-
-    mean_df = pd.DataFrame(result)
+    groups = _group_order(adata, groupby, adata.obs[groupby])
+    mean_df = _anndata_group_means(adata, list(features), groupby, groups,
+                                   layer=layer, use_raw=use_raw)
     mean_df.index.name = groupby
     return mean_df
 
@@ -112,108 +177,81 @@ def _get_cell_expression(data, features, groupby, layer=None, use_raw=None,
                          compute_on_fly=True, use_cached_stats=True):
     """Get per-cell expression matrix with group-stratified sampling.
 
-    Returns (matrix, group_labels, group_boundaries) where:
+    Returns (matrix, group_labels, group_sizes) where:
     - matrix: ndarray (n_sampled_cells, n_features)
     - group_labels: list of group names per row
-    - group_sizes: dict mapping group → n_cells in matrix
+    - group_sizes: dict mapping group → n_cells in matrix, in display order
+
+    The groups follow ``categories_order``, else the column's stored or
+    categorical order (natural order otherwise) -- the order every other plot
+    uses. The cytome path sorted them as strings (0, 1, 10, 2).
     """
     import scipy.sparse as sp
+    from ._categories import label_strings
 
     if _is_cytome_input(data):
         from ..utils._cytome_compat import open_cytome as _open_cytome
-        from ._plotEmbedding import _resolve_cytome_feature_values
+        from ._plotEmbedding import _resolve_cytome_feature_values_batch
 
-        groupby_df = _read_cells_columns(data, [groupby])
-        groups = categories_order or sorted(
-            groupby_df[groupby].dropna().unique(), key=str,
-        )
-        group_labels_all = groupby_df[groupby].astype(str).values
-
-        # Pre-fetch each feature as an n_cells vector. Cells columns first
-        # (cheap), matrix-resolved features second (one streaming column
-        # read per feature).
         with _open_cytome(data, mode="r") as ds:
+            labels_all = np.asarray(ds.cells[groupby])
             cells_cols = set(ds.cells.columns)
-        cells_feats = [f for f in features if f in cells_cols]
-        matrix_feats = [f for f in features if f not in cells_cols]
-        feature_vecs = {}
-        if cells_feats:
-            extra = _read_cells_columns(data, list(cells_feats))
+            cells_feats = [f for f in features if f in cells_cols]
+            matrix_feats = [f for f in features if f not in cells_cols]
+            feature_vecs = {}
             for f in cells_feats:
-                feature_vecs[f] = pd.to_numeric(extra[f], errors='coerce').values.astype(float)
-        if matrix_feats:
-            with _open_cytome(data, mode="r") as ds:
+                feature_vecs[f] = pd.to_numeric(pd.Series(np.asarray(ds.cells[f])),
+                                                errors='coerce').to_numpy(dtype=float)
+            if matrix_feats:
+                # one streaming pass for every feature, not one per feature
+                batched = _resolve_cytome_feature_values_batch(
+                    ds, list(matrix_feats), modality=modality,
+                    cytome_layer=cytome_layer, compute_on_fly=compute_on_fly,
+                    use_cached_stats=use_cached_stats)
                 for f in matrix_feats:
-                    vals, _ = _resolve_cytome_feature_values(
-                        ds, f,
-                        modality=modality, cytome_layer=cytome_layer,
-                        compute_on_fly=compute_on_fly,
-                        use_cached_stats=use_cached_stats,
-                    )
-                    feature_vecs[f] = np.asarray(vals, dtype=float)
+                    feature_vecs[f] = np.asarray(batched[f][0], dtype=float)
+        full = (np.column_stack([feature_vecs[f] for f in features])
+                if features else np.zeros((len(labels_all), 0)))
+    else:
+        labels_all = data.obs[groupby]
+        full = None
 
-        rng = np.random.RandomState(random_state)
-        sampled = []
-        labels = []
-        sizes = {}
-        for g in groups:
-            mask = group_labels_all == str(g)
-            cell_idx = np.where(mask)[0]
-            n = min(len(cell_idx), max_cells_per_group)
-            if n < len(cell_idx):
-                cell_idx = rng.choice(cell_idx, n, replace=False)
-            row_vals = [feature_vecs[f][cell_idx] for f in features]
-            cell_matrix = np.column_stack(row_vals) if row_vals else np.zeros((n, 0))
-            sampled.append(cell_matrix)
-            labels.extend([str(g)] * n)
-            sizes[str(g)] = n
-        if not sampled:
-            return np.zeros((0, len(features))), [], {}
-        return np.vstack(sampled), labels, sizes
-
-    # AnnData path
-    adata = data
-    group_labels_all = adata.obs[groupby].values
-    groups = resolve_group_order(group_labels_all, categories_order=categories_order)
+    groups = _group_order(data, groupby, labels_all, categories_order=categories_order)
+    lab = label_strings(labels_all)
     rng = np.random.RandomState(random_state)
-
-    sampled = []
-    labels = []
-    sizes = {}
+    picked, labels, sizes = [], [], {}
     for g in groups:
-        mask = np.array([str(x) == str(g) for x in group_labels_all])
-        cell_idx = np.where(mask)[0]
+        cell_idx = np.flatnonzero(lab == g)
         n = min(len(cell_idx), max_cells_per_group)
         if n < len(cell_idx):
             cell_idx = rng.choice(cell_idx, n, replace=False)
+        picked.append(cell_idx)
+        labels.extend([g] * n)
+        sizes[g] = n
+    if not picked:
+        return np.zeros((0, len(features))), [], {}
+    rows = np.concatenate(picked)
+    if full is not None:
+        return full[rows], labels, sizes
 
-        row_vals = []
-        for feat in features:
-            if feat in adata.obs.columns:
-                v = np.asarray(adata.obs[feat].values[cell_idx], dtype=float)
-            elif use_raw and adata.raw is not None:
-                v = adata.raw[cell_idx, feat].X
-                if sp.issparse(v):
-                    v = v.toarray()
-                v = np.asarray(v).flatten()
-            elif layer is not None:
-                v = np.asarray(adata[cell_idx, feat].layers[layer], dtype=float)
-                if sp.issparse(v):
-                    v = v.toarray()
-                v = v.flatten()
-            else:
-                v = adata[cell_idx, feat].X
-                if sp.issparse(v):
-                    v = v.toarray()
-                v = np.asarray(v, dtype=float).flatten()
-            row_vals.append(v)
-        # shape: (n_cells, n_features)
-        cell_matrix = np.column_stack(row_vals)
-        sampled.append(cell_matrix)
-        labels.extend([str(g)] * n)
-        sizes[str(g)] = n
-
-    return np.vstack(sampled), labels, sizes
+    # AnnData: only the sampled cells are read, all features at once
+    adata = data
+    cols = []
+    mat_feats = [f for f in features if f not in adata.obs.columns]
+    block = None
+    if mat_feats:
+        block = _feature_block(adata[rows], mat_feats, layer, use_raw)
+        block = np.asarray(block.toarray() if sp.issparse(block) else block, dtype=float)
+    j = 0
+    for f in features:
+        if f in adata.obs.columns:
+            cols.append(pd.to_numeric(adata.obs[f].iloc[rows], errors="coerce")
+                        .to_numpy(dtype=float, na_value=np.nan))
+        else:
+            cols.append(block[:, j])
+            j += 1
+    matrix = np.column_stack(cols) if cols else np.zeros((len(rows), 0))
+    return matrix, labels, sizes
 
 
 def heatmap(
@@ -238,7 +276,7 @@ def heatmap(
     cell_level: bool = False,
     max_cells_per_group: int = 100,
     show_group_colors: bool = True,
-    show: bool = True,
+    show: Optional[bool] = None,
     save: Optional[str] = None,
     ax: Optional[plt.Axes] = None,
     return_fig: bool = False,
@@ -246,6 +284,7 @@ def heatmap(
     cytome_layer: str = "counts",
     compute_on_fly: bool = True,
     use_cached_stats: bool = True,
+    palette=None,
 ):
     """Plot an expression heatmap.
 
@@ -268,7 +307,9 @@ def heatmap(
     layer, use_raw
         AnnData layer / raw attribute. Ignored for cytome.
     standard_scale : str, optional
-        ``'var'`` to z-score per feature, ``'group'`` per group.
+        ``'var'`` to z-score per feature, ``'group'`` per group (group-level);
+        the colorbar then reads "z-score". (``dotplot`` min-max scales
+        instead.) In the cell-level mode only ``'var'`` applies.
     log : bool
         Log1p transform.
     cmap : str
@@ -296,19 +337,30 @@ def heatmap(
     max_cells_per_group : int
         Maximum cells per group when ``cell_level=True``. Default 100.
     show_group_colors : bool
-        Show colored sidebar for groups when ``cell_level=True``.
-    show, save, ax, return_fig
-        Output options.
+        Show colored sidebar for groups when ``cell_level=True``. Its colours
+        are the column's own (stored, by name) -- the colours of the embedding.
+    palette : list or dict, optional
+        Colours for that sidebar, overriding the stored ones.
+    show : bool, optional
+        Call ``plt.show()``; ``None`` (default) shows unless ``ax`` is given.
+    save, ax, return_fig
+        Output options. Without ``return_fig`` the figure is returned when it
+        is not shown.
     
     modality : str, optional
-        Cytome only: which modality the data was stored under (``'RNA'``,
-        ``'ATAC'``, ``'tiles'``, ``'GA'``). ``None`` takes the store's first
-        modality.
+        Cytome only: the modality whose features to read (``'RNA'``,
+        ``'ATAC'``, ``'tiles'``, ``'GA'``). ``None`` finds the modality that
+        holds the feature, and raises if several do.
     cytome_layer : str, default 'counts'
-        Cytome only: the layer to read the values from.
+        Cytome only: the layer to read the values from. The default is the
+        raw counts -- unlike AnnData's ``.X``, which is usually normalised, so
+        the same data can read differently; pass ``'log1p'`` or ``'infog'``
+        (RNA) or ``'tfidf'`` (ATAC) for normalised values.
     compute_on_fly : bool, default True
-        Cytome only: normalise the raw layer while streaming (INFOG for RNA,
-        TF-IDF for ATAC) instead of requiring a materialised layer.
+        Cytome only: when ``cytome_layer`` names a normalised layer the store
+        does not hold (``'log1p'``, ``'infog'``, ``'tfidf'``), compute it per
+        feature from the counts. It does not normalise the default
+        ``'counts'``.
     use_cached_stats : bool, default True
         Cytome only: reuse normalisation statistics already stored in the
         cytome's metadata rather than recomputing them.
@@ -316,13 +368,21 @@ def heatmap(
     # --- Resolve dict / DataFrame features ---
     features, _auto_labels, _auto_positions = _resolve_features(features)
 
+    from . import _figure
+    show = _figure.resolve_show(show, ax)
+
     if cell_level:
+        # The cytome arguments were used inside and never passed in, so every
+        # cell-level call raised NameError (audit 2026-10-27, finding 7).
         return _heatmap_cell_level(
             data, features, groupby, layer, use_raw, standard_scale, log,
             cmap, figsize, categories_order, var_names_order, title,
             vmin, vmax, max_cells_per_group, show_group_colors,
             show, save, ax, return_fig,
-            var_group_labels=_auto_labels, var_group_positions=_auto_positions)
+            var_group_labels=_auto_labels, var_group_positions=_auto_positions,
+            modality=modality, cytome_layer=cytome_layer,
+            compute_on_fly=compute_on_fly, use_cached_stats=use_cached_stats,
+            palette=palette)
 
     mean_df = _get_mean_expression(
         data, features, groupby, layer, use_raw,
@@ -362,10 +422,7 @@ def heatmap(
         n_rows, n_cols = mean_df.shape
         figsize = (max(3, n_cols * 0.4 + 1.5), max(2.5, n_rows * 0.3 + 1))
 
-    if ax is None:
-        fig, ax = plt.subplots(figsize=figsize)
-    else:
-        fig = ax.figure
+    fig, ax, _created = _figure.begin(ax, figsize=figsize)
 
     im = ax.imshow(mean_df.values, aspect='auto', cmap=cmap, vmin=vmin, vmax=vmax,
                    interpolation='nearest')
@@ -390,22 +447,19 @@ def heatmap(
             sep_x = (end + next_start) / 2
             ax.axvline(sep_x, color='white', lw=2, zorder=2)
 
-    plt.colorbar(im, ax=ax, shrink=0.6, pad=0.02, label='Mean expression')
+    # the bar says what the colours are: a z-score once standard_scale is set
+    _cbar_label = ('Mean expression' if standard_scale not in ('var', 'group')
+                   else f"z-score (per {'feature' if standard_scale == 'var' else 'group'})")
+    fig.colorbar(im, ax=ax, shrink=0.6, pad=0.02, label=_cbar_label)
 
     if title:
         ax.set_title(title)
 
-    plt.tight_layout()
-
-    from ..settings import _savefig
-    _savefig(fig, save, writekey='heatmap')
-    if show:
-        plt.show()
-    else:
-        plt.close(fig)
-
+    _figure.layout(fig)
+    out = _figure.finish(fig, created=_created, show=show, save=save, writekey='heatmap')
     if return_fig:
         return fig, ax
+    return out
 
 
 def _heatmap_cell_level(data, features, groupby, layer, use_raw,
@@ -413,9 +467,12 @@ def _heatmap_cell_level(data, features, groupby, layer, use_raw,
                         categories_order, var_names_order,
                         title, vmin, vmax, max_cells_per_group,
                         show_group_colors, show, save, ax, return_fig,
-                        var_group_labels=None, var_group_positions=None):
+                        var_group_labels=None, var_group_positions=None,
+                        modality=None, cytome_layer="counts",
+                        compute_on_fly=True, use_cached_stats=True, palette=None):
     """Cell-level heatmap with group-stratified sampling."""
-    from . import color as _color_mod
+    from . import _figure
+    from ._categories import resolve_category_style
 
     # Reorder features if requested
     if var_names_order is not None:
@@ -444,6 +501,7 @@ def _heatmap_cell_level(data, features, groupby, layer, use_raw,
         figsize = (max(4, n_feats * 0.4 + 1.5),
                    max(3, n_cells * 0.012 + 1.5))
 
+    _created = ax is None
     if show_group_colors and ax is None:
         fig = plt.figure(figsize=figsize)
         gs = gridspec.GridSpec(1, 2, width_ratios=[0.03, 0.97],
@@ -472,17 +530,14 @@ def _heatmap_cell_level(data, features, groupby, layer, use_raw,
 
     # Group color sidebar
     if ax_colors is not None:
-        # Build color column
-        palette = _color_mod.d_color4
-        if not _is_cytome_input(data) and hasattr(data, 'uns'):
-            key = f'{groupby}_colors'
-            if key in data.uns and len(data.uns[key]) >= len(groups):
-                palette = list(data.uns[key])
-
+        # Colour by name, over the whole column, as every other plot: the
+        # sidebar indexed the palette by its own group list, so a group the
+        # sample or categories_order left out moved every colour after it.
+        style = resolve_category_style(data, groupby, palette=palette)
         color_arr = np.zeros((n_cells, 1, 3))
         row = 0
-        for i, g in enumerate(groups):
-            c = plt.matplotlib.colors.to_rgb(palette[i % len(palette)])
+        for g in groups:
+            c = plt.matplotlib.colors.to_rgb(style.color(g))
             n = sizes[g]
             color_arr[row:row + n, 0, :] = c
             row += n
@@ -504,25 +559,18 @@ def _heatmap_cell_level(data, features, groupby, layer, use_raw,
             spine.set_visible(False)
         ax_colors.tick_params(left=False, bottom=False)
 
-    plt.colorbar(im, ax=ax, shrink=0.5, pad=0.02, label='Expression')
+    fig.colorbar(im, ax=ax, shrink=0.5, pad=0.02,
+                 label='z-score (per feature)' if standard_scale == 'var' else 'Expression')
 
     if title:
         ax.set_title(title)
 
-    import warnings
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        plt.tight_layout()
-
-    from ..settings import _savefig
-    _savefig(fig, save, writekey='heatmap_cells')
-    if show:
-        plt.show()
-    else:
-        plt.close(fig)
-
+    _figure.layout(fig)
+    out = _figure.finish(fig, created=_created, show=show, save=save,
+                         writekey='heatmap_cells')
     if return_fig:
         return fig, ax
+    return out
 
 
 @wraps(heatmap)

@@ -10,8 +10,7 @@
 PIASO is a **Python and Rust** toolkit for single-cell omics (scRNA-seq,
 scATAC-seq and spatial transcriptomics), covering the analysis from raw counts
 through to the figures in a paper. Performance-critical routines are implemented
-in Rust; pre-compiled wheels ship for Linux, macOS (Intel and Apple Silicon) and
-Windows, so there is nothing to build.
+in Rust.
 
 ### Installation
 
@@ -20,19 +19,25 @@ Install from PyPI (stable release):
 pip install piaso-tools
 ```
 
+PIASO needs Python 3.10 or later. Pre-compiled wheels are built for
+**Linux on x86_64, CPython 3.10, 3.11 and 3.12**, and there `pip install` has
+nothing to build. On any other platform or Python (macOS, Windows, Linux on ARM,
+Python 3.13 or later), pip builds PIASO from its source distribution, which needs
+a [Rust toolchain](https://rustup.rs) and a C compiler; without them the
+installation stops with a build error.
+
 This also installs [cytome](https://github.com/genecell/cytome), the on-disk
 dataset format PIASO reads and writes. Nothing extra to install to work with
 `.cytome` files.
 
-Install from bioconda (stable release):
-```bash
-conda install -c conda-forge -c bioconda piaso
-```
-
-Install from GitHub (latest development version):
+Install from GitHub (latest development version; builds from source, so it needs Rust
+on every platform):
 ```bash
 pip install git+https://github.com/genecell/PIASO.git
 ```
+
+The bioconda package (`conda install -c bioconda piaso`) is version 1.0.3, from before
+the Rust extension; install from PyPI for the current release.
 
 ### Documentation
 

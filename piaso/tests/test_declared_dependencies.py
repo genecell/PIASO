@@ -31,7 +31,30 @@ import pytest
 
 
 PKG = pathlib.Path(__file__).resolve().parent.parent
-PYPROJECT = PKG.parent / "pyproject.toml"
+
+
+def _find_pyproject():
+    """PIASO's pyproject.toml: beside the package in a checkout. An installed package has
+    none beside it, so CI's `pytest --pyargs piaso.tests` against the wheel reads the one
+    in the folder it runs from (the checkout the wheel was built from), if it is PIASO's."""
+    for candidate in (PKG.parent / "pyproject.toml", pathlib.Path.cwd() / "pyproject.toml"):
+        try:
+            text = candidate.read_text()
+        except OSError:
+            continue
+        if re.search(r'^name\s*=\s*"piaso-tools"', text, re.M):
+            return candidate
+    return None
+
+
+PYPROJECT = _find_pyproject()
+
+
+def _pyproject_text() -> str:
+    if PYPROJECT is None:
+        pytest.skip("PIASO's pyproject.toml is neither beside the package (an installed "
+                    "package) nor in the current folder")
+    return PYPROJECT.read_text()
 
 # Import names that differ from their distribution name.
 IMPORT_TO_DIST = {
@@ -53,7 +76,7 @@ NOT_SHIPPED = ("_picco_core", f"{pathlib.Path('piaso') / 'tests'}")
 
 def _declared_dependencies() -> set[str]:
     """Distribution names from ``[project] dependencies``, normalised."""
-    text = PYPROJECT.read_text()
+    text = _pyproject_text()
     block = re.search(r"^dependencies\s*=\s*\[(.*?)^\]", text, re.S | re.M)
     assert block, "could not locate [project] dependencies in pyproject.toml"
     out = set()
@@ -233,7 +256,7 @@ def test_version_matches_pyproject():
     """
     import piaso
 
-    text = PYPROJECT.read_text()
+    text = _pyproject_text()
     declared = re.search(r'^version\s*=\s*"([^"]+)"', text, re.M)
     assert declared, "no version in pyproject.toml"
     assert piaso.__version__ == declared.group(1), (

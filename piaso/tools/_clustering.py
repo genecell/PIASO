@@ -44,7 +44,7 @@ def _leiden_local_group(ds, gmask, g, sub, *, modality, measurement, select,
                         max_nnz_percentile, n_components, svd_method, n_iter, tol,
                         stop_on="residuals",
                         n_neighbors, batch_size, random_state, resolution, n_threads=0,
-                        backend='auto', unit_length=None):
+                        backend='auto', unit_length=None, drop_first_component=False):
     """Cluster one coarse group in its own space.
 
     ``sub`` is the group's own store (from ``ds.split``), holding only its
@@ -69,7 +69,8 @@ def _leiden_local_group(ds, gmask, g, sub, *, modality, measurement, select,
                       key_added="X_svd", method=svd_method, n_iter=n_iter, tol=tol,
                       stop_on=stop_on,
                       random_state=random_state, batch_size=batch_size, verbosity=0,
-                      n_threads=n_threads, unit_length=unit_length)
+                      n_threads=n_threads, unit_length=unit_length,
+                      drop_first_component=bool(drop_first_component))
         if select and peak_like and selectPeaks is not None:
             # 1) per-group peak selection (20% cumulative-nnz, as the pipeline)
             selectPeaks(sub,
@@ -115,10 +116,17 @@ def _leiden_local_group(ds, gmask, g, sub, *, modality, measurement, select,
                       random_state=random_state, n_iterations=10,
                       adjacency_key="connectivities", backend=backend, n_threads=n_threads)
         sub_labels = np.asarray(sub.cells[_sub_key]).astype("U")
+        # By position: split and subset write a group's cells in the parent's
+        # order. By barcode, as before, cells that share one (two libraries
+        # with the same barcode; the schema does not make it unique) all took
+        # the label of the last of them. The barcodes, read in order, confirm
+        # the order instead.
         sub_bc = np.asarray(sub.cells["barcode"], dtype=object)
-        lab_map = {b: f"{g}-{lab}" for b, lab in zip(sub_bc, sub_labels)}
         parent_bc = np.asarray(ds.cells["barcode"], dtype=object)[np.asarray(gmask)]
-        return np.array([lab_map[b] for b in parent_bc], dtype=object), n_sel
+        if sub_labels.shape[0] != n_g or not np.array_equal(sub_bc.astype(str), parent_bc.astype(str)):
+            raise RuntimeError(f"leiden_local: the store of group {g!r} does not hold the group's "
+                               f"{n_g} cells in the parent's order")
+        return np.array([f"{g}-{lab}" for lab in sub_labels], dtype=object), n_sel
     finally:
         try:
             sub.close()
@@ -150,6 +158,7 @@ def _leiden_local_cytome_streaming_svd(
     backend: str = 'auto',
     tmp_dir=None,
     unit_length: Optional[bool] = None,
+    drop_first_component: bool = False,
 ):
     """Streaming, RAM-bounded `leiden_local` on a cytome, one group at a time.
 
@@ -200,7 +209,8 @@ def _leiden_local_cytome_streaming_svd(
                   svd_method=svd_method, n_iter=n_iter, tol=tol, stop_on=stop_on,
                   n_neighbors=n_neighbors,
                   batch_size=batch_size, random_state=random_state, resolution=resolution,
-                  n_threads=n_threads, backend=backend, unit_length=unit_length)
+                  n_threads=n_threads, backend=backend, unit_length=unit_length,
+                  drop_first_component=drop_first_component)
 
     todo = []
     for g in groups:
@@ -351,7 +361,7 @@ _DR_METHODS = ('X_svd', 'X_svd_full', 'X_pca', 'X_gdr', 'X_pca_harmony', 'X_svd_
 
 def _embed_group(adata_i, dr_method, n_components, batch_key, gdr_resolution,
                  svd_method, n_iter, svd_tol, random_state, verbosity, said, n_threads=0,
-                 unit_length=None, svd_stop_on="residuals"):
+                 unit_length=None, svd_stop_on="residuals", drop_first_component=False):
     """Embed one group's AnnData by ``dr_method``; return the ``obsm`` key."""
     if dr_method == 'X_svd':
         hv = 'highly_variable' in adata_i.var.columns and bool(np.asarray(adata_i.var['highly_variable']).any())
@@ -362,13 +372,15 @@ def _embed_group(adata_i, dr_method, n_components, batch_key, gdr_resolution,
         runSVD(adata_i, use_highly_variable=hv, n_components=n_components, random_state=random_state,
                scale_data=False, method=svd_method, n_iter=n_iter, tol=svd_tol, stop_on=svd_stop_on,
                key_added='X_svd',
-               n_threads=n_threads, unit_length=unit_length)
+               n_threads=n_threads, unit_length=unit_length,
+               drop_first_component=bool(drop_first_component))
         return 'X_svd'
     if dr_method in ('X_svd_full', 'X_svd_full_harmony'):
         runSVD(adata_i, use_highly_variable=False, n_components=n_components, random_state=random_state,
                scale_data=False, method=svd_method, n_iter=n_iter, tol=svd_tol, stop_on=svd_stop_on,
                key_added='X_svd_full',
-               n_threads=n_threads, unit_length=unit_length)
+               n_threads=n_threads, unit_length=unit_length,
+               drop_first_component=bool(drop_first_component))
         if dr_method == 'X_svd_full':
             return 'X_svd_full'
         _piaso_harmony(adata_i, batch_key=batch_key, use_rep='X_svd_full', key_added='X_svd_full_harmony')
@@ -407,6 +419,7 @@ def leiden_local(
     svd_tol: Optional[float] = None,
     svd_stop_on: str = "residuals",
     svd_unit_length: Optional[bool] = None,
+    svd_drop_first_component: bool = False,
     n_neighbors: int = 15,
     batch_size: int = 1024,
     random_state: int = 10,
@@ -498,6 +511,13 @@ def leiden_local(
         factorises, as ``runSVD`` does: on for an ATAC or tiles store's groups,
         off for RNA. On an AnnData the groups' SVDs see no modality, so pass
         True there for ATAC.
+    svd_drop_first_component : bool, default False
+        Passed to each group's ``runSVD`` as ``drop_first_component``
+        (``dr_method`` 'X_svd' and 'X_svd_full'): leave out the group's first
+        singular component, which on TF-IDF of ATAC peaks or tiles follows
+        each nucleus's depth more than its type. The workflow leaves it out of
+        the whole dataset's ATAC embedding; the groups kept it (``False``, as
+        before, keeps them unchanged).
     n_neighbors : int, default 15
         Neighbours for the per-group graph (capped below the group size).
     batch_size : int, default 1024
@@ -563,6 +583,7 @@ def leiden_local(
             n_neighbors=n_neighbors, batch_size=batch_size, random_state=random_state,
             min_cells=min_cells, verbose=verbose, n_threads=n_threads, backend=backend,
             tmp_dir=tmp_dir, unit_length=svd_unit_length,
+            drop_first_component=svd_drop_first_component,
         )
 
     # --- Cytome, other methods: convert, run, write back ---
@@ -580,13 +601,17 @@ def leiden_local(
 
     def _cluster(group_idx, prefix):
         adata_i = adata[group_idx].copy()
-        adata_i = adata_i[:, np.asarray(adata_i.X.getnnz(axis=0)).ravel() >= 1].copy()
+        # features with at least one count in the group (a dense X has no getnnz)
+        _nnz = (adata_i.X.getnnz(axis=0) if sparse.issparse(adata_i.X)
+                else np.count_nonzero(np.asarray(adata_i.X), axis=0))
+        adata_i = adata_i[:, np.asarray(_nnz).ravel() >= 1].copy()
         sqrt_ncells = int(np.sqrt(adata_i.shape[0]))
         nc = n_components if sqrt_ncells > n_components else sqrt_ncells
         use_rep = _embed_group(adata_i, dr_method, nc, batch_key, gdr_resolution,
                                svd_method, n_iter, svd_tol, random_state, verbosity, said,
                                n_threads=n_threads, unit_length=svd_unit_length,
-                               svd_stop_on=svd_stop_on)
+                               svd_stop_on=svd_stop_on,
+                               drop_first_component=svd_drop_first_component)
         knn = _piaso_neighbors(adata_i, use_rep=use_rep, n_neighbors=n_neighbors, random_state=random_state)
         _piaso_leiden(adata_i, resolution=resolution, key_added='leiden_local', knn_result=knn,
                       random_state=random_state, backend=backend, n_threads=n_threads)

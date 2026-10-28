@@ -1,0 +1,67 @@
+name: tutorials
+
+# Documentation examples rot silently. Over one release, three examples in this
+# project were wrong in ways review did not catch -- calls to functions absent
+# from the distribution, a stale version floor, and API defaults that quietly
+# did the wrong thing. Running them once would have caught every one.
+#
+# This executes the tutorials that can run unattended. Tutorials needing large
+# downloads or genome files are listed in NOT_EXECUTED in run_tutorials.py.
+
+on:
+  push:
+    branches: [main, master]
+    paths: ["piaso/**", "docs/tutorials/**", ".github/workflows/tutorials.yml"]
+  pull_request:
+    paths: ["piaso/**", "docs/tutorials/**"]
+  workflow_dispatch:
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # Example datasets are downloaded by piaso.data and cached between runs;
+      # without this every run re-fetches ~65 MB from Zenodo.
+      - name: Cache example datasets
+        uses: actions/cache@v4
+        with:
+          path: ~/.piaso/data
+          key: piaso-data-${{ hashFiles('piaso/data/_datasets.py') }}
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install .
+
+      - name: List tutorials
+        run: python docs/tutorials/run_tutorials.py --list
+
+      - name: Execute
+        run: python docs/tutorials/run_tutorials.py
+        env:
+          MPLBACKEND: Agg
+          NUMBA_THREADING_LAYER: workqueue
+
+      # A tutorial that no longer produces its figures is broken even if it
+      # exits 0, so check the images the Markdown references were written.
+      - name: Check figures were produced
+        run: |
+          python - <<'PY'
+          import pathlib, re, sys
+          d = pathlib.Path("docs/tutorials")
+          missing = []
+          for md in d.glob("rna_end_to_end_*.md"):
+              for ref in re.findall(r"!\[[^\]]*\]\((_images/[^)]+)\)", md.read_text()):
+                  if not (d / ref).is_file():
+                      missing.append(f"{md.name} -> {ref}")
+          if missing:
+              print("figures referenced but not produced:"); [print(" ", m) for m in missing]
+              sys.exit(1)
+          print("all referenced figures present")
+          PY

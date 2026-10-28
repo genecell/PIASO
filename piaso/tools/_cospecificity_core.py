@@ -15,9 +15,8 @@ from __future__ import annotations
 
 import functools
 
-import base64
-import pickle
 import warnings
+import zlib
 from typing import Any
 
 import numpy as np
@@ -33,10 +32,17 @@ from ..utils._cytome_compat import _is_cytome_dataset_obj as _is_cytome
 
 
 # ---------------------------------------------------------------------------
-# COSG dense matrix caching (metadata-blob via pickle+base64)
+# COSG dense matrix caching (in ds.metadata, checked against a digest of its
+# inputs, stored as compressed raw arrays: no pickle)
 # ---------------------------------------------------------------------------
 
 _COSG_CACHE_KEY_DEFAULT = None  # auto-derive from (mu, expressed_pct, layer)
+
+#: The cache entry's format. An entry without it (the base64 pickles written
+#: before 2026-10-27) is a miss and is replaced, never unpickled: loading a
+#: pickle from a shared store runs whatever code it holds.
+_COSG_CACHE_FORMAT = "piaso-cosg-dense/2"
+_COSG_CACHE_DTYPES = ("float32", "float64")
 
 
 def _resolve_modality_n_features(ds, modality: str) -> int:
@@ -101,30 +107,109 @@ def _derive_cosg_cache_key(
     )
 
 
+def _cosg_cache_inputs(ds, *, groupby: str, modality: str, cosg_layer: str,
+                       cosg_params: dict) -> dict:
+    """What a cached COSG dense matrix was computed from, as a JSON-able dict
+    whose digest keys the entry: the labels in cell order (a digest), the number
+    of cells, the store's category order for ``groupby``, the identity of every
+    matrix COSG may read for ``(modality, layer)`` (``{modality}_{layer}``, and
+    ``{modality}_counts``, which an unmaterialised layer is computed from),
+    the normalisation parameters cached for that layer, COSG's version and the
+    run's parameters.
+
+    So a relabel, a subset (cytome's ``subset`` copies the metadata, so the
+    copied entry meets other cells), a re-quantification or a COSG upgrade makes
+    the entry stale, and it is recomputed.
+    """
+    from ..utils._cytome_compat import require_cells_column
+    from ..utils import _store_digest as D
+    import cosg
+
+    require_cells_column(ds, groupby, argument="cospecificity: groupby")
+    layer = cosg_layer or "counts"
+    matrices = [D.matrix_identity(ds, m) for m in dict.fromkeys((f"{modality}_{layer}", f"{modality}_counts"))]
+    try:
+        cats = ds.metadata.get("categories") or {}
+        order = (cats.get(groupby) or {}).get("order") if isinstance(cats, dict) else None
+        layer_params = ds.metadata.get(f"{modality}_{layer}_params")
+    except Exception:
+        order, layer_params = None, None
+    return {
+        "groupby": groupby,
+        "labels": D.labels_digest(D.cell_column(ds, groupby)),
+        "n_cells": int(ds.n_cells),
+        "category_order": None if order is None else [str(x) for x in order],
+        "matrices": matrices,
+        "layer_params": None if layer_params is None else D.digest(layer_params),
+        "cosg_version": str(getattr(cosg, "__version__", "unknown")),
+        "params": cosg_params,
+    }
+
+
 def _save_cosg_cache(ds, key: str, scores_df: pd.DataFrame,
-                     cosg_params: dict) -> None:
+                     cosg_params: dict, inputs: dict, *, verbose: int = 1) -> None:
     """Persist the COSG dense output in ``ds.metadata[key]``.
 
-    The DataFrame is pickled (the dense float matrix would inflate
-    by ~5× as JSON) and base64-encoded so it fits in the JSON
-    metadata column. Cytome-only call site, so the pickle round-trip
-    stays inside one trusted host.
+    Stored as raw arrays, zlib-compressed (COSG's dense output is mostly
+    zeros): the values in C order with their dtype and shape, the feature names
+    and the group names, plus the digest of the inputs it was computed from
+    (:func:`_cosg_cache_inputs`). Nothing in it executes on load. A store
+    opened read-only keeps no cache: the result is returned all the same.
     """
+    from ..utils import _store_digest as D
+
+    if getattr(ds, "read_only", False):
+        if verbose:
+            print(f"cospecificity: the store is read-only; the COSG dense matrix is "
+                  f"not cached (ds.metadata[{key!r}])")
+        return
+    values = np.ascontiguousarray(scores_df.to_numpy())
+    if values.dtype.name not in _COSG_CACHE_DTYPES:
+        values = values.astype(np.float32)
+    names = [str(x) for x in scores_df.index]
+    if any("\n" in n for n in names):
+        raise ValueError("cospecificity: a feature name holds a newline; it cannot be cached")
     payload = {
-        "pickle_b64": base64.b64encode(pickle.dumps(scores_df)).decode("ascii"),
-        "shape": list(scores_df.shape),
-        "columns": list(scores_df.columns.astype(str)),
+        "format": _COSG_CACHE_FORMAT,
+        "digest": D.digest(inputs),
+        "inputs": inputs,
         "cosg_params": cosg_params,
+        "shape": [int(values.shape[0]), int(values.shape[1])],
+        "dtype": values.dtype.name,
+        "columns": pd.Index(scores_df.columns).tolist(),
+        "index_zlib": zlib.compress("\n".join(names).encode("utf-8"), 1),
+        "values_zlib": zlib.compress(values.tobytes(), 1),
     }
     ds.metadata[key] = payload
     ds.flush()
 
 
-def _load_cosg_cache(ds, key: str) -> pd.DataFrame | None:
+def _load_cosg_cache(ds, key: str, inputs: dict) -> tuple[pd.DataFrame | None, str]:
+    """``(frame, why)``: the cached COSG dense matrix when the entry was computed
+    from ``inputs`` (its digest matches), else ``(None, reason)``. An entry in an
+    older format (the base64 pickles) is a miss: it is never unpickled."""
+    from ..utils import _store_digest as D
+
     payload = ds.metadata.get(key)
-    if payload is None or "pickle_b64" not in payload:
-        return None
-    return pickle.loads(base64.b64decode(payload["pickle_b64"]))
+    if payload is None:
+        return None, "absent"
+    if not isinstance(payload, dict) or payload.get("format") != _COSG_CACHE_FORMAT:
+        return None, "an older format (replaced)"
+    if payload.get("digest") != D.digest(inputs):
+        return None, "stale: the labels, the cells, the matrix or COSG changed since it was cached"
+    try:
+        n, g = (int(x) for x in payload["shape"])
+        dtype = str(payload["dtype"])
+        if dtype not in _COSG_CACHE_DTYPES:
+            return None, f"unexpected dtype {dtype!r}"
+        values = np.frombuffer(zlib.decompress(payload["values_zlib"]), dtype=dtype).reshape(n, g)
+        index = zlib.decompress(payload["index_zlib"]).decode("utf-8").split("\n") if n else []
+        columns = list(payload["columns"])
+        if len(index) != n or len(columns) != g:
+            return None, "corrupt (shape)"
+    except (KeyError, TypeError, ValueError, zlib.error) as exc:
+        return None, f"unreadable ({exc})"
+    return pd.DataFrame(values.copy(), index=pd.Index(index), columns=pd.Index(columns)), "hit"
 
 
 def _ensure_cosg_dense(
@@ -146,10 +231,16 @@ def _ensure_cosg_dense(
     serves both ``cospecificity_map(cosg_n_genes_user=None)`` and
     ``specificity_hotspot(top_n=2000)``.
 
-    Cache key is auto-derived from
+    The metadata key is auto-derived from
     ``(groupby, modality, mu, expressed_pct, layer)`` when
     ``cache_key=None`` — the knobs that actually change the COSG
     λ values. Typical session: 1-2 cache entries per cytome.
+
+    An entry is used only when it was computed from the same inputs: the
+    labels, the number of cells, the matrix COSG reads, COSG's version and the
+    parameters (a digest, :func:`_cosg_cache_inputs`); otherwise it is
+    recomputed and replaced. So an entry never outlives a relabel, a subset or
+    a re-quantification, under the derived key or an explicit ``cache_key``.
     """
     if cache_key is None:
         cache_key = _derive_cosg_cache_key(
@@ -159,19 +250,31 @@ def _ensure_cosg_dense(
             cosg_remove_lowly_expressed=cosg_remove_lowly_expressed,
         )
 
+    import cosg
+
+    # Always compute at maximum n_genes_user. Resolve from modality.
+    feature_count = _resolve_modality_n_features(ds, modality)
+    params = {
+        "groupby": groupby, "modality": modality,
+        "cosg_mu": cosg_mu, "cosg_expressed_pct": cosg_expressed_pct,
+        "cosg_n_genes_user": feature_count,
+        "layer": cosg_layer,
+        "cosg_remove_lowly_expressed": bool(cosg_remove_lowly_expressed),
+    }
+    inputs = _cosg_cache_inputs(ds, groupby=groupby, modality=modality,
+                                cosg_layer=cosg_layer, cosg_params=params)
+
     if use_cached:
-        cached = _load_cosg_cache(ds, cache_key)
+        cached, why = _load_cosg_cache(ds, cache_key, inputs)
         if cached is not None:
             if verbose:
                 print(f"cospecificity: reusing cached COSG dense at "
                       f"ds.metadata[{cache_key!r}] "
                       f"(shape {cached.shape})")
             return cached
-
-    import cosg
-
-    # Always compute at maximum n_genes_user. Resolve from modality.
-    feature_count = _resolve_modality_n_features(ds, modality)
+        if verbose and why != "absent":
+            print(f"cospecificity: the cached COSG dense at ds.metadata[{cache_key!r}] "
+                  f"is not used: {why}")
 
     if verbose:
         print(f"cospecificity: running COSG (groupby={groupby!r}, "
@@ -194,15 +297,12 @@ def _ensure_cosg_dense(
     result = cosg.run_cosg_cytome(ds, **cosg_kwargs)
     scores_df = result["scores_df"]
 
-    params = {
-        "groupby": groupby, "modality": modality,
-        "cosg_mu": cosg_mu, "cosg_expressed_pct": cosg_expressed_pct,
-        "cosg_n_genes_user": feature_count,
-        "layer": cosg_layer,
-        "cosg_remove_lowly_expressed": bool(cosg_remove_lowly_expressed),
-    }
-    _save_cosg_cache(ds, cache_key, scores_df, params)
-    if verbose:
+    # COSG may cache its normalisation on first use (tfidf): describe the inputs as
+    # the next reader will see them
+    inputs = _cosg_cache_inputs(ds, groupby=groupby, modality=modality,
+                                cosg_layer=cosg_layer, cosg_params=params)
+    _save_cosg_cache(ds, cache_key, scores_df, params, inputs, verbose=verbose)
+    if verbose and not getattr(ds, "read_only", False):
         print(f"cospecificity: cached COSG dense to "
               f"ds.metadata[{cache_key!r}] (shape {scores_df.shape})")
     return scores_df
@@ -284,6 +384,14 @@ def _specificity_matrix(
     cells is scored −1 in that group, as cytorete's regulon assembly expects.
     For :func:`piaso.tl.runSCALAR` pass ``False``: SCALAR refuses negative
     entries (two −1 multiply to +1) and applies its own detection floor.
+
+    ``cosg_layer`` is the matrix COSG scores, on both backends: a cytome's
+    ``{modality}_{cosg_layer}`` (an unmaterialised ``log1p``/``infog``/``tfidf``
+    is computed from the counts), an AnnData's ``layers[cosg_layer]``. On an
+    AnnData without a ``'counts'`` layer, ``'counts'`` (the default) is ``.X``,
+    as a store's counts matrix is what ``from_anndata`` wrote from ``.X``;
+    ``None`` is ``.X``; any other name must be a layer. The caller's AnnData is
+    not modified (COSG runs on a lightweight copy that shares its matrix).
     """
     if _is_cytome(data):
         return _ensure_cosg_dense(
@@ -294,19 +402,32 @@ def _specificity_matrix(
             cosg_remove_lowly_expressed=cosg_remove_lowly_expressed,
         )
     # ---- AnnData path ----
+    import anndata as _ad
     import cosg as _cosg
     adata = data
-    key = "cosg"
+    if groupby not in adata.obs.columns:
+        raise KeyError(f"specificity_matrix: groupby={groupby!r} is not a column of adata.obs")
+    if cosg_layer is None or (cosg_layer == "counts" and "counts" not in adata.layers):
+        X, where = adata.X, ".X"
+    elif cosg_layer in adata.layers:
+        X, where = adata.layers[cosg_layer], f"layers[{cosg_layer!r}]"
+    else:
+        raise KeyError(
+            f"specificity_matrix: cosg_layer={cosg_layer!r} is not a layer of the AnnData "
+            f"(layers: {list(adata.layers)}); pass None for .X")
+    # COSG writes its result into .uns: run it on a copy that shares the matrix, so
+    # the caller's uns['cosg'] (or anything else) is never overwritten
+    work = _ad.AnnData(X=X, obs=adata.obs[[groupby]].copy(), var=pd.DataFrame(index=adata.var_names))
     if verbose:
-        print(f"cospecificity_trans: running COSG on AnnData "
+        print(f"cospecificity_trans: running COSG on AnnData {where} "
               f"(groupby={groupby!r}, n_genes_user={adata.n_vars}, mu={cosg_mu})")
     _cosg.cosg(
-        adata, groupby=groupby, mu=cosg_mu,
+        work, groupby=groupby, mu=cosg_mu,
         expressed_pct=cosg_expressed_pct,
         remove_lowly_expressed=cosg_remove_lowly_expressed,
-        n_genes_user=int(adata.n_vars), key_added=key,
+        n_genes_user=int(adata.n_vars), key_added="cosg",
     )
-    res = adata.uns[key]
+    res = work.uns["cosg"]
     groups = list(res["names"].dtype.names)
     var_names = np.asarray(adata.var_names)
     pos = {g: i for i, g in enumerate(var_names)}

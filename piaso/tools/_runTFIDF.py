@@ -193,6 +193,42 @@ def _runTFIDF_original(
 #  TF-IDF stats-only (for fused TF-IDF + SVD)
 # ===================================================================
 
+def check_tfidf_arrays(params, n_rows=None, n_cols=None, what="tfidf_params"):
+    """Refuse TF-IDF statistics that cannot describe a matrix.
+
+    The two vectors must be finite (an IDF read back from a feature table
+    the quantifier rewrote is all NaN), the depths not negative, and, when the
+    matrix's shape is given, one depth per row and one IDF per column. The
+    Python transform turned a NaN into 0 (``nan_to_num``) while the Rust engine
+    carried it into the solver, which then failed to converge: neither is an
+    answer, so both now stop here.
+    """
+    try:
+        depth = np.asarray(params["cell_depth"], dtype=np.float64)
+        idf = np.asarray(params["idf"], dtype=np.float64)
+    except KeyError as e:
+        raise ValueError(f"{what}: needs 'cell_depth' and 'idf' (missing {e})") from None
+    if depth.ndim != 1 or idf.ndim != 1:
+        raise ValueError(f"{what}: 'cell_depth' and 'idf' must be vectors")
+    bad = int((~np.isfinite(idf)).sum())
+    if bad:
+        raise ValueError(
+            f"{what}: {bad} of {idf.size} IDF values are not finite. The statistics no "
+            f"longer describe the matrix (re-quantified?); recompute them with "
+            f"piaso.tl.compute_tfidf_stats.")
+    bad = int((~np.isfinite(depth) | (depth < 0)).sum())
+    if bad:
+        raise ValueError(
+            f"{what}: {bad} of {depth.size} cell depths are negative or not finite; "
+            f"recompute them with piaso.tl.compute_tfidf_stats.")
+    scale = params.get("scale_factor", 1e4)
+    if scale is None or not np.isfinite(float(scale)):
+        raise ValueError(f"{what}: scale_factor must be a finite number, got {scale!r}")
+    if n_rows is not None and depth.shape[0] != int(n_rows):
+        raise ValueError(f"{what}: {depth.shape[0]} cell depths for a matrix of {int(n_rows)} rows")
+    if n_cols is not None and idf.shape[0] != int(n_cols):
+        raise ValueError(f"{what}: {idf.shape[0]} IDF values for a matrix of {int(n_cols)} columns")
+
 def assert_raw_counts(ds, modality, layer, *, what="TF-IDF", n_check=1):
     """Refuse to normalise a matrix that has already been normalised.
 
@@ -352,6 +388,11 @@ def compute_tfidf_stats(
         # The cache has one slot per modality; it records which matrix filled
         # it, so a reader asking for another matrix computes its own.
         stored = {"scale_factor": scale_factor, "matrix": f"{modality}_{_layer}"}
+        # What the statistics describe, checked on every load: a matrix
+        # rewritten under the same name (a re-quantification over other peaks)
+        # has another shape, non-zero count or creation time, and the cache is
+        # then recomputed instead of read (see _assert_tfidf_cache_current).
+        stored["fingerprint"] = _matrix_fingerprint(ds, f"{modality}_{_layer}")
 
         # Per-feature IDF. MUST use ds.features(modality), NOT
         # getattr(ds, entity_name): for 'tiles'/'GA' the modality name collides
@@ -420,22 +461,114 @@ def _tfidf_cache_matrix(stored, modality):
     return f"{modality}_counts"
 
 
-def _hydrate_tfidf_params(ds, stored, modality):
-    """Fill in the arrays a cached params dict refers to by column name.
+def _matrix_fingerprint(ds, matrix_name):
+    """``{n_rows, n_cols, n_nonzero, created_at}`` of a stored matrix, or None.
 
-    Older cytomes carry `cell_depth` and `idf` inline; those are returned
-    untouched. Newer ones carry only the scalar and the column names, so the
-    vectors are read back from the tables here. Either way the caller gets the
-    same three keys.
+    Every writer of a matrix (the importer, the quantifier, cytome's own)
+    records its creation time in ``matrix_meta``, so a matrix written again
+    under the same name differs here even when its shape does not."""
+    row = ds._conn.execute(
+        "SELECT n_rows, n_cols, n_nonzero, created_at FROM matrix_meta WHERE matrix_name = ?",
+        (matrix_name,)).fetchone()
+    if row is None:
+        return None
+    return {"n_rows": int(row[0]), "n_cols": int(row[1]), "n_nonzero": int(row[2]),
+            "created_at": None if row[3] is None else str(row[3])}
+
+
+def _importer_sums(ds, modality, layer):
+    """``(cell totals, feature totals)`` the importer or quantifier recorded for
+    ``{modality}_{layer}``, when its guard still vouches for them; else None.
+    Read straight from the tables, without the speed gate of
+    ``read_feature_stats``: this is a check, and a table scan is always cheaper
+    than the matrix pass it saves."""
+    from ..utils import _importer_stats as _st
+    matrix = f"{modality}_{layer}"
+    conn = ds._conn
+    try:
+        guard = _st._guard(conn, matrix)
+        ent = _st._entity_for(ds, modality)
+        if guard is None or ent is None:
+            return None
+        table, idx_col = ent
+        meta = _st._matrix_meta(conn, matrix)
+        total = f"{_st._singular(table)}_total_counts"
+        feat = _st._read_columns(conn, table, idx_col, ["n_cells_accessible", total], meta[1])
+        cell = _st._read_columns(conn, "cells", "cell_idx", [f"n_{table}_accessible", total], meta[0])
+    except Exception:
+        return None
+    if (feat is None or cell is None or not _st._holds_the_matrix(feat[0], feat[1], guard)
+            or not _st._holds_the_matrix(cell[0], cell[1], guard)):
+        return None
+    return cell[1], feat[1]
+
+
+def _assert_tfidf_cache_current(ds, stored, params, modality):
+    """Raise ``ValueError`` unless a cached payload still describes its matrix.
+
+    The cache used to be trusted whenever it named the matrix asked for, so
+    after the main matrix was quantified again over other peaks runSVD read the
+    old depths (``[6, 6, 4, 4]`` against the new matrix's ``[5, 4, 3, 4]``) and
+    an IDF that was all NaN (the new peaks had no value in the old column), and
+    the solver failed to converge. Checked here, in order:
+
+    - the matrix still exists, and the vectors are finite and sized to it;
+    - a payload that records its matrix's fingerprint matches it (shape,
+      non-zeros, creation time);
+    - a payload written before fingerprints equals the sums the importer or
+      quantifier recorded for the matrix, exactly (the statistics are computed
+      from those very sums); with no such record it cannot be checked, and is
+      recomputed once.
+    """
+    matrix = _tfidf_cache_matrix(stored, modality)
+    now = _matrix_fingerprint(ds, matrix)
+    if now is None:
+        raise ValueError(f"the cache describes {matrix}, which this store no longer holds")
+    check_tfidf_arrays(params, n_cols=now["n_cols"], what=f"cached TF-IDF statistics of {matrix}")
+    depth = np.asarray(params["cell_depth"], dtype=np.float64)
+    if depth.shape[0] not in (now["n_rows"], ds.n_cells):
+        raise ValueError(f"the cache holds {depth.shape[0]} cell depths for {matrix}'s "
+                         f"{now['n_rows']} rows")
+    recorded = stored.get("fingerprint") if isinstance(stored, dict) else None
+    if recorded is not None:
+        if dict(recorded) != now:
+            raise ValueError(f"the cache was computed from another {matrix} "
+                             f"(recorded {dict(recorded)}, now {now})")
+        return
+    layer = matrix[len(modality) + 1:] if matrix.startswith(f"{modality}_") else "counts"
+    sums = _importer_sums(ds, modality, layer)
+    if sums is None:
+        raise ValueError(f"the cache records no fingerprint of {matrix} and the store keeps no "
+                         f"importer sums to check it against")
+    cell_tot, feat_tot = sums
+    _n_alloc, n_true = _safe_n_cells(ds, modality, layer)
+    idf_now = np.log1p(n_true / np.maximum(feat_tot, 1.0)).astype(np.float32)
+    if (not np.array_equal(depth[:cell_tot.shape[0]], cell_tot)
+            or not np.array_equal(np.asarray(params["idf"], dtype=np.float32), idf_now)):
+        raise ValueError(f"the cached statistics are not {matrix}'s sums (stale)")
+
+
+def _hydrate_tfidf_params(ds, stored, modality):
+    """Fill in the arrays a cached params dict refers to by column name, and
+    check that they still describe their matrix.
+
+    Older cytomes carry `cell_depth` and `idf` inline; newer ones carry only
+    the scalar and the column names, so the vectors are read back from the
+    tables here. Either way the caller gets the same three keys, or a
+    ``ValueError`` saying why the cache is stale (both readers then recompute;
+    see ``_assert_tfidf_cache_current``).
     """
     params = dict(stored)
     params.pop("matrix", None)
+    params.pop("fingerprint", None)
     depth_col = params.pop("cell_depth_column", None)
     if depth_col is not None and "cell_depth" not in params:
         params["cell_depth"] = np.asarray(ds.cells[depth_col], dtype=np.float64)
     idf_col = params.pop("idf_column", None)
     if idf_col is not None and "idf" not in params:
         params["idf"] = np.asarray(ds.features(modality)[idf_col], dtype=np.float32)
+    if "cell_depth" in params and "idf" in params:
+        _assert_tfidf_cache_current(ds, stored, params, modality)
     return params
 
 
@@ -468,8 +601,9 @@ def _load_or_compute_tfidf_stats(
             params = _hydrate_tfidf_params(ds, stored, modality)
         except Exception as e:
             # The cache points at a column that is no longer there (a dropped
-            # feature table, a subset that did not carry it). Recompute rather
-            # than fail on someone else's stale metadata.
+            # feature table, a subset that did not carry it), or no longer
+            # describes its matrix (re-quantified). Recompute rather than fail
+            # on someone else's stale metadata.
             if verbosity > 0:
                 print(f"  Cached TF-IDF stats at {key!r} are unusable ({e}); "
                       f"recomputing")

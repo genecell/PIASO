@@ -115,18 +115,29 @@ def _make_unique(names):
 
     Cell Ranger gene *symbols* are not unique (gene *ids* are). Leaving
     duplicates in ``var_names`` makes every downstream ``adata[:, gene]``
-    ambiguous, so this mirrors what users expect from the ecosystem.
+    ambiguous, so this mirrors what users expect from the ecosystem
+    (anndata's ``make_index_unique``): a suffix that would repeat a name
+    already present is skipped, so ``['A', 'A', 'A-1']`` becomes
+    ``['A', 'A-2', 'A-1']``, not two ``'A-1'``.
     """
-    names = np.asarray(names, dtype=object)
+    names = np.asarray(names, dtype=object).astype(str)
+    used = set(names.tolist())
     seen: dict = {}
     out = np.empty(len(names), dtype=object)
     for i, n in enumerate(names):
         if n not in seen:
             seen[n] = 0
             out[i] = n
-        else:
-            seen[n] += 1
-            out[i] = f"{n}-{seen[n]}"
+            continue
+        k = seen[n]
+        while True:
+            k += 1
+            cand = f"{n}-{k}"
+            if cand not in used:
+                break
+        seen[n] = k
+        used.add(cand)
+        out[i] = cand
     return out.astype(str)
 
 
@@ -362,6 +373,46 @@ def read_10x(path, **kwargs):
     return (read_10x_h5 if inner.is_file() else read_10x_mtx)(inner, **kwargs)
 
 
+def _n_barcodes(folder) -> int:
+    """How many cells a Cell Ranger folder's filtered matrix holds, read from the
+    file ``cytome.from_cellranger`` reads (the .h5, else the MTX folder)."""
+    folder = Path(folder)
+    h5 = folder / "filtered_feature_bc_matrix.h5"
+    if h5.exists():
+        import h5py
+        with h5py.File(h5, "r") as f:
+            grp = f["matrix"] if "matrix" in f else f[list(f.keys())[0]]
+            return int(grp["barcodes"].shape[0])
+    mtx = folder / "filtered_feature_bc_matrix"
+    for name in ("barcodes.tsv.gz", "barcodes.tsv"):
+        p = mtx / name
+        if p.exists():
+            opener = gzip.open if name.endswith(".gz") else open
+            with opener(p, "rt") as fh:
+                return sum(1 for line in fh if line.strip())
+    raise FileNotFoundError(f"No filtered matrix in {folder}")
+
+
+def _library_of_each_row(paths, labels, cells):
+    """Each merged cell's library index, from the libraries' row blocks; checked against
+    the sample column that merge wrote, so a change in merge's order cannot go unseen."""
+    counts = [_n_barcodes(p) for p in paths]
+    if sum(counts) != len(cells):
+        raise RuntimeError(
+            f"importCellRanger: the merged store has {len(cells)} cells, the libraries' matrices "
+            f"{sum(counts)} ({counts}); cannot tell which library each cell came from.")
+    lib = np.repeat(np.arange(len(paths)), counts)
+    if "sample_id" in cells.columns:
+        expected = np.asarray(labels, dtype=object)[lib]
+        got = cells["sample_id"].astype(object).to_numpy()
+        bad = int((got != expected).sum())
+        if bad:
+            raise RuntimeError(
+                f"importCellRanger: {bad} merged cells are not in their library's row block "
+                f"(sample_id differs from the expected label); the merged order changed.")
+    return lib
+
+
 def importCellRanger(
     path,
     output: str | Path,
@@ -416,7 +467,9 @@ def importCellRanger(
     tss_bed : str, optional
         TSS BED for per-cell TSS enrichment during fragment import.
     compression : str, default "lz4"
-        Fragment chunk compression (``'lz4'``/``'zlib'``/``'zstd'``).
+        Fragment chunk compression. Only ``'lz4'`` is supported: the importer
+        wrote lz4 bytes whatever was asked, so ``'zlib'`` and ``'zstd'`` gave
+        mislabelled chunks (an unreadable store for ``'zlib'``).
     build_index : bool, default True
         Build the peak / fragment spatial index.
     rust_binary : str, optional
@@ -537,7 +590,15 @@ def importCellRanger(
     out = Path(output)
     cytome.from_cellranger([str(p) for p in paths], str(out), sample_name=labels,
                            modalities=modality, import_fragments=False,
-                           keep_chroms=keep_chroms, build_index=build_index, force=force)
+                           keep_chroms=keep_chroms, build_index=build_index, force=force).close()
+    # cytome.from_cellranger leaves an unreferenced dataset on the new store
+    # (the merge's, it seems) that holds its write lock until Python's cycle
+    # collector frees it: the barcode rewrite below then waited out SQLite's
+    # busy timeout and failed with "database is locked", on every multi-folder
+    # import with fragments. Closing the returned dataset is not enough
+    # (measured); collecting is. The cytome side should close what it opens.
+    import gc
+    gc.collect()
     if not want_frag:
         return cytome.open(str(out))
 
@@ -551,14 +612,22 @@ def importCellRanger(
         miss = [str(paths[i]) for i, p in enumerate(paths) if _frag(p) is None]
         print(f"[importCellRanger] no atac_fragments.tsv.gz in {miss}; those libraries get peaks only.")
 
-    # suffix merged barcodes per library so the single k-way import can disambiguate collisions
+    # Suffix merged barcodes per library so the single k-way import can
+    # disambiguate collisions. The library of a cell is its ROW BLOCK: merge
+    # concatenates the libraries in order, each as many rows as its matrix has
+    # barcodes. Mapping sample names to indices gave two libraries with the
+    # same name one suffix (fragments joined to the wrong library's cells), and
+    # an unexpected name the suffix '<NA>'.
     ds = cytome.open(str(out))
-    cells = ds.cells.to_pandas()
-    lab_to_idx = {lab: i for i, lab in enumerate(labels)}
-    suf = cells["sample_id"].map(lab_to_idx).astype("Int64").astype(str)
-    cells["barcode"] = cells["barcode"].astype(str) + "-" + suf
-    ds.set_entity("cells", cells)
-    ds.close()
+    try:
+        cells = ds.cells.to_pandas()
+        if "cell_idx" in cells.columns:
+            cells = cells.sort_values("cell_idx", kind="stable").reset_index(drop=True)
+        lib = _library_of_each_row(paths, labels, cells)
+        cells["barcode"] = cells["barcode"].astype(str) + "-" + lib.astype(str)
+        ds.set_entity("cells", cells)
+    finally:
+        ds.close()
 
     importFragments(cytome=str(out), fragments=[f for _, f in have],
                     barcode_suffixes=[str(i) for i, _ in have], genome=genome,

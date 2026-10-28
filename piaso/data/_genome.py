@@ -563,6 +563,12 @@ def fetch_genome(
 
     genome_dir.mkdir(parents=True, exist_ok=True)
 
+    # Every file reaches its final name complete or not at all (a temporary
+    # file beside it, renamed): the check above takes a file under its final
+    # name as done, so an interrupted download written straight there was
+    # reported "already available" ever after.
+    from ._download import download, copy_atomic
+
     if source_dir is not None:
         # Copy from local directory
         local = Path(source_dir)
@@ -570,7 +576,7 @@ def fetch_genome(
             src = local / filename
             dst = genome_dir / filename
             if src.exists():
-                shutil.copy2(str(src), str(dst))
+                copy_atomic(src, dst)
                 print(f"  Copied {filename}")
             else:
                 print(f"  WARNING: {filename} not found in {source_dir}")
@@ -578,12 +584,10 @@ def fetch_genome(
             src = local / gtf_spec["filename"]
             dst = genome_dir / gtf_spec["filename"]
             if src.exists():
-                shutil.copy2(str(src), str(dst))
+                copy_atomic(src, dst)
                 print(f"  Copied {gtf_spec['filename']}")
     else:
         # Download per-file from the PIASO-data master branch on GitHub
-        import urllib.request
-
         if gtf_spec is not None:
             print(
                 f"Downloading {genome} reference data "
@@ -596,7 +600,7 @@ def fetch_genome(
             url = f"{PIASO_DATA_RAW_URL}/{genome}/{filename}"
             dst = genome_dir / filename
             try:
-                urllib.request.urlretrieve(url, str(dst))
+                download(url, dst)
                 size_kb = dst.stat().st_size / 1024
                 if size_kb > 1024:
                     print(f"  {filename}  ({size_kb / 1024:.1f} MB)")
@@ -647,6 +651,22 @@ def fetch_genome(
     return str(genome_dir)
 
 
+def _write_atomic(final_path: Path, write):
+    """Run ``write(tmp_path)`` and rename its output to ``final_path`` only once it is complete."""
+    import tempfile
+    fd, tmp = tempfile.mkstemp(prefix=f".{final_path.name}.", suffix=".part", dir=str(final_path.parent))
+    os.close(fd)
+    try:
+        out = write(tmp)
+        from ._download import _umask
+        os.chmod(tmp, 0o666 & ~_umask())
+        os.replace(tmp, final_path)
+        return out
+    finally:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+
+
 def _fetch_and_normalize_gtf(gtf_spec: dict, genome_dir: Path) -> Path:
     """Download a GTF from ``gtf_spec`` into ``genome_dir`` and, when
     the source needs it, remap chromosome names to UCSC ``chr1`` style.
@@ -664,7 +684,7 @@ def _fetch_and_normalize_gtf(gtf_spec: dict, genome_dir: Path) -> Path:
     Returns the path to the FINAL gtf file (chrom-remapped if
     applicable).
     """
-    import urllib.request
+    from ._download import download
 
     final_path = genome_dir / gtf_spec["filename"]
     raw_path = (
@@ -673,7 +693,7 @@ def _fetch_and_normalize_gtf(gtf_spec: dict, genome_dir: Path) -> Path:
         else final_path
     )
     print(f"  fetching GTF: {gtf_spec['filename']}")
-    urllib.request.urlretrieve(gtf_spec["url"], str(raw_path))
+    download(gtf_spec["url"], raw_path)
     size_mb = raw_path.stat().st_size / 1024 / 1024
     print(f"    downloaded ({size_mb:.1f} MB)")
 
@@ -687,17 +707,17 @@ def _fetch_and_normalize_gtf(gtf_spec: dict, genome_dir: Path) -> Path:
             )
         report_path = genome_dir / "_assembly_report.txt"
         print(f"  fetching assembly report for chrom remap")
-        urllib.request.urlretrieve(report_url, str(report_path))
+        download(report_url, report_path)
         chrom_map = _parse_refseq_assembly_report(str(report_path))
         print(f"    parsed {len(chrom_map)} chrom mappings")
-        stats = _remap_gtf_chroms(str(raw_path), str(final_path), chrom_map)
+        stats = _write_atomic(final_path, lambda tmp: _remap_gtf_chroms(str(raw_path), tmp, chrom_map))
         print(
             f"  chrom remap: kept {stats['kept']:,} lines, "
             f"dropped {stats['dropped']:,} (unmapped scaffolds)"
         )
         raw_path.unlink()   # remove the un-remapped original
     elif remap_kind == "ensembl":
-        stats = _remap_ensembl_gtf(str(raw_path), str(final_path))
+        stats = _write_atomic(final_path, lambda tmp: _remap_ensembl_gtf(str(raw_path), tmp))
         print(
             f"  ensembl chrom remap (prepend 'chr'): "
             f"kept {stats['kept']:,} lines"

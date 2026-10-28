@@ -13,7 +13,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'external', 'cy
 
 from piaso.tools._normalization import _precompute_stats, _precompute_stats_streaming
 
-MTG_H5AD = "/path/to/project/mtg_full.h5ad"
+from conftest import MTG_H5AD
 # E18_CYTOME comes from conftest.py; @pytest.mark.requires_e18 applies the skip
 
 
@@ -102,7 +102,7 @@ def test_streaming_batch_size_consistency():
     print("PASS: batch sizes 50, 100, 150, 300 all produce identical streaming KNN")
 
 
-@pytest.mark.skipif(not os.path.exists(MTG_H5AD), reason="MTG h5ad not available")
+@pytest.mark.data(MTG_H5AD)
 def test_streaming_stats_close_rna():
     """Verify mean/var stats are close (float32 vs float64 accumulation).
 
@@ -138,7 +138,7 @@ def test_streaming_stats_close_rna():
     print("PASS: stats within float32 tolerance")
 
 
-@pytest.mark.skipif(not os.path.exists(MTG_H5AD), reason="MTG h5ad not available")
+@pytest.mark.data(MTG_H5AD)
 def test_streaming_knn_high_overlap_rna():
     """Verify KNN overlap is high on real RNA data.
 

@@ -89,15 +89,35 @@ def _ensure_infog_params(ds, modality, use_cached_stats=True, batch_size=2048):
                 DeprecationWarning, stacklevel=3,
             )
             return legacy
-    if getattr(ds, "read_only", False):
-        # A store opened read-only cannot keep the cache: compute for this call.
-        from ..tools._normalization import _infog_streaming
-        return _infog_streaming(ds, batch_size=batch_size, modality=modality,
-                                write=False)["infog_params"]
-    # Cache miss / forced refresh — compute via piaso.tl.infog (streaming, lazy)
-    from ..tools._normalization import infog as _infog
-    _infog(ds, save_layer=False, streaming=True, batch_size=batch_size, verbosity=0)
-    return ds.metadata.get(f"{modality}_infog_params") or ds.metadata.get("infog_params")
+    # Cache miss / forced refresh: compute THIS modality's parameters and cache
+    # only them. This used to call infog(ds) without the modality, so a GA or
+    # ATAC request computed RNA INFOG and returned None, and every request --
+    # a plot or a COSG run with layer='infog' -- rewrote the feature table's
+    # highly variable genes as a side effect of reading a layer. The
+    # parameters are what infog(ds, modality=...) stores, nothing else.
+    from ..tools._normalization import _infog_streaming
+    try:
+        res = _infog_streaming(ds, batch_size=batch_size, modality=modality, write=False)
+    except ValueError as exc:
+        raise ValueError(
+            f"{modality}_infog_params are not cached in this cytome, and computing them stopped: "
+            f"{exc}\nTo cache them on purpose, run piaso.tl.infog(ds, modality={modality!r}) once "
+            f"(allow_non_integer=True for a matrix that is not counts).") from exc
+    params = res["infog_params"]
+    payload = {
+        "cell_depth": params["cell_depth"],
+        "inv_gene_depth": params["inv_gene_depth"],
+        "scale": float(params["scale"]),
+        "counts_sum": float(params["counts_sum"]),
+        "threshold": (float(params["threshold"]) if params["threshold"] is not None else None),
+        # no genes were selected: the parameters alone, which is all a reader uses
+        "n_top_genes": None,
+    }
+    if not getattr(ds, "read_only", False):
+        # A store opened read-only cannot keep the cache: computed for this call only.
+        ds.metadata[f"{modality}_infog_params"] = payload
+        ds.flush()
+    return payload
 
 
 def _ensure_tfidf_params(ds, modality, use_cached_stats=True, batch_size=2048):

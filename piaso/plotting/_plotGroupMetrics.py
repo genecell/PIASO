@@ -16,35 +16,31 @@ import matplotlib.pyplot as plt
 
 
 def _resolve_group_colors(df, data, groupby, palette):
-    """Return ``{group: hex}`` for the df index, best-effort."""
+    """Return ``{group: colour}`` for the df index, by name.
+
+    Through the resolver every plot uses: an explicit ``palette`` (dict by
+    name, list matched to the column's order), else the colours
+    ``calculateGroupMetrics`` stashed in ``df.attrs['colors']``, else the
+    column's stored colours (re-resolved from ``data`` + ``groupby``), else
+    the PIASO default. Without ``data`` the df's own row order is the order a
+    list or the default palette is matched to.
+    """
+    import pandas as pd
+    from ._categories import resolve_category_style
     groups = [str(g) for g in df.index]
-    from . import color as _color_mod
-    default = _color_mod.d_color4
-
-    # 1. explicit palette (dict or list)
-    if isinstance(palette, dict):
-        return {g: palette.get(g, default[i % len(default)]) for i, g in enumerate(groups)}
-    if isinstance(palette, (list, tuple)) and len(palette):
-        return {g: palette[i % len(palette)] for i, g in enumerate(groups)}
-
-    # 2. colours stashed on the df by calculateGroupMetrics
     stashed = df.attrs.get("colors")
-    if isinstance(stashed, dict) and stashed:
-        return {g: stashed.get(g, default[i % len(default)]) for i, g in enumerate(groups)}
-
-    # 3. re-resolve from the source via the shared category store
+    if palette is None and isinstance(stashed, dict) and stashed:
+        palette = {str(k): v for k, v in stashed.items()}
     gb = groupby or df.attrs.get("groupby")
     if data is not None and gb is not None:
         try:
-            from ._plotEmbedding import _resolve_categorical_style
-            pal, _order = _resolve_categorical_style(data, gb)
-            if isinstance(pal, dict) and pal:
-                return {g: pal.get(g, default[i % len(default)]) for i, g in enumerate(groups)}
+            style = resolve_category_style(data, gb, palette=palette)
+            return {g: style.color(g) for g in groups}
         except Exception:
             pass
-
-    # 4. default palette per group
-    return {g: default[i % len(default)] for i, g in enumerate(groups)}
+    style = resolve_category_style(values=pd.Categorical(groups, categories=groups),
+                                   palette=palette, read_stored=False)
+    return {g: style.color(g) for g in groups}
 
 
 def plotGroupMetrics(
@@ -62,7 +58,7 @@ def plotGroupMetrics(
     fontsize: Optional[float] = None,
     rotation: float = 45,
     save: Optional[str] = None,
-    show: bool = True,
+    show: Optional[bool] = True,
     return_fig: bool = False,
 ):
     """Plot the per-group metrics DataFrame from :func:`piaso.pp.calculateGroupMetrics`.
@@ -96,10 +92,14 @@ def plotGroupMetrics(
     rotation : float, default 45
         Group-label rotation (anchored to the ticks so names don't overlap).
     save, show, return_fig
-        Output options.
+        Output options. The figure is returned with ``return_fig=True``, and
+        whenever it is not shown; it is closed only once saved and not shown.
     """
     import pandas as pd
+    from . import _figure
 
+    if kind not in ("bar", "heatmap"):
+        raise ValueError(f"kind must be 'bar' or 'heatmap', got {kind!r}.")
     _fs = float(fontsize) if fontsize is not None else float(
         plt.rcParams.get("font.size", 10) or 10)
 
@@ -134,7 +134,7 @@ def plotGroupMetrics(
         # Hide unused panels.
         for k in range(n, nrow * ncol):
             axs[k // ncol][k % ncol].axis("off")
-        fig.tight_layout()
+        _figure.layout(fig, quiet=False)
 
     elif kind == "heatmap":
         M = df[cols].to_numpy(dtype=float)
@@ -166,18 +166,15 @@ def plotGroupMetrics(
         cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
         cbar.ax.tick_params(labelsize=_fs * 0.6)
         cbar.set_label(f"{normalize}-scaled" if normalize else "value", fontsize=_fs * 0.7)
-        fig.tight_layout()
+        _figure.layout(fig, quiet=False)
     else:
         raise ValueError(f"kind must be 'bar' or 'heatmap', got {kind!r}.")
 
-    from ..settings import _savefig
-    _savefig(fig, save, writekey="group_metrics")
-    if show:
-        plt.show()
-    else:
-        plt.close(fig)
+    out = _figure.finish(fig, created=True, show=bool(show), save=save,
+                         writekey="group_metrics")
     if return_fig:
         return fig
+    return out
 
 
 # snake_case alias, consistent with the other piaso.pl entry points

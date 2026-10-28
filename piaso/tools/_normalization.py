@@ -382,6 +382,7 @@ def _infog_original(
         counts = sparse.csr_matrix(counts)
 
     ### Raise an error if any negative values are found in counts
+    _check_finite_counts(counts.data, "infog")
     if counts.data.size > 0 and counts.data.min() < 0:
         raise ValueError("Input counts contain negative values, which is not allowed.")
 
@@ -692,6 +693,7 @@ def _infog_streaming(
 
     _counts_checked = False
     for chunk, indices in chunk_factory():
+        _check_finite_counts(chunk.data if sparse.issparse(chunk) else np.asarray(chunk), "infog")
         if not _counts_checked:
             _check_integer_counts(
                 chunk, layer=layer, allow_non_integer=allow_non_integer,
@@ -742,9 +744,8 @@ def _infog_streaming(
     gene_mean = gene_sum / _n_eff
     gene_var = gene_sum_sq / _n_eff - gene_mean ** 2
 
-    # Select top n HVG by variance
-    hvg_indices = np.argsort(gene_var)[::-1][:n_top_genes]
-    hvg_indices = np.sort(hvg_indices)  # sort for consistent ordering
+    # Select top n HVG by variance: the in-memory path's rule, ties in gene order
+    hvg_indices = np.sort(_select_top_n(gene_var, n_top_genes))
     hvg_mask = np.zeros(n_genes, dtype=bool)
     hvg_mask[hvg_indices] = True
 
@@ -985,19 +986,35 @@ def infog(
         return out
 
 
-### Refer to Scanpy for _select_top_n function
 def _select_top_n(scores, n_top):
-    # Asking for more top features than exist makes `-n_top` an out-of-range
-    # kth for argpartition, and numpy reports it as "kth(=-4216) out of bounds
-    # (784)" -- a message about an index nobody passed. Datasets with fewer
-    # features than the 3000/5000 defaults are ordinary: a targeted spatial
-    # panel is a few hundred genes, and Fashion-MNIST is 784 pixels.
-    n_top = int(min(n_top, scores.shape[0]))
-    reference_indices = np.arange(scores.shape[0], dtype=int)
-    partition = np.argpartition(scores, -n_top)[-n_top:]
-    partial_indices = np.argsort(scores.iloc[partition])[::-1]
-    global_indices = reference_indices[partition][partial_indices]
-    return global_indices
+    """Indices of the ``n_top`` largest scores, largest first; equal scores in feature order.
+
+    The one rule of both INFOG paths. The in-memory path took scanpy's
+    argpartition and the streaming path a reversed argsort, and the two
+    ordered equal scores differently: once ``n_top_genes`` reaches into the
+    genes of equal (often zero) variance, 22 of 300 selected genes differed on
+    a toy. Without ties the selection is the same as either's. Asking for more
+    than there are takes them all (a targeted panel has a few hundred genes).
+    """
+    s = np.asarray(scores, dtype=np.float64)
+    n_top = int(min(n_top, s.shape[0]))
+    order = np.lexsort((np.arange(s.shape[0]), -s))
+    return order[:n_top]
+
+
+def _check_finite_counts(values, what):
+    """Refuse NaN or infinite counts: one makes every INFOG value NaN.
+
+    A NaN count propagates through the cell and gene depths into the whole
+    normalised layer, and the variance ranking then selects a single gene, all
+    without a word. score() already rejects non-finite input; INFOG now does too.
+    """
+    v = np.asarray(values)
+    if v.size and np.issubdtype(v.dtype, np.floating) and not np.all(np.isfinite(v)):
+        n_bad = int((~np.isfinite(v)).sum())
+        raise ValueError(
+            f"{what}: the counts contain {n_bad} NaN or infinite value(s); they would make every "
+            f"normalised value NaN. Clean the matrix (e.g. np.nan_to_num) first.")
 
 ### Refer to scDRS for _get_p_from_empi_null function
 def _get_p_from_empi_null(
@@ -1452,6 +1469,164 @@ def _gene_set_weight_matrix(gene_sets_indices, weights_list, n_features):
     )
 
 
+#: The fused kernel takes int32 row pointers. A call is split by rows so that no
+#: call holds more non-zeros than this; tests lower it to exercise the split.
+_KERNEL_MAX_NNZ = 2 ** 31 - 1
+
+
+def _fused_matmul_reduce_rows(fmr, fmr32, A, bc_data, bc_indices, bc_indptr, bc_n_cols,
+                              query_scores, *, n_ctrl_set, n_sets, max_workers, compute_pvalues):
+    """The fused kernel over every row of CSR ``A``, in as few calls as int32 allows.
+
+    The kernel reads ``A``'s row pointers as int32. Casting a matrix with 2^31
+    or more non-zeros (about a million cells of RNA) wrapped them and the
+    kernel read the wrong entries or panicked. Rows are independent in the
+    kernel -- each row's control means and p-values depend on that row alone
+    -- so a matrix that does not fit is handed over in row blocks that do, and
+    the result is the same as one call. A matrix that fits is passed whole,
+    exactly as before. Returns ``(ctrl_means, pvals_or_None)``, each
+    ``(n_rows, n_sets)``.
+    """
+    n_rows, n_features = A.shape
+    if bc_indptr.size and int(bc_indptr[-1]) > 2 ** 31 - 1:
+        raise ValueError(
+            f"score(): the control-set matrix has {int(bc_indptr[-1]):,} entries, more than the "
+            f"kernel's int32 indices hold; score fewer gene sets per call or lower n_ctrl_set.")
+    indptr = np.asarray(A.indptr)
+    qs = np.asarray(query_scores, dtype=np.float64)
+
+    def _call(a, q):
+        _fmr, _a_vals, _b_vals = _fused_matmul_reduce_dispatch(fmr, fmr32, a.data, bc_data)
+        m, p = _fmr(
+            _a_vals,
+            a.indices.astype(np.int32, copy=False),
+            a.indptr.astype(np.int32, copy=False),
+            a.shape[0], n_features,
+            _b_vals, bc_indices, bc_indptr, bc_n_cols,
+            q.ravel().astype(np.float64, copy=False),
+            n_sets, n_ctrl_set,
+            # The kernel's TILE, not the call: see _kernel_tile_rows.
+            _kernel_tile_rows(a.shape[0], max(1, max_workers)),
+            max(1, max_workers), compute_pvalues,
+        )
+        return m.reshape(a.shape[0], n_sets), (p.reshape(a.shape[0], n_sets) if p is not None else None)
+
+    if int(indptr[-1]) <= _KERNEL_MAX_NNZ:
+        return _call(A, qs)
+    means = np.empty((n_rows, n_sets), dtype=np.float64)
+    pvals = np.empty((n_rows, n_sets), dtype=np.float64) if compute_pvalues else None
+    start = 0
+    while start < n_rows:
+        end = int(np.searchsorted(indptr, indptr[start] + _KERNEL_MAX_NNZ, side="right")) - 1
+        end = min(max(end, start + 1), n_rows)    # one row always fits: its nnz <= n_features
+        m, p = _call(A[start:end], qs[start:end])
+        means[start:end] = m
+        if pvals is not None and p is not None:
+            pvals[start:end] = p
+        start = end
+    return means, pvals
+
+
+def _name_to_indices(var_names):
+    """``name -> [indices]`` for an AnnData's var_names, every position of a repeated name kept.
+
+    A dict built as ``{name: idx}`` kept only the last column of a repeated
+    name, while the cytome path scores all of them (``_gene_name_alias_map``):
+    the same gene list then scored different columns on the two inputs. Both
+    now take the union, and the repeat is reported the same way.
+    """
+    out: dict = {}
+    for idx, name in enumerate(var_names):
+        out.setdefault(name, []).append(idx)
+    dups = sorted(str(n) for n, v in out.items() if len(v) > 1)
+    if dups:
+        warnings.warn(
+            f"score: {len(dups)} gene name(s) are repeated in var_names (e.g. {dups[:5]}); each is "
+            f"scored over ALL its columns, as on a cytome. Make them unique "
+            f"(adata.var_names_make_unique()) to score one.", UserWarning, stacklevel=3)
+    return out
+
+
+def _resolve_gene_sets(parsed, gene_weights, name_to_idx):
+    """Gene sets as feature indices and weights, the one rule both inputs use.
+
+    Each name resolves to all its features (a repeated name, or an alias, to
+    several), and its weight goes with each of them. A set none of whose
+    genes resolves is left out and named in ``dropped``. Returns
+    ``(names, indices, weights, dropped)``.
+    """
+    names, indices, weights, dropped = [], [], [], []
+    for gs_idx, (name, genes) in enumerate(parsed.items()):
+        w_vec = gene_weights[gs_idx] if gene_weights is not None else None
+        if w_vec is not None and len(w_vec) != len(genes):
+            raise ValueError(
+                f"gene_weights for gene set {name!r} has {len(w_vec)} weights for {len(genes)} genes; "
+                f"they must line up one to one, in order.")
+        valid_idx, valid_w = [], []
+        for gi, g in enumerate(genes):
+            idxs = name_to_idx.get(g)
+            if idxs is None:
+                continue
+            idxs = list(idxs) if isinstance(idxs, (list, tuple, np.ndarray)) else [idxs]
+            if not idxs:
+                continue
+            valid_idx.extend(idxs)
+            valid_w.extend([(w_vec[gi] if w_vec is not None else 1.0)] * len(idxs))
+        if not valid_idx:
+            dropped.append(name)
+            continue
+        names.append(name)
+        indices.append(valid_idx)
+        weights.append(np.array(valid_w, dtype=float) if gene_weights is None
+                       else _check_gene_weights(valid_w, name))
+    return names, indices, weights, dropped
+
+
+def _cell_mask_array(cell_mask, n_cells):
+    """``cell_mask`` as a boolean array of length ``n_cells``, or None.
+
+    Documented as a boolean mask or the indices of the cells to score; the
+    indices used to be cast to bool, which reads [3, 7, 9] as "the first
+    three cells" (or fails on the length)."""
+    if cell_mask is None:
+        return None
+    arr = np.asarray(cell_mask)
+    if arr.dtype == bool:
+        if arr.shape[0] != n_cells:
+            raise ValueError(f"cell_mask length ({arr.shape[0]}) must match the {n_cells} cells.")
+        return arr
+    if np.issubdtype(arr.dtype, np.integer):
+        if arr.size and (arr.min() < 0 or arr.max() >= n_cells):
+            raise ValueError(f"cell_mask indices must lie in [0, {n_cells}); got {arr.min()} to {arr.max()}.")
+        out = np.zeros(n_cells, dtype=bool)
+        out[arr] = True
+        return out
+    raise TypeError(f"cell_mask must be a boolean mask or integer cell indices, not {arr.dtype}.")
+
+
+def _take_rows(X, mask):
+    """Rows ``mask`` of a sparse or dense matrix (an AnnData layer or ``.X``)."""
+    if sparse.issparse(X):
+        if X.format not in ("csr", "csc"):
+            X = X.tocsr()
+        return X[mask]
+    return np.asarray(X)[mask]
+
+
+def _warn_unmatched_sets(dropped, n_sets_given, where, stacklevel=3):
+    """One warning per call naming the gene sets none of whose genes are in the data.
+
+    They used to be dropped in silence, so their cell type could never be
+    predicted and nothing said why."""
+    if not dropped:
+        return
+    head = ", ".join(repr(d) for d in dropped[:5]) + (", ..." if len(dropped) > 5 else "")
+    warnings.warn(
+        f"score(): {len(dropped)} of {n_sets_given} gene set(s) match no feature of {where} and are "
+        f"left out of the result: {head}. Check the gene names (symbols against Ensembl ids, "
+        f"species, modality).", UserWarning, stacklevel=stacklevel)
+
+
 def _score_streaming_multi(
     ds,
     gene_list,
@@ -1599,31 +1774,12 @@ def _score_streaming_multi(
     else:  # list of lists
         parsed = {f"GeneSet_{i}": gs for i, gs in enumerate(gene_list)}
 
-    gene_set_names = []
-    gene_sets_indices = []
-    weights_list = []
-
-    for gs_idx, (name, genes) in enumerate(parsed.items()):
-        # name -> [indices]: a duplicated symbol resolves to ALL its features
-        # (union scoring). Track per-resolved-index weights in parallel.
-        valid_idx = []
-        valid_w = []
-        w_vec = gene_weights[gs_idx] if gene_weights is not None else None
-        for gi, g in enumerate(genes):
-            idxs = var_names_to_idx.get(g)
-            if not idxs:
-                continue
-            valid_idx.extend(idxs)
-            valid_w.extend([(w_vec[gi] if w_vec is not None else 1.0)] * len(idxs))
-        if not valid_idx:
-            continue
-        gene_set_names.append(name)
-        gene_sets_indices.append(valid_idx)
-        weights_list.append(
-            np.array(valid_w, dtype=float) if gene_weights is None
-            else _check_gene_weights(valid_w, name))
+    gene_set_names, gene_sets_indices, weights_list, _dropped = _resolve_gene_sets(
+        parsed, gene_weights, var_names_to_idx)
 
     n_sets = len(gene_set_names)
+    if n_sets:
+        _warn_unmatched_sets(_dropped, len(parsed), f"modality '{modality}'")
     if n_sets == 0:
         _ex = list(var_names[:5])
         raise ValueError(
@@ -1909,25 +2065,13 @@ def _score_streaming_multi(
 
         # Control matmul
         if _rust_fmr is not None:
-            _fmr, _a_vals, _b_vals = _fused_matmul_reduce_dispatch(
-                _rust_fmr, _rust_fmr32, chunk_csr.data, big_ctrl_csr.data)
-            m_flat, p_flat = _fmr(
-                _a_vals,
-                chunk_csr.indices.astype(np.int32, copy=False),
-                chunk_csr.indptr.astype(np.int32, copy=False),
-                n_chunk, n_features,
-                _b_vals, bc_indices, bc_indptr, bc_n_cols,
-                query_scores[ri].ravel().astype(np.float64, copy=False),
-                n_sets, n_ctrl_set,
-                # The kernel's TILE, not the chunk. Passing n_chunk here made
-                # one tile, so one thread did all the work — see
-                # _kernel_tile_rows.
-                _kernel_tile_rows(n_chunk, max(1, max_workers)),
-                max(1, max_workers), compute_pvalues,
-            )
-            ctrl_means[ri] = m_flat.reshape(n_chunk, n_sets)
-            if compute_pvalues and p_flat is not None:
-                pval_matrix[ri] = p_flat.reshape(n_chunk, n_sets)
+            m_blk, p_blk = _fused_matmul_reduce_rows(
+                _rust_fmr, _rust_fmr32, chunk_csr, big_ctrl_csr.data, bc_indices, bc_indptr,
+                bc_n_cols, query_scores[ri], n_sets=n_sets, n_ctrl_set=n_ctrl_set,
+                max_workers=max_workers, compute_pvalues=compute_pvalues)
+            ctrl_means[ri] = m_blk
+            if compute_pvalues and p_blk is not None:
+                pval_matrix[ri] = p_blk
         else:
             # Python fallback: chunked dense
             chunk_result = chunk_csr @ big_ctrl_csr
@@ -2001,17 +2145,25 @@ def _write_cytome_score(ds, key_added, score_val, pval, compute_pvalues, pvalue_
 
 #### Gene Set Scoring Method
 def _write_single_set_result(adata, key_added, score_matrix, pval_matrix,
-                             verbosity=1):
+                             verbosity=1, mask=None):
     """Write a one-set multi-path result where a single-set call would put it.
 
     ``gene_list={"NAME": [...]}`` takes the multi-set branch, which names each
     score by its own key and so had nothing to do with ``key_added``. But one
     set is one set: the caller asked for a column by that name, and plotting
-    it is the obvious next line.
+    it is the obvious next line. With a ``mask`` the rows are the masked cells,
+    written into the caller's full-length column with NaN elsewhere.
     """
-    adata.obs[key_added] = np.asarray(score_matrix)[:, 0]
+    def _full(v):
+        v = np.asarray(v)[:, 0]
+        if mask is None:
+            return v
+        out = np.full(adata.n_obs, np.nan, dtype=np.float64)
+        out[mask] = v
+        return out
+    adata.obs[key_added] = _full(score_matrix)
     if pval_matrix is not None:
-        adata.obs[f"{key_added}_pval"] = np.asarray(pval_matrix)[:, 0]
+        adata.obs[f"{key_added}_pval"] = _full(pval_matrix)
     if verbosity:
         print(f"Finished. The scores are saved in adata.obs['{key_added}'].")
 
@@ -2300,10 +2452,27 @@ def score(
     if layer is _UNSET:
         layer = 'infog'        # documented default (both backends). Explicit None = the base/raw matrix:
                                # AnnData → adata.X; cytome → {modality}_counts (mapped just below).
+    # A .cytome path is as valid an input as an open Dataset (the docstring
+    # says so): open it, score, close it. It used to reach the AnnData branch.
+    from ..utils._cytome_compat import _is_path_like, is_cytome_input, open_cytome
+    if _is_path_like(adata):
+        if not is_cytome_input(adata):
+            raise TypeError(f"score(): a path must point at a .cytome file, got {str(adata)!r}.")
+        with open_cytome(adata) as _ds:
+            return score(
+                _ds, gene_list, gene_weights=gene_weights, n_nearest_neighbors=n_nearest_neighbors,
+                leaf_size=leaf_size, layer=layer, random_seed=random_seed, n_ctrl_set=n_ctrl_set,
+                exclude_set_genes=exclude_set_genes, key_added=key_added, compute_pvalues=compute_pvalues,
+                fallback_chunk_size=fallback_chunk_size, max_workers=max_workers, use_rust=use_rust,
+                compute_on_fly=compute_on_fly, precomputed_knn=precomputed_knn, verbosity=verbosity,
+                modality=modality, batch_size=batch_size, cell_mask=cell_mask,
+                score_chunk_size=score_chunk_size, max_score_chunk_bytes=max_score_chunk_bytes,
+                max_score_batch_cache_bytes=max_score_batch_cache_bytes, pvalue_to=pvalue_to)
     # --- Cytome streaming dispatch ---
     if _is_cytome_dataset(adata):
         if layer is None:      # a cytome has no `.X`; None means the raw matrix = {modality}_counts
             layer = "counts"   # (mirrors `_get_infog_chunk_iterator`'s `layer or 'counts'`)
+        cell_mask = _cell_mask_array(cell_mask, adata.n_cells)
         _multi = isinstance(gene_list, (dict, pd.DataFrame)) or (
             isinstance(gene_list, list) and len(gene_list) > 0
             and isinstance(gene_list[0], (list, np.ndarray))
@@ -2355,19 +2524,12 @@ def score(
     # No global seeding: the draws below use local RandomState instances, which
     # reproduce the same stream without disturbing the caller.
 
-    # cell_mask on AnnData: subset adata, then run the existing logic on the
-    # subset. Output rows correspond to masked cells only — matches the
-    # cytome path's contract.
-    _original_adata = None
-    if cell_mask is not None:
-        cell_mask_arr = np.asarray(cell_mask).astype(bool)
-        if cell_mask_arr.shape[0] != adata.n_obs:
-            raise ValueError(
-                f"cell_mask length ({cell_mask_arr.shape[0]}) must match "
-                f"adata.n_obs ({adata.n_obs})."
-            )
-        _original_adata = adata
-        adata = adata[cell_mask_arr].copy()
+    # cell_mask on AnnData: score the selected cells only (the result has their
+    # rows, as on a cytome) and write any named result to the CALLER's object,
+    # NaN for the cells outside the mask, as the cytome path does. The rows are
+    # cut from the one matrix scored; scoring adata[mask].copy() copied every
+    # layer and then received the single-set results, which were lost with it.
+    _mask = _cell_mask_array(cell_mask, adata.n_obs)
 
     # --- Determine mode: single gene set vs multiple ---
     _multi = isinstance(gene_list, (dict, pd.DataFrame)) or (
@@ -2381,12 +2543,16 @@ def score(
             f"piaso.tl.score: layer '{layer}' not found in adata.layers "
             f"(available: {list(adata.layers)}). Create it (e.g. piaso.tl.score/normalize to make "
             f"'infog'), pass an existing layer, or pass layer=None to use adata.X.")
+    _X = adata.layers[layer] if layer is not None else adata.X
+    if _mask is not None:
+        _X = _take_rows(_X, _mask)
     cellxgene = _as_scoring_csr(
-        adata.layers[layer] if layer is not None else adata.X,
-        what=f"adata.layers[{layer!r}]" if layer is not None else "adata.X",
+        _X, what=f"adata.layers[{layer!r}]" if layer is not None else "adata.X",
     )
+    del _X
     n_cells, n_genes = cellxgene.shape
-    var_names_to_idx = {name: idx for idx, name in enumerate(adata.var_names)}
+    obs_index = adata.obs_names if _mask is None else adata.obs_names[_mask]
+    var_names_to_idx = _name_to_indices(adata.var_names)
     if precomputed_knn is not None:
         knn_idx = precomputed_knn
     else:
@@ -2465,28 +2631,17 @@ def score(
                 f"genes if you want key_added to name the result.",
                 UserWarning, stacklevel=2)
 
-        # Map gene names to indices, filter invalid
-        gene_set_names = []
-        gene_sets_indices = []
-        weights_list = []
-
-        for gs_idx, (name, genes) in enumerate(parsed.items()):
-            valid_idx = [var_names_to_idx[g] for g in genes if g in var_names_to_idx]
-            if not valid_idx:
-                continue
-            gene_set_names.append(name)
-            gene_sets_indices.append(valid_idx)
-            if gene_weights is not None:
-                w = gene_weights[gs_idx]
-                valid_mask = [g in var_names_to_idx for g in genes]
-                weights_list.append(_check_gene_weights(
-                    [w_i for w_i, m in zip(w, valid_mask) if m], name))
-            else:
-                weights_list.append(np.ones(len(valid_idx), dtype=float))
+        # Map gene names to indices (a repeated name to all its columns, as on a
+        # cytome); a set with no gene in the data is left out, and said so.
+        gene_set_names, gene_sets_indices, weights_list, _dropped = _resolve_gene_sets(
+            parsed, gene_weights, var_names_to_idx)
 
         n_sets = len(gene_set_names)
         if n_sets == 0:
-            raise ValueError("No valid gene sets found.")
+            raise ValueError(
+                f"No valid gene sets found: none of the {len(parsed)} gene set(s) has a gene in "
+                f"adata.var_names (named like {list(adata.var_names[:5])}).")
+        _warn_unmatched_sets(_dropped, len(parsed), "adata.var_names")
 
         # --- Control blocks (numpy draws) + the multiply (Rust when available) ---
         all_ctrl_rows, all_ctrl_cols, all_ctrl_data = [], [], []
@@ -2532,25 +2687,13 @@ def score(
         # Batched matrix multiply
         if _rust_fmr is not None:
             big_ctrl_csr = _big_ctrl_coo.tocsr()
-            cellxgene_csr = cellxgene.tocsr() if not sparse.isspmatrix_csr(cellxgene) else cellxgene
-            _fmr, _a_vals, _b_vals = _fused_matmul_reduce_dispatch(
-                _rust_fmr, _rust_fmr32, cellxgene_csr.data, big_ctrl_csr.data)
-            means_flat, pval_flat = _fmr(
-                _a_vals,
-                cellxgene_csr.indices.astype(np.int32, copy=False),
-                cellxgene_csr.indptr.astype(np.int32, copy=False),
-                n_cells, cellxgene_csr.shape[1],
-                _b_vals,
+            # in row blocks whose non-zeros fit the kernel's int32 row pointers
+            ctrl_means, pval_matrix = _fused_matmul_reduce_rows(
+                _rust_fmr, _rust_fmr32, cellxgene, big_ctrl_csr.data,
                 big_ctrl_csr.indices.astype(np.int32, copy=False),
                 big_ctrl_csr.indptr.astype(np.int32, copy=False),
-                big_ctrl_csr.shape[1],
-                query_scores.ravel().astype(np.float64, copy=False),
-                n_sets, n_ctrl_set,
-                _kernel_tile_rows(n_cells, max(1, max_workers)),
-                max(1, max_workers), compute_pvalues,
-            )
-            ctrl_means = means_flat.reshape(n_cells, n_sets)
-            pval_matrix = pval_flat.reshape(n_cells, n_sets) if pval_flat is not None else None
+                big_ctrl_csr.shape[1], query_scores, n_sets=n_sets, n_ctrl_set=n_ctrl_set,
+                max_workers=max_workers, compute_pvalues=compute_pvalues)
         else:
             # Python fallback: chunked dense conversion
             big_ctrl = _big_ctrl_coo.tocsc()
@@ -2579,7 +2722,7 @@ def score(
         score_matrix = (query_scores / scaling_factors[None, :]) - (ctrl_means / scaling_factors[None, :])
         if key_added is not None and len(gene_set_names) == 1:
             _write_single_set_result(adata, key_added, score_matrix,
-                                     pval_matrix, verbosity)
+                                     pval_matrix, verbosity, mask=_mask)
         return score_matrix, gene_set_names, pval_matrix
 
     else:
@@ -2595,16 +2738,22 @@ def score(
             raise ValueError(f"Length mismatch: the input gene_weights ({len(gene_weights)}) and gene_list ({len(gene_list)}) must be the same.")
 
         # Only keep genes in adata.var_names
-        valid_genes = set(adata.var_names)
         filtered_genes = []
         filtered_weights = []
         filtered_out_genes = []
         for gene, weight in zip(gene_list, gene_weights):
-            if gene in valid_genes:
+            if gene in var_names_to_idx:
                 filtered_genes.append(gene)
                 filtered_weights.append(weight)
             else:
                 filtered_out_genes.append(gene)
+
+        if not filtered_genes:
+            # An empty set used to come back as an all-NaN column that looked
+            # like a score; the multi-set path raises for the same input.
+            raise ValueError(
+                f"score(): none of the {len(filtered_out_genes)} gene(s) of the gene set is in "
+                f"adata.var_names (e.g. {filtered_out_genes[:5]}); there is nothing to score.")
 
         gene_list = filtered_genes
         gene_weights = np.array(filtered_weights, dtype=float)
@@ -2615,10 +2764,18 @@ def score(
         if verbosity > 0 and n_filtered_genes > 0:
             print(f"Note: {n_filtered_genes} genes were not found in adata.var_names and are excluded from scoring: {', '.join(filtered_out_genes[:10])} {'...' if n_filtered_genes > 10 else ''}")
 
-        cellxgene_subset = adata[:, gene_list].layers[layer] if layer is not None else adata[:, gene_list].X
-
-        # Map gene names to indices for KNN lookup
-        gene_idx = [var_names_to_idx[g] for g in gene_list]
+        # Each gene's columns (a repeated name has several, scored together as
+        # on a cytome), each with the gene's weight. The query side is read from
+        # the scored CSR matrix, so a dense layer works here as it does in the
+        # multi-set path (adata[:, genes].layers[...] was an ArrayView there).
+        gene_idx, _w = [], []
+        for g, w in zip(gene_list, gene_weights):
+            for j in var_names_to_idx[g]:
+                gene_idx.append(j)
+                _w.append(w)
+        gene_idx = np.asarray(gene_idx, dtype=np.int64)
+        gene_weights = np.asarray(_w, dtype=float)
+        cellxgene_subset = cellxgene[:, gene_idx]
         gene_list_knn_idx = knn_idx[gene_idx]
 
         # Control genes: the one sampler every path uses
@@ -2634,7 +2791,7 @@ def score(
         cols = np.repeat(np.arange(n_ctrl_set, dtype=np.int32), n_genes_gs)
         data = np.tile(gene_weights, n_ctrl_set)
         ctrl_gene_weight = sparse.csr_matrix(
-            (data, (rows, cols)), shape=(adata.n_vars, n_ctrl_set)
+            (data, (rows, cols)), shape=(n_genes, n_ctrl_set)
         )
 
         cellxgene_ctrl = cellxgene @ ctrl_gene_weight
@@ -2660,7 +2817,7 @@ def score(
 
         # Background and final score
         BG = np.ravel(cellxgene_ctrl.mean(axis=1))
-        scaling_factor = np.median(gene_weights) * len(gene_list)
+        scaling_factor = np.median(gene_weights) * n_genes_gs
         cellxgene_query = cellxgene_query / scaling_factor
         BG = BG / scaling_factor
         score_val = cellxgene_query - BG
@@ -2679,15 +2836,20 @@ def score(
             "nlog10_pval_FDR": nlog10_pooled_p_FDR
         }
 
-        df_score_pval_res = pd.DataFrame(index=adata.obs.index, data=score_pval_res, dtype=np.float32)
+        df_score_pval_res = pd.DataFrame(index=obs_index, data=score_pval_res, dtype=np.float32)
 
-        if key_added is None:
-            adata.obs['INFOG_score'] = score_val
-            adata.uns['INFOG_score'] = df_score_pval_res
-            if verbosity > 0:
-                print(f"Finished. The scores are saved in adata.obs['INFOG_score'] and the scores, P values are saved in adata.uns['INFOG_score'].")
+        _out_key = key_added if key_added is not None else 'INFOG_score'
+        if _mask is None:
+            adata.obs[_out_key] = score_val
+            adata.uns[_out_key] = df_score_pval_res
         else:
-            adata.obs[key_added] = score_val
-            adata.uns[key_added] = df_score_pval_res
-            if verbosity > 0:
-                print(f"Finished. The scores are saved in adata.obs['{key_added}'] and the scores, P values are saved in adata.uns['{key_added}'].")
+            # every cell of the caller's object, NaN where it was not scored
+            _full = np.full(adata.n_obs, np.nan, dtype=np.float64)
+            _full[_mask] = score_val
+            adata.obs[_out_key] = _full
+            _table = pd.DataFrame(np.nan, index=adata.obs_names, columns=df_score_pval_res.columns,
+                                  dtype=np.float32)
+            _table.iloc[np.flatnonzero(_mask)] = df_score_pval_res.to_numpy()
+            adata.uns[_out_key] = _table
+        if verbosity > 0:
+            print(f"Finished. The scores are saved in adata.obs['{_out_key}'] and the scores, P values are saved in adata.uns['{_out_key}'].")

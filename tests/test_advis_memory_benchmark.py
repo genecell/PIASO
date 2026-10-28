@@ -9,13 +9,13 @@ import sys, os, time, gc, json
 import numpy as np
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-sys.path.insert(0, "/path/to/project")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 # ADVIS 5-lib has old schema (no min_start) — skip it
-# ADVIS_5LIB = "/path/to/project/results/snakemake/advis_5lib_dim30/pipeline.cytome"
-ADVIS_35LIB = "/path/to/project/results/snakemake/advis_35/pipeline.cytome"
+from conftest import pipeline_store  # noqa: E402
+ADVIS_35LIB = pipeline_store("advis_35")
 # Standalone benchmark script: import the canonical E18 path from conftest
-from conftest import E18_CYTOME  # noqa: E402
+from conftest import E18_SOURCE as E18_CYTOME  # noqa: E402
 
 
 def get_rss_mb():

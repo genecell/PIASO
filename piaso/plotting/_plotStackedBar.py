@@ -12,7 +12,7 @@ from functools import wraps
 
 
 from ..utils._cytome_compat import is_cytome_input as _is_cytome_input
-from ..utils._cytome_compat import read_cells_columns as _read_cells_columns
+from ._store_io import read_cells_columns as _read_cells_columns  # read-only
 
 
 def _get_composition_data(data, groupby, splitby):
@@ -20,13 +20,18 @@ def _get_composition_data(data, groupby, splitby):
 
     Returns DataFrame: rows = splitby categories, columns = groupby categories, values = counts.
     """
+    from ._categories import resolve_category_style, label_strings
     if _is_cytome_input(data):
         df = _read_cells_columns(data, [groupby, splitby])
     else:
         df = data.obs[[groupby, splitby]].copy()
 
-    ct = pd.crosstab(df[splitby], df[groupby])
-    return ct
+    # Rows and columns in the order every plot uses (stored or categorical,
+    # else natural): crosstab sorts strings, so clusters ran 0, 1, 10, 2.
+    rows = resolve_category_style(data, splitby, df[splitby]).present(df[splitby])
+    cols = resolve_category_style(data, groupby, df[groupby]).present(df[groupby])
+    ct = pd.crosstab(label_strings(df[splitby]), label_strings(df[groupby]))
+    return ct.reindex(index=rows, columns=cols, fill_value=0)
 
 
 def stacked_barplot(
@@ -40,7 +45,7 @@ def stacked_barplot(
     title: Optional[str] = None,
     legend_ncol: Optional[int] = None,
     legend_fontsize: int = 9,
-    show: bool = True,
+    show: Optional[bool] = None,
     save: Optional[str] = None,
     ax: Optional[plt.Axes] = None,
     return_fig: bool = False,
@@ -68,7 +73,10 @@ def stacked_barplot(
         per-bar ranking would put a different cell type at the bottom of every
         bar and make the plot unreadable.
     palette : list or dict, optional
-        Colors for groups. Falls back to ``adata.uns`` then ``d_color4``.
+        Colors for groups. Without it, the column's stored colours (by name:
+        ``adata.uns``, a cytome's ``set_categories``), then ``d_color4``.
+        Colours follow the category, not its position, so ``sort_groups``
+        moves a segment without recolouring it.
     figsize : tuple, optional
         Figure size.
     title : str, optional
@@ -77,16 +85,17 @@ def stacked_barplot(
         Legend columns. Auto-calculated if None.
     legend_fontsize : int
         Legend font size.
-    show : bool
-        Call plt.show().
+    show : bool, optional
+        Call ``plt.show()``; ``None`` (default) shows unless ``ax`` is given.
     save : str, optional
         Save path.
     ax : Axes, optional
         Pre-existing axes.
     return_fig : bool
-        Return (fig, ax).
+        Return (fig, ax). Otherwise the figure is returned when it is not shown.
     """
-    from . import color as _color_mod
+    from . import _figure
+    from ._categories import resolve_category_style
 
     ct = _get_composition_data(data, groupby, splitby)
 
@@ -101,36 +110,22 @@ def stacked_barplot(
 
     groups = list(ct.columns)
 
-    # Resolve palette
-    if palette is None:
-        if isinstance(palette, dict):
-            pass
-        elif not _is_cytome_input(data) and hasattr(data, 'uns'):
-            key = f'{groupby}_colors'
-            if key in data.uns and len(data.uns[key]) >= len(groups):
-                palette = list(data.uns[key][:len(groups)])
-        if palette is None:
-            palette = [_color_mod.d_color4[i % len(_color_mod.d_color4)]
-                       for i in range(len(groups))]
-    elif isinstance(palette, dict):
-        palette = [palette.get(g, _color_mod.d_color4[i % len(_color_mod.d_color4)])
-                   for i, g in enumerate(groups)]
+    # Colours by name over the whole column: the list used to be matched to
+    # the segments in the order drawn, so sort_groups swapped colours.
+    style = resolve_category_style(data, groupby, palette=palette)
 
     if figsize is None:
         figsize = (max(6, len(ct) * 0.6 + 2), 5)
 
-    if ax is None:
-        fig, ax = plt.subplots(figsize=figsize)
-    else:
-        fig = ax.figure
+    show = _figure.resolve_show(show, ax)
+    fig, ax, _created = _figure.begin(ax, figsize=figsize)
 
     bottom = np.zeros(len(ct))
     x = np.arange(len(ct))
 
-    for i, g in enumerate(groups):
+    for g in groups:
         vals = ct[g].values
-        c = palette[i] if isinstance(palette, list) else palette[i % len(palette)]
-        ax.bar(x, vals, bottom=bottom, label=str(g), color=c, width=0.8,
+        ax.bar(x, vals, bottom=bottom, label=str(g), color=style.color(g), width=0.8,
                edgecolor='white', linewidth=0.3)
         bottom += vals
 
@@ -149,17 +144,12 @@ def stacked_barplot(
     for spine in ['top', 'right']:
         ax.spines[spine].set_visible(False)
 
-    plt.tight_layout()
-
-    from ..settings import _savefig
-    _savefig(fig, save, writekey='stacked_barplot')
-    if show:
-        plt.show()
-    else:
-        plt.close(fig)
-
+    _figure.layout(fig)
+    out = _figure.finish(fig, created=_created, show=show, save=save,
+                         writekey='stacked_barplot')
     if return_fig:
         return fig, ax
+    return out
 
 
 @wraps(stacked_barplot)

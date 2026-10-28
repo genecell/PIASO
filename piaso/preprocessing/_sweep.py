@@ -23,6 +23,11 @@ def load_peaks(peak_file: str) -> Tuple[Dict[str, list], list, int]:
     """
     Load peaks from a BED / narrowPeak / broadPeak file.
 
+    Blank, ``#``, ``track`` and ``browser`` lines are skipped; a line with fewer
+    than three columns or with non-integer coordinates raises ``ValueError``;
+    intervals with end <= start are left out (they can count nothing), as in
+    the Rust quantifier.
+
     Parameters
     ----------
     peak_file : str
@@ -43,16 +48,23 @@ def load_peaks(peak_file: str) -> Tuple[Dict[str, list], list, int]:
     global_idx = 0
 
     with open(peak_file, "r") as fh:
-        for line in fh:
-            if line.startswith("#") or line.startswith("track"):
+        for lineno, line in enumerate(fh, start=1):
+            if (not line.strip() or line.startswith("#") or line.startswith("track")
+                    or line.startswith("browser")):
                 continue
-            parts = line.rstrip("\n").split("\t")
+            parts = line.rstrip("\r\n").split("\t")
+            # A short or non-numeric line is an error, as in the Rust reader:
+            # skipped, or read as 0, it changed the peak set without a word.
             if len(parts) < 3:
-                continue
-
+                raise ValueError(f"{peak_file}: line {lineno} has fewer than three "
+                                 f"tab-separated columns: {line[:80]!r}")
             chrom = parts[0]
-            start = int(parts[1])
-            end = int(parts[2])
+            try:
+                start = int(parts[1])
+                end = int(parts[2])
+            except ValueError:
+                raise ValueError(f"{peak_file}: line {lineno}: start and end must be "
+                                 f"integers: {line[:80]!r}") from None
 
             if start >= end:
                 continue

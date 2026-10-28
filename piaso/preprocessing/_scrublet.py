@@ -7,9 +7,14 @@ Reproduces the exact scrublet pipeline:
   4. Re-normalize (to 1e6 = TPM)
   5. Z-score (mean center + variance normalize, computed on observed only)
   6. PCA via sklearn.decomposition.PCA (or IncrementalPCA for streaming)
-  7. KNN with adjusted k: k_adj = k * (1 + n_sim/n_obs)
+  7. KNN with adjusted k: k_adj = k * (1 + n_sim/n_obs), each point's own
+     entry left out, as scrublet's annoy and scikit-learn searches do
   8. Bayesian doublet scoring
   9. Auto-threshold via skimage or histogram bimodality
+
+A cell that is not scored (its library has fewer than 50 cells, or fewer
+genes pass the variability filter than ``n_components``) gets NaN and a
+missing doublet call, never 0 / False, and one warning names the libraries.
 
 Supports both AnnData (in-memory) and cytome Dataset (streaming) inputs.
 Cytome path uses 4 streaming passes with O(batch_size × n_genes) peak RAM,
@@ -201,6 +206,8 @@ def scrublet(
     threshold: Optional[float] = None,
     batch_size: int = 1024,
     verbose: bool = True,
+    layer: Optional[str] = None,
+    modality: str = "RNA",
 ):
     """Detect doublets using the Scrublet algorithm (Wolock et al., 2019).
 
@@ -211,10 +218,15 @@ def scrublet(
     Parameters
     ----------
     data : AnnData or cytome.Dataset or str
-        Input data. For AnnData, uses raw counts from ``X`` or ``raw``.
-        For cytome, streams from the RNA measurement layer.
+        Input data. For AnnData, uses raw counts from ``X`` or ``raw``
+        (or ``layers[layer]``). For cytome, streams from the RNA counts.
     library_key : str, optional
-        Column in ``obs``/``cells`` identifying libraries.
+        Column in ``obs``/``cells`` identifying libraries; each library is
+        scored on its own. ``None`` scores all cells as one library. A key
+        that is not a column, or a column that is missing (NULL / NaN / empty)
+        for any cell, raises: those cells would otherwise go unscored, or be
+        pooled, without a word -- which is what happened on the pipeline's
+        stores, whose ``sample_id`` is empty.
     n_components : int
         Number of PCA components for the manifold.
     sim_doublet_ratio : float
@@ -238,11 +250,21 @@ def scrublet(
         Streaming batch size for cytome path (default 1024).
     verbose : bool
         Print progress messages.
+    layer : str, optional
+        The raw counts: ``adata.layers[layer]`` on AnnData,
+        ``{modality}_{layer}`` on a cytome. ``None`` takes ``.X`` (or
+        ``.raw``) on AnnData and ``{modality}_raw_counts`` or
+        ``{modality}_counts`` on a cytome, and refuses values that are not
+        integers: doublets are simulated by adding two cells' raw counts.
+    modality : str, default 'RNA'
+        Cytome only: the modality to read.
 
     Returns
     -------
     None
-        Adds ``scrublet_score`` and ``is_doublet`` to obs/cells.
+        Adds ``scrublet_score`` and ``is_doublet`` to obs/cells. Cells that
+        are not scored get NaN and a missing call (a nullable boolean on
+        AnnData, NULL on a cytome).
     """
     is_cytome = _is_cytome_input(data)
 
@@ -255,7 +277,8 @@ def scrublet(
             min_cells=min_cells,
             min_gene_variability_pctl=min_gene_variability_pctl,
             random_state=random_state, threshold=threshold,
-            batch_size=batch_size, verbose=verbose,
+            batch_size=batch_size, verbose=verbose, layer=layer,
+            modality=modality,
         )
     else:
         _scrublet_anndata(
@@ -266,8 +289,61 @@ def scrublet(
             min_cells=min_cells,
             min_gene_variability_pctl=min_gene_variability_pctl,
             random_state=random_state, threshold=threshold,
-            verbose=verbose,
+            verbose=verbose, layer=layer,
         )
+
+
+# ============================================================================
+# Libraries and unscored cells -- one rule for both paths
+# ============================================================================
+
+#: A library smaller than this is not scored (its cells get NaN).
+_MIN_CELLS_PER_LIBRARY = 50
+
+
+def _library_groups(labels, library_key, where):
+    """``[(name, cell_indices), ...]`` for each library, in sorted order.
+
+    ``labels`` is the library column (None when ``library_key`` is None).
+    A missing value (None / NaN / an empty string) is refused: SQL's
+    ``WHERE col = NULL`` matched no cell, so every cell of a store with an
+    empty sample column was left at score 0 and "not a doublet", and on
+    AnnData a NaN label pooled or dropped its cells.
+    """
+    import pandas as pd
+    if library_key is None:
+        return None
+    lab = pd.Series(np.asarray(labels, dtype=object))
+    missing = lab.isna().to_numpy() | (lab.astype(str).str.strip().to_numpy() == "")
+    if missing.any():
+        raise ValueError(
+            f"scrublet: library_key={library_key!r} is missing (NULL, NaN or empty) for "
+            f"{int(missing.sum())} of {len(lab)} cells of {where}. Those cells would not be scored. "
+            f"Fill the column (one library per value), or pass library_key=None to score all the "
+            f"cells as one library.")
+    codes, names = pd.factorize(lab.astype(str), sort=True)
+    order = np.argsort(codes, kind="stable")
+    bounds = np.searchsorted(codes[order], np.arange(len(names) + 1))
+    return [(str(names[i]), np.sort(order[bounds[i]:bounds[i + 1]]).astype(np.int64))
+            for i in range(len(names))]
+
+
+def _warn_unscored(skipped, n_total):
+    """One warning naming the libraries left unscored, and why."""
+    if not skipped:
+        return
+    import warnings
+    n = sum(c for _, c, _ in skipped)
+    head = "; ".join(f"{name} ({c} cells: {why})" for name, c, why in skipped[:5])
+    warnings.warn(
+        f"scrublet: {n} of {n_total} cells were not scored and have NaN scores and a missing "
+        f"doublet call: {head}{' ...' if len(skipped) > 5 else ''}.", UserWarning, stacklevel=3)
+
+
+def _too_few_genes(n_genes_filtered, n_components):
+    """The PCA needs more genes than components (scikit-learn's arpack solver
+    refuses ``n_components >= n_features``), so a small panel cannot be scored."""
+    return n_genes_filtered <= n_components
 
 
 # ============================================================================
@@ -278,55 +354,68 @@ def _scrublet_anndata(
     data, library_key, n_components, sim_doublet_ratio,
     expected_doublet_rate, n_neighbors, min_counts, min_cells,
     min_gene_variability_pctl, random_state, threshold, verbose,
+    layer=None,
 ):
     """In-memory scrublet for AnnData objects."""
-    counts_full, obs_df = _load_anndata_counts(data)
+    import pandas as pd
+    counts_full, obs_df = _load_anndata_counts(data, layer=layer)
 
     n_total = counts_full.shape[0]
-    scores = np.zeros(n_total, dtype=np.float64)
+    scores = np.full(n_total, np.nan, dtype=np.float64)
     predicted = np.zeros(n_total, dtype=bool)
+    scored = np.zeros(n_total, dtype=bool)
 
-    if library_key is not None and library_key in obs_df.columns:
-        libraries = obs_df[library_key].unique()
-    else:
-        libraries = [None]
+    if library_key is not None and library_key not in obs_df.columns:
+        raise KeyError(
+            f"scrublet: library_key={library_key!r} is not a column of adata.obs "
+            f"(columns: {list(obs_df.columns)}).")
+    groups = _library_groups(obs_df[library_key].to_numpy() if library_key is not None else None,
+                             library_key, "adata.obs")
+    if groups is None:
+        groups = [("all", np.arange(n_total, dtype=np.int64))]
 
-    for lib_i, lib in enumerate(libraries):
-        if lib is not None:
-            mask = (obs_df[library_key] == lib).values
-            lib_name = str(lib)
-        else:
-            mask = np.ones(n_total, dtype=bool)
-            lib_name = "all"
-
-        cell_indices = np.where(mask)[0]
+    skipped = []
+    for lib_i, (lib_name, cell_indices) in enumerate(groups):
         n_cells = len(cell_indices)
 
         if verbose:
-            print(f"  Library {lib_i+1}/{len(libraries)}: "
+            print(f"  Library {lib_i+1}/{len(groups)}: "
                   f"{lib_name} ({n_cells} cells)")
 
-        if n_cells < 50:
+        if n_cells < _MIN_CELLS_PER_LIBRARY:
             if verbose:
-                print(f"    Skipping — too few cells ({n_cells} < 50)")
+                print(f"    Skipping — too few cells ({n_cells} < {_MIN_CELLS_PER_LIBRARY})")
+            skipped.append((lib_name, n_cells, f"fewer than {_MIN_CELLS_PER_LIBRARY} cells"))
             continue
 
-        lib_scores, lib_predicted = _scrublet_library_inmemory(
+        out = _scrublet_library_inmemory(
             counts_full[cell_indices], n_components, sim_doublet_ratio,
             expected_doublet_rate, n_neighbors, min_counts, min_cells,
             min_gene_variability_pctl, random_state, threshold, verbose,
         )
+        if out is None:
+            skipped.append((lib_name, n_cells, f"no more genes pass the filter than n_components={n_components}"))
+            continue
+        lib_scores, lib_predicted = out
 
         scores[cell_indices] = lib_scores
         predicted[cell_indices] = lib_predicted
+        scored[cell_indices] = True
 
     data.obs['scrublet_score'] = scores
-    data.obs['is_doublet'] = predicted
+    if scored.all():
+        data.obs['is_doublet'] = predicted
+    else:
+        # a missing call, not "not a doublet", for a cell nobody scored
+        calls = pd.array(predicted, dtype="boolean")
+        calls[~scored] = pd.NA
+        data.obs['is_doublet'] = calls
+    _warn_unscored(skipped, n_total)
 
     if verbose:
-        total_doublets = predicted.sum()
-        print(f"  Total doublets: {total_doublets}/{n_total} "
-              f"({100*total_doublets/n_total:.1f}%)")
+        total_doublets = int(predicted[scored].sum())
+        print(f"  Total doublets: {total_doublets}/{int(scored.sum())} scored cells "
+              f"({100*total_doublets/max(int(scored.sum()), 1):.1f}%)")
 
 
 def _scrublet_library_inmemory(
@@ -346,6 +435,11 @@ def _scrublet_library_inmemory(
         X_obs_norm, min_counts=min_counts, min_cells=min_cells,
         min_vscore_pctl=min_gene_variability_pctl,
     )
+    if _too_few_genes(len(gene_filter), n_components):
+        if verbose:
+            print(f"    Warning: only {len(gene_filter)} genes selected "
+                  f"(<= n_components={n_components}), skipping library")
+        return None
     if verbose:
         print(f"    Selected {len(gene_filter)} genes "
               f"(v-score pctl={min_gene_variability_pctl})")
@@ -408,67 +502,73 @@ def _scrublet_cytome(
     data, library_key, n_components, sim_doublet_ratio,
     expected_doublet_rate, n_neighbors, min_counts, min_cells,
     min_gene_variability_pctl, random_state, threshold, batch_size, verbose,
+    layer=None, modality="RNA",
 ):
     """Streaming scrublet for cytome Dataset objects.
 
     Uses 4 streaming passes per library with O(batch_size * n_genes)
     peak RAM, independent of total cell count.
     """
-    ds, ml = _resolve_cytome_layer(data)
+    ds, ml = _resolve_cytome_layer(data, layer=layer, modality=modality)
     n_total = ml.shape[0]
 
-    scores = np.zeros(n_total, dtype=np.float64)
+    scores = np.full(n_total, np.nan, dtype=np.float64)
     predicted = np.zeros(n_total, dtype=bool)
+    scored = np.zeros(n_total, dtype=bool)
 
-    # Determine libraries from cells table
+    # Determine libraries from cells table: one read of the column, the same
+    # rule as AnnData (a missing value raises; SQL's `= NULL` matched nothing)
     conn = ds._conn
     cells_cols = [r[1] for r in conn.execute("PRAGMA table_info(cells)").fetchall()]
+    groups = None
+    if library_key is not None:
+        if library_key not in cells_cols:
+            raise KeyError(
+                f"scrublet: library_key={library_key!r} is not a column of the cytome's cells "
+                f"table (columns: {cells_cols}).")
+        rows = conn.execute(f"SELECT cell_idx, [{library_key}] FROM cells ORDER BY cell_idx").fetchall()
+        idx = np.array([r[0] for r in rows], dtype=np.int64)
+        groups = _library_groups([r[1] for r in rows], library_key, "the cytome's cells table")
+        groups = [(name, idx[pos]) for name, pos in groups]
+    if groups is None:
+        groups = [("all", np.arange(n_total, dtype=np.int64))]
 
-    if library_key and library_key in cells_cols:
-        libs = [r[0] for r in conn.execute(
-            f"SELECT DISTINCT [{library_key}] FROM cells ORDER BY [{library_key}]"
-        ).fetchall()]
-        lib_indices_map = {}
-        for lib in libs:
-            rows = conn.execute(
-                f"SELECT cell_idx FROM cells WHERE [{library_key}] = ? "
-                "ORDER BY cell_idx", (lib,)
-            ).fetchall()
-            lib_indices_map[lib] = np.array([r[0] for r in rows], dtype=np.int64)
-    else:
-        libs = [None]
-        lib_indices_map = {None: np.arange(n_total, dtype=np.int64)}
-
-    for lib_i, lib in enumerate(libs):
-        lib_cell_indices = lib_indices_map[lib]
+    skipped = []
+    for lib_i, (lib_name, lib_cell_indices) in enumerate(groups):
         n_cells = len(lib_cell_indices)
-        lib_name = str(lib) if lib is not None else "all"
 
         if verbose:
-            print(f"  Library {lib_i+1}/{len(libs)}: "
+            print(f"  Library {lib_i+1}/{len(groups)}: "
                   f"{lib_name} ({n_cells} cells) [streaming]")
 
-        if n_cells < 50:
+        if n_cells < _MIN_CELLS_PER_LIBRARY:
             if verbose:
-                print(f"    Skipping — too few cells ({n_cells} < 50)")
+                print(f"    Skipping — too few cells ({n_cells} < {_MIN_CELLS_PER_LIBRARY})")
+            skipped.append((lib_name, n_cells, f"fewer than {_MIN_CELLS_PER_LIBRARY} cells"))
             continue
 
-        lib_scores, lib_predicted = _scrublet_library_streaming(
+        out = _scrublet_library_streaming(
             ml, lib_cell_indices, n_components, sim_doublet_ratio,
             expected_doublet_rate, n_neighbors, min_counts, min_cells,
             min_gene_variability_pctl, random_state, threshold,
             batch_size, verbose,
         )
+        if out is None:
+            skipped.append((lib_name, n_cells, f"no more genes pass the filter than n_components={n_components}"))
+            continue
+        lib_scores, lib_predicted = out
 
         scores[lib_cell_indices] = lib_scores
         predicted[lib_cell_indices] = lib_predicted
+        scored[lib_cell_indices] = True
 
-    _store_cytome_results(ds, scores, predicted)
+    _store_cytome_results(ds, scores, predicted, scored)
+    _warn_unscored(skipped, n_total)
 
     if verbose:
-        total_doublets = predicted.sum()
-        print(f"  Total doublets: {total_doublets}/{n_total} "
-              f"({100*total_doublets/n_total:.1f}%)")
+        total_doublets = int(predicted[scored].sum())
+        print(f"  Total doublets: {total_doublets}/{int(scored.sum())} scored cells "
+              f"({100*total_doublets/max(int(scored.sum()), 1):.1f}%)")
 
 
 def _scrublet_library_streaming(
@@ -558,11 +658,11 @@ def _scrublet_library_streaming(
     )
     n_genes_filtered = len(gene_filter)
 
-    if n_genes_filtered < n_components:
+    if _too_few_genes(n_genes_filtered, n_components):
         if verbose:
             print(f"    Warning: only {n_genes_filtered} genes selected "
-                  f"(< n_components={n_components}), skipping library")
-        return np.zeros(n_cells), np.zeros(n_cells, dtype=bool)
+                  f"(<= n_components={n_components}), skipping library")
+        return None
 
     if verbose:
         print(f"    Selected {n_genes_filtered} genes "
@@ -676,10 +776,18 @@ def _knn_score_threshold(manifold_obs, manifold_sim, n_cells, n_sim,
         np.ones(n_sim, dtype=int),
     ])
 
+    # k_adj neighbours OTHER than the point itself, as scrublet takes them
+    # (get_knn_graph: annoy's get_nns_by_item(i, k + 1)[1:], or scikit-learn's
+    # kneighbors() on the fitted points, which leaves each point out).
+    # pynndescent's neighbor_graph lists the point itself first, so it is asked
+    # for one more and the point is dropped: otherwise every simulated doublet
+    # counted itself as a doublet neighbour and every cell spent one of its k
+    # places on itself.
     from pynndescent import NNDescent
-    index = NNDescent(manifold, n_neighbors=k_adj,
+    n_points = manifold.shape[0]
+    index = NNDescent(manifold, n_neighbors=min(k_adj + 1, n_points),
                       metric='euclidean', random_state=random_state)
-    knn_indices, _ = index.neighbor_graph
+    knn_indices = _without_self(index.neighbor_graph[0], k_adj)
 
     if verbose:
         print(f"    KNN done: k={_k}, k_adj={k_adj}")
@@ -717,6 +825,23 @@ def _knn_score_threshold(manifold_obs, manifold_sim, n_cells, n_sim,
 # ============================================================================
 # Helpers
 # ============================================================================
+
+def _without_self(knn, k):
+    """Each row's first ``k`` neighbours other than the row's own point.
+
+    When the point is not among a row's neighbours (an approximate search can
+    miss it, e.g. among exact duplicates), the row's first ``k`` are taken.
+    """
+    knn = np.asarray(knn)
+    n, width = knn.shape
+    is_self = knn == np.arange(n)[:, None]
+    has_self = is_self.any(axis=1)
+    first = np.argmax(is_self, axis=1)
+    cols = np.arange(width)
+    shift = (cols[None, :] >= first[:, None]) & has_self[:, None]
+    gather = np.minimum(cols[None, :] + shift.astype(np.intp), width - 1)
+    return np.take_along_axis(knn, gather, axis=1)[:, :k]
+
 
 def _sparse_zscore(E, gene_mean, gene_std):
     """Z-score sparse matrix using precomputed mean/std. Returns dense."""
@@ -763,9 +888,32 @@ def _auto_threshold(doublet_scores_sim, expected_rate=0.06):
 from ..utils._cytome_compat import is_cytome_input as _is_cytome_input
 
 
-def _load_anndata_counts(data):
-    """Extract raw counts and obs from AnnData."""
-    if hasattr(data, 'raw') and data.raw is not None:
+def _holds_integers(matrix) -> bool:
+    from ..tools._normalization import _sample_stored_values
+    vals = np.asarray(_sample_stored_values(matrix), dtype=np.float64)
+    vals = vals[np.isfinite(vals)]
+    return bool(vals.size == 0 or np.allclose(vals, np.round(vals)))
+
+
+def _not_counts_error(what):
+    return ValueError(
+        f"scrublet: {what} holds non-integer values, so it is not raw counts. Scrublet simulates "
+        f"doublets by adding two cells' raw counts, which means nothing on normalised or "
+        f"log-transformed values. Pass layer= the layer that holds the raw counts.")
+
+
+def _load_anndata_counts(data, layer=None):
+    """Extract raw counts and obs from AnnData.
+
+    ``layer`` names the counts; without it ``.X`` is used when it holds
+    integers, else ``.raw.X``, and a matrix that is not integer counts is
+    refused (a log1p ``.X`` with no ``.raw`` used to be scored as counts).
+    """
+    if layer is not None:
+        if layer not in data.layers:
+            raise KeyError(f"scrublet: layer {layer!r} not in adata.layers ({list(data.layers)}).")
+        counts = data.layers[layer]
+    elif hasattr(data, 'raw') and data.raw is not None:
         sample = data.X[:min(100, data.shape[0])]
         if sparse.issparse(sample):
             sample = sample.toarray()
@@ -773,8 +921,12 @@ def _load_anndata_counts(data):
             counts = data.X
         else:
             counts = data.raw.X
+            if not _holds_integers(counts):
+                raise _not_counts_error("neither adata.X nor adata.raw.X")
     else:
         counts = data.X
+        if not _holds_integers(counts):
+            raise _not_counts_error("adata.X (and there is no adata.raw)")
 
     if not sparse.issparse(counts):
         counts = sparse.csc_matrix(counts)
@@ -784,12 +936,17 @@ def _load_anndata_counts(data):
     return counts, data.obs
 
 
-def _resolve_cytome_layer(data):
-    """Open cytome Dataset and find the RNA measurement layer.
+def _resolve_cytome_layer(data, layer=None, modality="RNA"):
+    """Open cytome Dataset and find the counts to score.
 
-    Returns (dataset, measurement_layer).
+    ``layer`` names ``{modality}_{layer}``; without it the store's
+    ``{modality}_raw_counts`` or ``{modality}_counts`` is used, and its values
+    must be integers. Any other matrix is never guessed at (the old fallback
+    took any matrix with 'RNA' or 'counts' in its name, then the first one).
+    A column-major matrix is refused: each row block would decode the whole
+    matrix. Returns (dataset, measurement_layer).
     """
-    from ..utils._cytome_compat import open_cytome_sync
+    from ..utils._cytome_compat import open_cytome_sync, require_row_major
     if isinstance(data, str):
         ds = open_cytome_sync(data)
     else:
@@ -797,34 +954,31 @@ def _resolve_cytome_layer(data):
 
     from cytome.core.measurement import MeasurementLayer
 
-    # Try modality-based access first (ds.RNA.counts → RNA_counts)
     info = ds.to_info_dict()
     matrix_names = [m['name'] for m in info.get('matrices', [])]
 
-    layer_name = None
-    for candidate in ['RNA_raw_counts', 'RNA_counts', 'counts']:
-        if candidate in matrix_names:
-            layer_name = candidate
-            break
+    if layer is not None:
+        candidates = [f"{modality}_{layer}"]
+    else:
+        candidates = [f"{modality}_raw_counts", f"{modality}_counts"]
+    layer_name = next((c for c in candidates if c in matrix_names), None)
     if layer_name is None:
-        # Fallback: any matrix with "RNA" or "counts" in name
-        for name in matrix_names:
-            if 'RNA' in name or 'counts' in name.lower():
-                layer_name = name
-                break
-    if layer_name is None and matrix_names:
-        layer_name = matrix_names[0]
-
-    if layer_name is None:
-        raise ValueError("No count matrix found in cytome for scrublet. "
-                         f"Available matrices: {matrix_names}")
+        raise ValueError(
+            f"scrublet: no {' or '.join(candidates)} matrix in this cytome. "
+            f"Available matrices: {matrix_names}. Pass layer= (and modality=) to name the raw counts.")
+    require_row_major(ds, modality, layer_name[len(modality) + 1:], "scrublet",
+                      "Scrublet reads each library's cells by row; re-import the counts row-major.")
 
     ml = MeasurementLayer(ds._conn, layer_name)
+    if layer is None:
+        first = ml.rows(np.arange(min(200, ml.shape[0]), dtype=np.int64))
+        if not _holds_integers(first):
+            raise _not_counts_error(f"the cytome's {layer_name}")
     return ds, ml
 
 
-def _store_cytome_results(ds, scores, predicted):
-    """Write scrublet results to cytome cells table.
+def _store_cytome_results(ds, scores, predicted, scored=None):
+    """Write scrublet results to cytome cells table (NULL for an unscored cell).
 
     Uses ``executemany`` inside a ``with conn:`` block instead of an
     explicit ``BEGIN``. The cytome connection runs with Python's
@@ -847,8 +1001,10 @@ def _store_cytome_results(ds, scores, predicted):
         conn.execute("ALTER TABLE cells ADD COLUMN is_doublet INTEGER")
     conn.commit()  # finalize schema before the bulk UPDATE
 
+    if scored is None:
+        scored = np.isfinite(np.asarray(scores, dtype=np.float64))
     rows = [
-        (float(scores[i]), int(predicted[i]), int(i))
+        ((float(scores[i]), int(predicted[i])) if scored[i] else (None, None)) + (int(i),)
         for i in range(len(scores))
     ]
     # ``with conn:`` auto-commits on clean exit and rolls back on exception.

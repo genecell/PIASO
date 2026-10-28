@@ -18,10 +18,10 @@ import numpy as np
 __test__ = False
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-sys.path.insert(0, "/path/to/project")
-sys.path.insert(0, "/path/to/project/COSG")
 
-RADC_CYTOME = "/path/to/project/results/brain_7M/RADC_694K.cytome"
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from conftest import results_path  # noqa: E402
+RADC_CYTOME = results_path("brain_7M", "RADC_694K.cytome")
 
 
 def get_rss_mb():

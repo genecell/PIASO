@@ -15,6 +15,55 @@ from ._neighbors import _is_cytome_dataset
 _IGRAPH_RNG_LOCK = threading.Lock()
 
 
+def _cell_mask_bool(cell_mask, n, what="cell_mask"):
+    """A boolean mask of length ``n`` from a boolean mask or from cell indices.
+
+    ``cell_mask`` is documented as a boolean mask or sorted indices, but was
+    cast with ``astype(bool)``: indices became a boolean array of their own
+    length (an error, or, when as many indices as cells were given, a wrong
+    mask).
+    """
+    arr = np.asarray(cell_mask)
+    if arr.dtype == bool:
+        if arr.ndim != 1 or arr.shape[0] != n:
+            raise ValueError(f"{what} length ({arr.shape[0] if arr.ndim else 0}) must match "
+                             f"the graph ({n} rows).")
+        return arr
+    if arr.ndim != 1 or (arr.size and not np.issubdtype(arr.dtype, np.integer)):
+        raise TypeError(f"{what} must be a boolean mask or an array of integer cell indices")
+    idx = arr.astype(np.int64)
+    if idx.size and (idx.min() < 0 or idx.max() >= n):
+        raise IndexError(f"{what} holds indices outside 0..{n - 1}")
+    if np.unique(idx).size != idx.size:
+        raise ValueError(f"{what} holds a cell index more than once")
+    out = np.zeros(n, dtype=bool)
+    out[idx] = True
+    return out
+
+
+def _igraph_from_adjacency(adj):
+    """An undirected igraph Graph and its edge weights from a symmetric sparse matrix.
+
+    The upper triangle's stored non-zeros, in row-major order: the edges and
+    weights the per-edge lookup ``adj[sources, targets]`` gave before, read
+    straight from the matrix (that lookup and the Python list of edge tuples
+    were the slow part on large graphs). A matrix with unsummed duplicates is
+    summed on a copy first, so each pair is one edge.
+    """
+    import igraph as ig
+    import scipy.sparse as _sp
+    A = _sp.csr_matrix(adj)
+    if not A.has_canonical_format:
+        A = A.copy()
+        A.sum_duplicates()
+    coo = A.tocoo()
+    keep = (coo.data != 0) & (coo.row <= coo.col)
+    edges = np.column_stack([coo.row[keep], coo.col[keep]]).astype(np.int64, copy=False)
+    g = ig.Graph(n=A.shape[0], edges=edges, directed=False)
+    g.es['weight'] = coo.data[keep].tolist()
+    return g
+
+
 class _SeededRNG:
     """A seeded random number generator compatible with igraph's RNG interface."""
 
@@ -178,12 +227,7 @@ def leiden(
     # into the full-cell ordering (e.g. multi-batch GDR writes them
     # into a temp cells column at masked positions).
     if cell_mask is not None:
-        cell_mask_arr = np.asarray(cell_mask).astype(bool)
-        if cell_mask_arr.shape[0] != adj.shape[0]:
-            raise ValueError(
-                f"cell_mask length ({cell_mask_arr.shape[0]}) must match "
-                f"adjacency matrix ({adj.shape[0]} rows)."
-            )
+        cell_mask_arr = _cell_mask_bool(cell_mask, adj.shape[0])
         adj = adj[cell_mask_arr][:, cell_mask_arr]
 
     if backend == 'auto':
@@ -192,6 +236,13 @@ def leiden(
             backend = 'rust' if hasattr(_ext, 'leiden_csr') else 'igraph'
         except Exception:
             backend = 'igraph'
+        if backend == 'igraph':
+            import warnings
+            warnings.warn(
+                "leiden: the Rust extension has no leiden_csr, so igraph's Leiden runs instead "
+                "(another partition, and not the same at every thread count). Rebuild or reinstall "
+                "PIASO's extension, or pass backend='igraph' to silence this.",
+                RuntimeWarning, stacklevel=2)
     if backend == 'rust':
         labels = _leiden_rust(adj, resolution, n_iterations, random_state, n_threads)
         return _store_labels(data, labels, key_added, cell_mask)
@@ -203,14 +254,7 @@ def leiden(
     # Our connectivities (from fuzzy_simplicial_set) are symmetric,
     # so we take the upper triangle to build an undirected graph
     # without duplicate edges.
-    sources, targets = adj.nonzero()
-    mask = sources <= targets
-    sources, targets = sources[mask], targets[mask]
-    weights = np.array(adj[sources, targets]).flatten()
-    g = ig.Graph(n=adj.shape[0],
-                 edges=list(zip(sources.tolist(), targets.tolist())),
-                 directed=False)
-    g.es['weight'] = weights.tolist()
+    g = _igraph_from_adjacency(adj)
 
     # igraph's RNG is PROCESS-GLOBAL: set_random_number_generator installs it
     # for the whole interpreter, not for this call. Two threads clustering

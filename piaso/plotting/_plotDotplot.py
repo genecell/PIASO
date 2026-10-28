@@ -98,7 +98,7 @@ def _nice_legend_fracs(dot_max, n_target=5):
 
 
 from ..utils._cytome_compat import is_cytome_input as _is_cytome_input
-from ..utils._cytome_compat import read_cells_columns as _read_cells_columns
+from ._store_io import read_cells_columns as _read_cells_columns  # read-only
 from ._group_order import resolve_group_order
 from ._group_order import natural_key
 
@@ -162,15 +162,16 @@ def _get_expression_data(
     data, features, groupby, layer=None, use_raw=None,
     modality=None, cytome_layer="counts",
     compute_on_fly=True, use_cached_stats=True,
-    mean_only_expressed=False,
+    mean_only_expressed=False, expression_cutoff=0.0,
 ):
     """Extract expression matrix for features x groups.
 
     Returns
     -------
-    fraction_df : DataFrame (groups x features) — fraction of cells with expression > 0
+    fraction_df : DataFrame (groups x features) — fraction of cells with
+        expression > ``expression_cutoff``
     mean_df : DataFrame (groups x features) — mean expression. Over ALL cells in
-        the group by default, or only the expressing (>0) cells when
+        the group by default, or only the expressing cells when
         ``mean_only_expressed=True``.
     """
     if _is_cytome_input(data):
@@ -180,9 +181,11 @@ def _get_expression_data(
             compute_on_fly=compute_on_fly,
             use_cached_stats=use_cached_stats,
             mean_only_expressed=mean_only_expressed,
+            expression_cutoff=expression_cutoff,
         )
     return _get_expression_data_anndata(data, features, groupby, layer, use_raw,
-                                        mean_only_expressed=mean_only_expressed)
+                                        mean_only_expressed=mean_only_expressed,
+                                        expression_cutoff=expression_cutoff)
 
 
 def _ordered_groups(data, groupby, present):
@@ -196,18 +199,15 @@ def _ordered_groups(data, groupby, present):
     uses so the two plots agree. Levels present but not in the declared order
     are appended, string-sorted, rather than dropped.
     """
-    from ._plotEmbedding import _resolve_categorical_style
+    from ._categories import resolve_category_style, missing_mask
 
-    present = [p for p in present if pd.notna(p)]
-    _, declared = _resolve_categorical_style(data, groupby)
-    if not declared:
-        # natural, not lexicographic: cluster 10 belongs after 9, and the
-        # dot plot has to agree with the legend on the embedding above it.
-        return sorted(present, key=natural_key)
+    present = [p for p in present if not missing_mask([p])[0]]
+    # The order every plot uses (stored order, the categorical order an
+    # AnnData carried into a store, else natural: cluster 10 after 9), so the
+    # dot plot agrees with the legend on the embedding above it.
+    style = resolve_category_style(data, groupby, np.asarray(present, dtype=object))
     present_str = {str(p): p for p in present}
-    ordered = [present_str[str(c)] for c in declared if str(c) in present_str]
-    seen = {str(c) for c in ordered}
-    return ordered + sorted((p for p in present if str(p) not in seen), key=str)
+    return [present_str[c] for c in style.present(np.asarray(present, dtype=object))]
 
 
 def _group_mean(gv, mean_only_expressed):
@@ -246,39 +246,60 @@ def _group_indicator(group_labels, groups):
     )
 
 
-def _aggregate_by_group(values, indicator, group_sizes, mean_only_expressed):
+def _aggregate_by_group(values, indicator, group_sizes, mean_only_expressed,
+                        cutoff=0.0):
     """Per-group mean and expressing fraction for a ``(n_cells, n_features)`` block.
 
-    ``values`` may be sparse or dense. Both statistics are one matrix product:
-    the indicator sums each group's rows, and the same product over the
-    ``> 0`` mask counts the expressing cells.
+    A cell "expresses" a feature when its value is ``> cutoff``
+    (``expression_cutoff``; it was hard-coded to ``> 0`` and the argument
+    ignored). ``values`` may be sparse or dense. Every statistic is one matrix
+    product: the indicator sums each group's rows, and the same product over
+    the ``> cutoff`` mask counts the expressing cells. On a sparse block the
+    implicit zeros express only when the cutoff is negative.
+
+    ``mean_only_expressed`` averages the values of the expressing cells only:
+    their sum over their count. (The sum used to run over every cell, which
+    is the same for counts with a cutoff of 0 but not for scaled data.)
     """
     import scipy.sparse as sp
 
+    cutoff = float(cutoff)
+    sizes = group_sizes[:, None]
     if sp.issparse(values):
-        nz = values.copy()
-        nz.data = (nz.data > 0).astype(np.float64)
+        values = values.tocsr()
+        above = values.copy()
+        above.data = (values.data > cutoff).astype(np.float64)
         sums = np.asarray((indicator @ values).todense(), dtype=float)
-        counts = np.asarray((indicator @ nz).todense(), dtype=float)
+        counts = np.asarray((indicator @ above).todense(), dtype=float)
+        if cutoff < 0:
+            # an implicit zero is above a negative cutoff: count every cell
+            # except the stored values at or below it
+            below = values.copy()
+            below.data = (values.data <= cutoff).astype(np.float64)
+            counts = sizes - np.asarray((indicator @ below).todense(), dtype=float)
+        if mean_only_expressed:
+            kept = values.copy()
+            kept.data = np.where(values.data > cutoff, values.data, 0.0)
+            sums_expr = np.asarray((indicator @ kept).todense(), dtype=float)
     else:
         dense = np.asarray(values, dtype=float)
+        mask = dense > cutoff
         sums = indicator @ dense
-        counts = indicator @ (dense > 0).astype(float)
+        counts = indicator @ mask.astype(float)
+        if mean_only_expressed:
+            sums_expr = indicator @ np.where(mask, dense, 0.0)
 
-    sizes = group_sizes[:, None]
     with np.errstate(divide="ignore", invalid="ignore"):
         frac = np.where(sizes > 0, counts / np.maximum(sizes, 1), 0.0)
         if mean_only_expressed:
-            # Mean over the expressing cells only -- the denominator is the
-            # count of >0 entries, not the group size.
-            mean = np.where(counts > 0, sums / np.maximum(counts, 1), 0.0)
+            mean = np.where(counts > 0, sums_expr / np.maximum(counts, 1), 0.0)
         else:
             mean = np.where(sizes > 0, sums / np.maximum(sizes, 1), 0.0)
     return frac, mean
 
 
 def _get_expression_data_anndata(adata, features, groupby, layer=None, use_raw=None,
-                                 mean_only_expressed=False):
+                                 mean_only_expressed=False, expression_cutoff=0.0):
     import scipy.sparse as sp
 
     groups = _ordered_groups(adata, groupby, adata.obs[groupby].dropna().unique())
@@ -302,13 +323,13 @@ def _get_expression_data_anndata(adata, features, groupby, layer=None, use_raw=N
         else:
             source = adata[:, mat_feats].X
         frac, mean = _aggregate_by_group(source, indicator, group_sizes,
-                                         mean_only_expressed)
+                                         mean_only_expressed, expression_cutoff)
         for j, feat in enumerate(mat_feats):
             blocks[feat] = (frac[:, j], mean[:, j])
     for feat in obs_feats:
         vals = np.asarray(adata.obs[feat].values, dtype=float)[:, None]
         frac, mean = _aggregate_by_group(vals, indicator, group_sizes,
-                                         mean_only_expressed)
+                                         mean_only_expressed, expression_cutoff)
         blocks[feat] = (frac[:, 0], mean[:, 0])
 
     groups_str = [str(g) for g in groups]
@@ -321,7 +342,7 @@ def _get_expression_data_cytome(
     source, features, groupby,
     modality=None, cytome_layer="counts",
     compute_on_fly=True, use_cached_stats=True,
-    mean_only_expressed=False,
+    mean_only_expressed=False, expression_cutoff=0.0,
 ):
     """Read per-feature expression for a cytome dataset.
 
@@ -368,7 +389,8 @@ def _get_expression_data_cytome(
             v = np.where(finite, vals, 0.0)[:, None]
             counted = indicator.multiply(finite[None, :]).tocsr()
             sizes = np.asarray(counted.sum(axis=1), dtype=float).ravel()
-            frac, mean = _aggregate_by_group(v, counted, sizes, mean_only_expressed)
+            frac, mean = _aggregate_by_group(v, counted, sizes, mean_only_expressed,
+                                             expression_cutoff)
             fraction_data[feat] = dict(zip(groups_str, frac[:, 0]))
             mean_data[feat] = dict(zip(groups_str, mean[:, 0]))
 
@@ -389,7 +411,7 @@ def _get_expression_data_cytome(
                 [np.asarray(batched[feat][0], dtype=float) for feat in matrix_feats]
             )
             frac, mean = _aggregate_by_group(block, indicator, group_sizes,
-                                             mean_only_expressed)
+                                             mean_only_expressed, expression_cutoff)
             for j, feat in enumerate(matrix_feats):
                 fraction_data[feat] = dict(zip(groups_str, frac[:, j]))
                 mean_data[feat] = dict(zip(groups_str, mean[:, j]))
@@ -427,21 +449,24 @@ def _compute_dendrogram(data, groupby, features=None, layer=None, use_raw=None,
     from scipy.cluster.hierarchy import linkage
     from scipy.spatial.distance import pdist
 
-    if use_rep is not None and not _is_cytome_input(data):
-        # Use cell embeddings to compute group centroids
-        embeddings = data.obsm[use_rep]
-        group_labels = data.obs[groupby].values
-        groups = resolve_group_order(group_labels)
-        centroids = []
-        for g in groups:
-            mask = np.array([str(x) == g for x in group_labels])
-            centroids.append(embeddings[mask].mean(axis=0))
-        centroid_matrix = np.vstack(centroids)
-
-        if centroid_matrix.shape[0] < 2:
+    centroids = None
+    if use_rep is not None:
+        # Group centroids of a cell embedding, through the dendrogram's helper:
+        # one pass over the cells (this was a per-cell Python loop per group),
+        # and on a store the name resolves as a basis does ('X_pca' finds
+        # 'RNA_pca'); a store's use_rep used to be ignored without a word.
+        from ._plotDendrogram import _group_centroids_from_rep
+        centroids = _group_centroids_from_rep(data, groupby, use_rep, modality=modality)
+        if centroids is None:
+            import warnings
+            warnings.warn(f"dotplot: use_rep={use_rep!r} not found; the dendrogram is "
+                          "built from the features' mean expression.", UserWarning,
+                          stacklevel=3)
+    if centroids is not None:
+        groups = [str(g) for g in centroids.index]
+        if centroids.shape[0] < 2:
             return None, groups
-
-        dist = pdist(centroid_matrix, metric='euclidean')
+        dist = pdist(centroids.to_numpy(dtype=float), metric='euclidean')
         Z = linkage(dist, method=method)
     else:
         if features is None:
@@ -492,7 +517,7 @@ def dotplot(
     grid: bool = False,
     show_border: bool = True,
     edgecolor: str = 'none',
-    show: bool = True,
+    show: Optional[bool] = None,
     save: Optional[str] = None,
     ax: Optional[plt.Axes] = None,
     return_fig: bool = False,
@@ -521,7 +546,11 @@ def dotplot(
     use_raw : bool, optional
         Use raw attribute. Ignored for cytome.
     expression_cutoff : float
-        Threshold for "expressing" (default 0).
+        A cell expresses a feature when its value is above this (default 0).
+        Sets the dot size (fraction expressing) and, with
+        ``mean_only_expressed``, which cells the colour averages.
+
+        *Changed*: it was accepted and ignored, the threshold always 0.
     mean_only_expressed : bool
         Compute mean over expressing cells only.
     standard_scale : str, optional
@@ -581,28 +610,34 @@ def dotplot(
         Show outer border around the plot area (default: True).
     edgecolor : str
         Edge color for dots (default: 'none').
-    show : bool
-        Call plt.show().
+    show : bool, optional
+        Call ``plt.show()``; ``None`` (default) shows unless ``ax`` is given.
     save : str, optional
         Save path.
     ax : Axes, optional
-        Pre-existing axes.
+        Pre-existing axes. Its figure is never closed here.
     return_fig : bool
-        Return (fig, ax) tuple.
+        Return (fig, ax) tuple. Otherwise the figure is returned when it is
+        not shown.
     palette
         Not used for dotplot (color is continuous). Reserved for API consistency.
     
     fontsize : float, optional
         Base font size for labels; ``None`` follows the figure settings.
     modality : str, optional
-        Cytome only: which modality the data was stored under (``'RNA'``,
-        ``'ATAC'``, ``'tiles'``, ``'GA'``). ``None`` takes the store's first
-        modality.
+        Cytome only: the modality whose features to read (``'RNA'``,
+        ``'ATAC'``, ``'tiles'``, ``'GA'``). ``None`` finds the modality that
+        holds the feature, and raises if several do.
     cytome_layer : str, default 'counts'
-        Cytome only: the layer to read the values from.
+        Cytome only: the layer to read the values from. The default is the
+        raw counts -- unlike AnnData's ``.X``, which is usually normalised, so
+        the same data can read differently; pass ``'log1p'`` or ``'infog'``
+        (RNA) or ``'tfidf'`` (ATAC) for normalised values.
     compute_on_fly : bool, default True
-        Cytome only: normalise the raw layer while streaming (INFOG for RNA,
-        TF-IDF for ATAC) instead of requiring a materialised layer.
+        Cytome only: when ``cytome_layer`` names a normalised layer the store
+        does not hold (``'log1p'``, ``'infog'``, ``'tfidf'``), compute it per
+        feature from the counts. It does not normalise the default
+        ``'counts'``.
     use_cached_stats : bool, default True
         Cytome only: reuse normalisation statistics already stored in the
         cytome's metadata rather than recomputing them.
@@ -621,6 +656,7 @@ def dotplot(
         modality=modality, cytome_layer=cytome_layer,
         compute_on_fly=compute_on_fly, use_cached_stats=use_cached_stats,
         mean_only_expressed=mean_only_expressed,
+        expression_cutoff=expression_cutoff,
     )
 
     # --- Reorder groups ---
@@ -723,10 +759,9 @@ def dotplot(
     # main axes' real drawn box instead of a GridSpec column that ignores the
     # aspect-shrunk height — the old source of the misalignment. The shared
     # divider is created here and reused for the right colorbar/legend panel.
-    if ax is None:
-        fig, ax = plt.subplots(figsize=figsize)
-    else:
-        fig = ax.figure
+    from . import _figure
+    show = _figure.resolve_show(show, ax)
+    fig, ax, _created = _figure.begin(ax, figsize=figsize)
     ax_dendro = None
     _divider = None
 
@@ -843,16 +878,6 @@ def dotplot(
     # above 0.25 — e.g. a max of 25% showed only one dot.)
     legend_fracs = _nice_legend_fracs(dot_max, n_target=5)
 
-    # Cap the legend handle dot size so the largest circle doesn't overrun its
-    # own label (#9). The dots are still proportional to each other up to the cap.
-    _LEG_MAX = 130.0
-    legend_elements = []
-    for f in legend_fracs:
-        s = ((f - dot_min) / (dot_max - dot_min + 1e-12)) * size_scale
-        legend_elements.append(
-            plt.scatter([], [], s=min(max(s, _MIN_DOT), _LEG_MAX), c='grey',
-                        edgecolors='black', linewidths=0.5, label=f'{f:.0%}')
-        )
 
     # --- Colorbar + size legend in DEDICATED axes alongside the grid ---
     # Using fig.colorbar(..., ax=ax) and ax.legend(bbox_to_anchor=...) steals
@@ -867,6 +892,25 @@ def dotplot(
     lax = divider.append_axes("right", size="24%", pad=0.35)
     lax.axis('off')
 
+    # The key draws each fraction at exactly the size a data dot of that
+    # fraction gets, so the two can be compared. It was capped at 130 while
+    # data dots reach size_scale (200): the 80 % and 100 % key dots came out
+    # identical, and smaller than a 100 % dot. The room a big dot needs is
+    # made by spacing the key (handle length and row spacing, below) rather
+    # than by shrinking the dot.
+    legend_elements = []
+    key_sizes = []
+    for f in legend_fracs:
+        s_f = float(np.clip((f - dot_min) / (dot_max - dot_min + 1e-12), 0, 1)) * size_scale
+        s_f = max(s_f, _MIN_DOT) if s_f > 0 else 0.0
+        key_sizes.append(s_f)
+        legend_elements.append(
+            lax.scatter([], [], s=s_f, c='grey', edgecolors='black',
+                       linewidths=0.5, label=f'{f:.0%}')
+        )
+    # a marker of scatter size s is sqrt(s) points across (plus its stroke)
+    _key_diam = float(np.sqrt(max(key_sizes, default=0.0))) + 0.5
+
     cax = lax.inset_axes([0.0, 0.6, 0.12, 0.3])   # provisional; sized below
     cbar = fig.colorbar(sc, cax=cax)
     cax.set_title('Mean\nexpression', fontsize=_fs_cbar_title, pad=3)
@@ -875,11 +919,16 @@ def dotplot(
     # The size legend goes straight on `lax` (which is axis-off) rather than
     # into a second inset: a legend sizes itself to its content, and boxing it
     # inside a fraction of the panel was part of what stretched it.
+    # rows and handles wide and tall enough for the largest key dot: the
+    # legend's row pitch is about the text height plus labelspacing, both in
+    # units of the font size
+    _ls = max(1.1, (_key_diam + 2.0) / _fs_legend - 1.0)
+    _hl = max(2.0, (_key_diam + 1.0) / _fs_legend)
     _size_legend = lax.legend(
         handles=legend_elements, title='Fraction\nexpressing',
         loc='upper left', bbox_to_anchor=(0.0, 0.5),   # provisional
         frameon=False, fontsize=_fs_legend, title_fontsize=_fs_legend,
-        labelspacing=1.1, handletextpad=1.0, borderpad=0.2)
+        labelspacing=_ls, handlelength=_hl, handletextpad=1.0, borderpad=0.2)
 
     if title:
         ax.set_title(title, fontsize=_fs_title, pad=10)
@@ -907,15 +956,10 @@ def dotplot(
 
     _fit_dotplot_keys(fig, ax, lax, cax, _size_legend)
 
-    from ..settings import _savefig
-    _savefig(fig, save, writekey='dotplot')
-    if show:
-        plt.show()
-    else:
-        plt.close(fig)
-
+    out = _figure.finish(fig, created=_created, show=show, save=save, writekey='dotplot')
     if return_fig:
         return fig, ax
+    return out
 
 
 @wraps(dotplot)

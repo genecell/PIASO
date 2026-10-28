@@ -225,12 +225,12 @@ def _connected_start(graph, dim: int, n_threads: int, identity=None):
     depend on the number of threads.
     """
     import warnings
-    from threadpoolctl import threadpool_limits
+    from ._blas import one_blas_thread
     A = _NormalizedGraphOps(graph, n_threads)
     n = A.n
     names = np.arange(n) if identity is None else np.asarray(identity)
     tiny = np.finfo(np.float64).tiny
-    with threadpool_limits(limits=1):
+    with one_blas_thread():
         if n <= START_DENSE:
             # small: every eigenvector at once
             dense = A(np.eye(n))
@@ -263,7 +263,14 @@ def _connected_start(graph, dim: int, n_threads: int, identity=None):
 def _component_meta(data, labels, n_comp: int, dim: int):
     """umap-learn's component placement: on the axes when there are few
     components, else a spectral layout of the centroids' affinities
-    (exp(-d^2)), here by a dense eigendecomposition."""
+    (exp(-d^2)), here by a dense eigendecomposition, on one BLAS thread like
+    the start's dense steps (it sat outside their limit)."""
+    from ._blas import one_blas_thread
+    with one_blas_thread():
+        return _component_meta_impl(data, labels, n_comp, dim)
+
+
+def _component_meta_impl(data, labels, n_comp: int, dim: int):
     if n_comp <= 2 * dim:
         k = int(np.ceil(n_comp / 2.0))
         base = np.hstack([np.eye(k), np.zeros((k, dim - k))])

@@ -23,6 +23,7 @@ def plotConfusionMatrix(
     dpi=300,
     return_objects=False,
     show_group_color_bars=False,
+    show=None,
     **kwargs
 ):
     """
@@ -57,7 +58,10 @@ def plotConfusionMatrix(
         fmt (str): Format for annotations. Default is '.2f'.
         title (str): Custom title for the plot. If None, generates automatic title.
         save_path (str): Path to save the figure. If None, only displays.
+            Saved with TrueType fonts.
         dpi (int): DPI for saved figure. Default is 300.
+        show (bool): Call ``plt.show()`` (default). When not shown the figure
+            is returned (without ``return_objects``), and closed if saved.
         return_objects (bool): If True, returns (confusion_matrix, fig, ax). Default is False.
         show_group_color_bars (bool): If True, shows colored bars next to ticks for categories 
                                that have colors defined in adata.uns (e.g., 'CellTypes_colors'). 
@@ -153,37 +157,13 @@ def plotConfusionMatrix(
     """
     
     # Handle different data types
+    from ..utils._cytome_compat import is_cytome_input
     _uns = None  # for color bar support
-    if isinstance(data, str):
-        # Path to cytome file
-        import sqlite3
-        conn = sqlite3.connect(data)
-        cols = [r[1] for r in conn.execute("PRAGMA table_info(cells)").fetchall()]
-        missing = [c for c in [groupby_query, groupby_reference] if c not in cols]
-        if missing:
-            conn.close()
-            raise ValueError(
-                f"Column(s) {missing} not found in cytome cells table. "
-                f"Available columns: {cols}"
-            )
-        rows = conn.execute(
-            f"SELECT [{groupby_query}], [{groupby_reference}] FROM cells"
-        ).fetchall()
-        conn.close()
-        df = pd.DataFrame(rows, columns=[groupby_query, groupby_reference])
-    elif hasattr(data, '_conn'):
-        # Cytome Dataset object
-        cols = [r[1] for r in data._conn.execute("PRAGMA table_info(cells)").fetchall()]
-        missing = [c for c in [groupby_query, groupby_reference] if c not in cols]
-        if missing:
-            raise ValueError(
-                f"Column(s) {missing} not found in cytome cells table. "
-                f"Available columns: {cols}"
-            )
-        rows = data._conn.execute(
-            f"SELECT [{groupby_query}], [{groupby_reference}] FROM cells"
-        ).fetchall()
-        df = pd.DataFrame(rows, columns=[groupby_query, groupby_reference])
+    if is_cytome_input(data):
+        # A store, as a path or a Dataset: read through cytome's own API,
+        # opened read-only (this was raw SQL on a read-write connection)
+        from ._store_io import read_cells_columns
+        df = read_cells_columns(data, [groupby_query, groupby_reference])
     elif hasattr(data, 'obs'):  # AnnData object
         df = data.obs
         _uns = getattr(data, 'uns', None)
@@ -267,36 +247,21 @@ def plotConfusionMatrix(
     # Reorder the confusion matrix
     conf_matrix_reordered = conf_matrix_norm.iloc[row_order, col_order]
     
-    # Get color information if show_group_color_bars is True and data is AnnData
+    # Group colours by name, from the resolver every plot uses: the stored
+    # colours of each column (AnnData uns, a store's categories), else the
+    # PIASO default. (Only AnnData uns was read, positionally.)
     query_colors = None
     reference_colors = None
-    if show_group_color_bars and (_uns is not None or hasattr(data, 'uns')):
-        uns = _uns if _uns is not None else getattr(data, 'uns', {})
-        query_color_key = f"{groupby_query}_colors"
-        reference_color_key = f"{groupby_reference}_colors"
+    if show_group_color_bars:
+        from ._categories import resolve_category_style
+        _src = data if (hasattr(data, 'obs') or is_cytome_input(data)) else None
+        q_style = resolve_category_style(_src, groupby_query, df[groupby_query],
+                                         read_stored=_src is not None)
+        r_style = resolve_category_style(_src, groupby_reference, df[groupby_reference],
+                                         read_stored=_src is not None)
+        query_colors = [q_style.color(c) for c in conf_matrix_reordered.index]
+        reference_colors = [r_style.color(c) for c in conf_matrix_reordered.columns]
 
-        if query_color_key in uns:
-            # Get unique categories in original order, then reorder
-            query_cats = conf_matrix_norm.index.tolist()
-            if len(uns[query_color_key]) >= len(query_cats):
-                # Create mapping from category to color
-                original_query_cats = df[groupby_query].astype('category').cat.categories.tolist() if hasattr(df[groupby_query], 'cat') else sorted(df[groupby_query].unique())
-                query_color_map = {cat: uns[query_color_key][i] for i, cat in enumerate(original_query_cats) if i < len(uns[query_color_key])}
-                # Get colors for reordered categories
-                query_colors = [query_color_map.get(cat, '#808080') for cat in query_cats]
-                query_colors = [query_colors[i] for i in row_order]
-        
-        if reference_color_key in uns:
-            # Get unique categories in original order, then reorder
-            reference_cats = conf_matrix_norm.columns.tolist()
-            if len(uns[reference_color_key]) >= len(reference_cats):
-                # Create mapping from category to color
-                original_ref_cats = df[groupby_reference].astype('category').cat.categories.tolist() if hasattr(df[groupby_reference], 'cat') else sorted(df[groupby_reference].unique())
-                reference_color_map = {cat: uns[reference_color_key][i] for i, cat in enumerate(original_ref_cats) if i < len(uns[reference_color_key])}
-                # Get colors for reordered categories
-                reference_colors = [reference_color_map.get(cat, '#808080') for cat in reference_cats]
-                reference_colors = [reference_colors[i] for i in col_order]
-    
     # Plotting
     if figsize is None:
         # ~0.34 in per cell, plus room for the labels, clamped so a 3x3 is not
@@ -344,12 +309,13 @@ def plotConfusionMatrix(
                                    edgecolor='white', linewidth=0.5, clip_on=False)
                 ax.add_patch(rect)
         
-        # Add reference color bar (top) - positioned at the top, adjacent to heatmap
+        # Reference colour bar on top, beside the reference labels (the x
+        # ticks are moved to the top below). seaborn's y axis runs downward,
+        # so the top edge is y = 0: the bar spans y in [-0.3, 0]. It was at
+        # y = n_rows, which is the BOTTOM edge, away from its labels.
         if reference_colors:
-            # Create a thicker bar on the top, ABOVE the heatmap
-            # The top of the heatmap is at y = number of rows
             for i, color in enumerate(reference_colors):
-                rect = plt.Rectangle((i, conf_matrix_reordered.shape[0]), 1, 0.3, 
+                rect = plt.Rectangle((i, -0.3), 1, 0.3,
                                    facecolor=color, edgecolor='white', linewidth=0.5, clip_on=False)
                 ax.add_patch(rect)
     
@@ -386,14 +352,12 @@ def plotConfusionMatrix(
     else:
         ax.set_title(title, pad=20)
     
-    plt.tight_layout()
-    
-    # Save if path provided
-    if save_path:
-        plt.savefig(save_path, dpi=dpi, bbox_inches='tight')
-        print(f"Figure saved to: {save_path}")
-    
-    plt.show()
-    
+    from . import _figure
+    _figure.layout(fig, quiet=False)
+    out = _figure.finish(fig, created=True, show=_figure.resolve_show(show),
+                         save=save_path, writekey="confusion_matrix", dpi=dpi,
+                         literal=True)
+
     if return_objects:
         return conf_matrix_reordered, fig, ax
+    return out

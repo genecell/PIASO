@@ -4,9 +4,9 @@ build-backend = "maturin"
 
 [project]
 name = "piaso-tools"
-version = "1.2.7"
+version = "1.2.8"
 description = "Precise Integrative Analysis of Single-cell Omics."
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 license = {text = "BSD-3-Clause"}
 authors = [
     { name = "Min Dai", email = "dai@broadinstitute.org" }
@@ -23,11 +23,10 @@ classifiers = [
     "Intended Audience :: Developers",
     "Intended Audience :: Science/Research",
     "Natural Language :: English",
-    "Operating System :: MacOS :: MacOS X",
-    "Operating System :: Microsoft :: Windows",
+    # What CI builds wheels for and tests: Linux x86_64, CPython 3.10 to 3.12. Elsewhere pip
+    # builds from the sdist (Rust needed), on platforms nobody has run PIASO on yet.
     "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -37,7 +36,9 @@ classifiers = [
 dependencies = [
     "anndata>=0.8",
     "numpy>=1.21.6",
-    "matplotlib>=3.5.2",
+    # >=3.6: matplotlib.colormaps.get_cmap (plotEmbedding's categorical colormaps); on 3.5 the
+    # call failed inside a try and the colormap a user named was silently ignored.
+    "matplotlib>=3.6",
     # No upper bound. pandas 3 turns on `future.infer_string`, so a string
     # column is StringDtype rather than object -- which broke dtype dispatch
     # until the checks stopped asking numpy about a pandas extension dtype.
@@ -66,7 +67,15 @@ dependencies = [
     # which does not exist before 1.1.0. The import is lazy, so a stale cosg
     # does not break `import piaso` -- it fails partway through a GDR run with
     # ModuleNotFoundError, which is the worst time to find out.
-    "cosg>=1.1.2",
+    # Floor 1.2.1: COSG before 1.2.1 scored a group with no cell in a batch, so
+    # runGDR(batch_key=..., groupby=...) and predictCellTypeByGDR (reference and
+    # query as two batches) gained a marker set of unrelated genes, one noise
+    # dimension of X_gdr, per batch-group pair without cells
+    # (tests/test_gdr_batch_missing_group.py); 1.2.0's dense output, which
+    # specificity_matrix reads on a cytome, fails under pandas 3 ("assignment
+    # destination is read-only"); and 1.2.1 reads a cytome's column-major
+    # matrices.
+    "cosg>=1.2.1",
     # Required, not optional. PIASO reads cytome datasets throughout tl/pp/pl,
     # and cytome is a 124 KB pure-Python wheel whose own dependencies (numpy,
     # scipy, pandas, lz4) are all already listed above -- so requiring it adds
@@ -83,7 +92,12 @@ dependencies = [
     # Floor 0.3.7: piaso.data.makeGenomeFiles reads the reference's GTF with
     # cytome.read_gtf, new in 0.3.7 (one reader for GENCODE, Ensembl, NCBI
     # RefSeq and plain GTF 2.2), and raises ImportError on an older cytome.
-    "cytome>=0.3.7,<1.0",
+    # Floor 0.3.9: the cytome this release was tested with, released with it
+    # (cytome's own audit of 2026-10-27: writes that never stop half done,
+    # categoricals and missing labels that round-trip, readers that never
+    # write). No PIASO call needs a function new in 0.3.9; the suite passes on
+    # 0.3.8 too.
+    "cytome>=0.3.9,<1.0",
 ]
 
 # https://docs.pypi.org/project_metadata/#project-urls
@@ -127,3 +141,16 @@ scanpy = [
 # again for the public tree, where the sources they gate do not ship.
 features = ["pyo3/extension-module"]
 module-name = "piaso._piaso"
+
+[tool.pytest.ini_options]
+testpaths = ["tests", "piaso/tests"]
+# An unregistered marker is an error, not a silently unselectable test. The markers are
+# described in tests/conftest.py, which also registers them for a copy of tests/ run alone.
+addopts = "--strict-markers"
+markers = [
+    "data(*paths): needs these files from the data roots (PIASO_TEST_DATA, PIASO_TEST_RESULTS); skipped without them, failed with PIASO_REQUIRE_DATA=1",
+    "requires_e18: needs the E18 store built by the workflow (data(E18_CYTOME))",
+    "snakemake: runs Snakemake (PIASO_SNAKEMAKE or PATH); skipped without it",
+    "network: may download (PIASO-data, Zenodo); skipped when the download fails",
+    "slow: a call of 20 s or more (tests/slow_tests.txt); deselect with -m 'not slow'",
+]

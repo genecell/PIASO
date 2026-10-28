@@ -436,7 +436,9 @@ def _rust_available():
 def test_rust_matches_numpy():
     import numpy as np
     from piaso.data._pwm import PWM
-    from piaso.preprocessing.grn._scan import scan_motifs
+    # the numpy reference itself: scan_motifs dispatches to Rust when it is built,
+    # so comparing it with scan_motifs_rust compared Rust with Rust
+    from piaso.preprocessing.grn._scan import _scan_motifs_numpy
     from piaso.preprocessing.grn._scan_rust import scan_motifs_rust
 
     rng = np.random.default_rng(0)
@@ -452,12 +454,10 @@ def test_rust_matches_numpy():
     seqs[3] = seqs[3][:100] + "CACGTG" + seqs[3][106:]
 
     bg = np.array([0.25, 0.25, 0.25, 0.25])
-    r_np = scan_motifs(pwms, seqs, background=bg, pvalue=1e-3, both_strands=True)
+    r_np = _scan_motifs_numpy(pwms, seqs, background=bg, pvalue=1e-3, both_strands=True)
     r_rs = scan_motifs_rust(pwms, seqs, background=bg, pvalue=1e-3, both_strands=True)
-    # hit counts identical; best scores match where there are hits
+    # identical to the bit (one precision: float64 window scores added in the same
+    # order); tests/test_grn_scan_parity.py covers the edge thresholds
     assert np.array_equal(r_np["hit_count"], r_rs["hit_count"]), \
         (r_np["hit_count"], r_rs["hit_count"])
-    a, b = r_np["best_score"], r_rs["best_score"]
-    both = np.isfinite(a) & np.isfinite(b)
-    assert np.allclose(a[both], b[both], atol=1e-4)
-    assert np.array_equal(np.isfinite(a), np.isfinite(b))
+    assert np.array_equal(r_np["best_score"], r_rs["best_score"], equal_nan=True)

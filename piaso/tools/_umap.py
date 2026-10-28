@@ -79,7 +79,9 @@ def umap(
     random_state : int
         Random seed for reproducibility. With the Rust backend it sets the
         layout's negative samples and the start's noise of 1e-4; the spectral
-        start itself does not depend on it, as umap-learn's does not.
+        start itself does not depend on it, as umap-learn's does not. The
+        Rust layout is deterministic, so ``None`` there means seed 0 (with
+        umap-learn ``None`` means a fresh random state each call).
     key_added : str
         Key/name for the UMAP coordinates.
     knn_result : dict, optional
@@ -265,6 +267,12 @@ def umap(
     from . import _umap_rust
     if backend == 'auto':
         backend = 'rust' if (precomputed_knn is not None and _umap_rust.available()) else 'umap-learn'
+        if precomputed_knn is not None and backend == 'umap-learn':
+            warnings.warn(
+                "umap: the Rust extension has no umap_layout_csr, so umap-learn computes the "
+                "embedding instead (single-threaded with a seed, and another picture). Rebuild or "
+                "reinstall PIASO's extension, or pass backend='umap-learn' to silence this.",
+                RuntimeWarning, stacklevel=2)
     if backend == 'rust':
         if precomputed_knn is None:
             raise ValueError("umap(backend='rust') needs a stored kNN graph: run piaso.tl.neighbors first, "

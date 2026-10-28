@@ -185,6 +185,13 @@ class EngineOps:
             self.depth = np.ascontiguousarray(tfidf["cell_depth"], dtype=np.float64)
             self.idf = np.ascontiguousarray(tfidf["idf"], dtype=np.float32)
             self.scale = float(tfidf.get("scale_factor", 1e4))
+            # The Python transform (`_normalize_chunk_tfidf`, run_TFIDF) skips
+            # the multiply for a scale of 0, i.e. reads it as 1; the engine
+            # multiplied by 0 and factorised a matrix of zeros.
+            if self.scale == 0.0:
+                self.scale = 1.0
+            if not (np.isfinite(self.depth).all() and np.isfinite(self.idf).all()):
+                raise ValueError("tfidf cell_depth / idf hold values that are not finite")
             if self.depth.shape[0] != n_rows_matrix or self.idf.shape[0] != n_cols_matrix:
                 raise ValueError("tfidf cell_depth / idf do not match the matrix shape")
         self.n_threads = int(n_threads)
@@ -288,7 +295,7 @@ def _block_tridiagonal(A_blocks, B_blocks):
 
 
 def _block_lanczos(ops, n_components, k, q_max, rng, tol, log, verbosity,
-                   stop_on="residuals"):
+                   stop_on="residuals", dense=None):
     """Randomized block Lanczos on ``X X^T``: the Krylov subspace, with structure.
 
     Each round applies ``X^T`` then ``X`` to the newest block only (two passes
@@ -311,7 +318,7 @@ def _block_lanczos(ops, n_components, k, q_max, rng, tol, log, verbosity,
     n_rows, n_cols = ops.n_rows, ops.n_cols
     Omega = rng.standard_normal((n_cols, k)).astype(np.float64)
     log("Y = X @ Omega")
-    V, _ = np.linalg.qr(ops.xb(Omega))
+    V, _ = dense.qr(ops.xb(Omega))
     del Omega
     blocks, A_blocks, B_blocks, hist = [V], [], [], []
     V_prev, B_prev = None, None
@@ -322,19 +329,19 @@ def _block_lanczos(ops, n_components, k, q_max, rng, tol, log, verbosity,
         log(f"W = X Z (lanczos round {i + 1})")
         W = ops.xb(Z)
         del Z
-        A = V.T @ W
+        A = dense.tmul(V, W)
         A = 0.5 * (A + A.T)
-        W -= V @ A
+        dense.submul(W, V, A)
         if V_prev is not None:
-            W -= V_prev @ B_prev.T
+            dense.submul(W, V_prev, B_prev.T)
         # Full reorthogonalisation, twice: in floating point the blocks
         # drift, and every Lanczos in production does this.
         for _ in range(2):
             for Vj in blocks:
-                W -= Vj @ (Vj.T @ W)
+                dense.submul(W, Vj, dense.tmul(Vj, W))
         A_blocks.append(A)
         rounds = i + 1
-        V_next, B = np.linalg.qr(W)
+        V_next, B = dense.qr(W)
         if stop_on == "residuals":
             theta_all, Y_T = np.linalg.eigh(_block_tridiagonal(A_blocks, B_blocks))
             order = np.argsort(theta_all)[::-1][:n_components]
@@ -358,23 +365,66 @@ def _block_lanczos(ops, n_components, k, q_max, rng, tol, log, verbosity,
         B_blocks.append(B)
         blocks.append(V_next)
         V_prev, B_prev, V = V, B, V_next
-    Q = np.hstack(blocks)
     theta, U_T = np.linalg.eigh(_block_tridiagonal(A_blocks, B_blocks))
     order = np.argsort(theta)[::-1][:n_components]
     S = np.sqrt(np.maximum(theta[order], 0.0))
-    U = Q @ U_T[:, order]
+    # U = [V_0 ... V_q] @ U_T[:, order], block by block, added in block order
+    # (without the n_rows x (q + 1) k copy np.hstack made)
+    U = dense.mul(blocks[0], U_T[:k, order])
+    for j in range(1, len(blocks)):
+        U += dense.mul(blocks[j], U_T[j * k:(j + 1) * k, order])
+    basis_columns = sum(b.shape[1] for b in blocks)
     log("V = X^T U / S")
     Vt = (ops.xty(U) / np.maximum(S, np.finfo(float).tiny)).T
     info = {"iterations": rounds, "converged": converged if tol is not None else None,
-            "method": "krylov", "criterion": crit, "basis_columns": int(Q.shape[1]),
+            "method": "krylov", "criterion": crit, "basis_columns": int(basis_columns),
             "stop_on": stop_on}
     return U * S, S, Vt, info
 
 
 
+def _fix_signs(emb, Vt):
+    """Each component's sign fixed by a rule: its cell coordinate of largest
+    magnitude positive (the first such cell on a tie), the loadings flipped with
+    it. A singular pair is only defined up to its sign, and which one a solver
+    returns follows the internals of its QR and SVD; with the rule it follows
+    the data alone. (scikit-learn's ``svd_flip`` with ``u_based_decision``.)"""
+    if emb.size == 0:
+        return emb, Vt
+    top = np.argmax(np.abs(emb), axis=0)
+    signs = np.sign(emb[top, np.arange(emb.shape[1])])
+    signs[signs == 0] = 1.0
+    emb = emb * signs
+    if Vt is not None:
+        Vt = Vt * signs[:, None]
+    return emb, Vt
+
+
 def rsvd_core(ops, n_components, n_iter, random_state, oversampling=10,
               tol=None, method="power", verbosity=0, stop_on="residuals"):
     """Randomized SVD of the operator; returns ``(U*S, S, Vt, info)``.
+
+    The dense steps between the passes (QR, the Lanczos products and
+    reorthogonalisation, the eigen- and singular value decompositions) run on
+    one BLAS thread (``_blas.one_blas_thread``), so the result does not depend
+    on how many cores OpenBLAS sees: at one and at two threads they differed in
+    the last bits (9e-12), enough to flip a kNN tie. The tall ones (QR, the
+    products and the reorthogonalisation) run on row blocks of a fixed height
+    side by side (``_dense.Dense``), so they keep their speed. The passes
+    themselves are Rust (``EngineOps``) or scipy's sparse products, neither of
+    which uses BLAS. Each component's sign follows a rule (``_fix_signs``): its
+    cell coordinate of largest magnitude is positive.
+    """
+    from ._blas import one_blas_thread
+    from ._dense import Dense
+    with one_blas_thread(), Dense(getattr(ops, "n_threads", 0)) as dense:
+        return _rsvd(ops, n_components, n_iter, random_state, oversampling=oversampling,
+                     tol=tol, method=method, verbosity=verbosity, stop_on=stop_on, dense=dense)
+
+
+def _rsvd(ops, n_components, n_iter, random_state, oversampling=10,
+          tol=None, method="power", verbosity=0, stop_on="residuals", dense=None):
+    """The body of :func:`rsvd_core`.
 
     ``info`` reports the passes taken and, under ``tol``, whether and when
     the iteration converged. ``method="auto"`` picks block Krylov with
@@ -390,6 +440,9 @@ def rsvd_core(ops, n_components, n_iter, random_state, oversampling=10,
     """
     if stop_on not in STOP_RULES:
         raise ValueError(f"stop_on must be one of {STOP_RULES}, got {stop_on!r}")
+    if dense is None:
+        from ._dense import Dense
+        dense = Dense(1)
     n_rows, n_cols = ops.n_rows, ops.n_cols
     k = n_components + oversampling
     if method == "auto":
@@ -442,9 +495,10 @@ def rsvd_core(ops, n_components, n_iter, random_state, oversampling=10,
 
     if method == "krylov":
         emb, S, Vt, info = _block_lanczos(ops, n_components, k, n_iter, rng, tol, log, verbosity,
-                                          stop_on=stop_on)
+                                          stop_on=stop_on, dense=dense)
         info["passes"] = n_pass
         _report(info)
+        emb, Vt = _fix_signs(emb, Vt)
         return emb, S, Vt, info
     elif method == "power":
         Omega = rng.standard_normal((n_cols, k)).astype(np.float64)
@@ -455,7 +509,7 @@ def rsvd_core(ops, n_components, n_iter, random_state, oversampling=10,
         converged = False
         Q = None
         for i in range(n_iter):
-            Q, _ = np.linalg.qr(Y)
+            Q, _ = dense.qr(Y)
             log(f"Z = X^T Q (power iter {i + 1})")
             Z = ops.xty(Q)
             if tol is not None and stop_on == "singular_values":
@@ -475,7 +529,7 @@ def rsvd_core(ops, n_components, n_iter, random_state, oversampling=10,
                 # pass: Y U_B - Q U_B S^2.
                 U_B, S_r, _ = np.linalg.svd(Z.T, full_matrices=False)
                 U_B, S_r = U_B[:, :n_components], S_r[:n_components]
-                rel = _relative_residuals(Y @ U_B - Q @ (U_B * S_r ** 2), S_r ** 2)
+                rel = _relative_residuals(dense.mul(Y, U_B) - dense.mul(Q, U_B * S_r ** 2), S_r ** 2)
                 crit = float(rel.max())
                 if verbosity > 1:
                     print(f"    iteration {i + 1}: largest relative residual {crit:.2e}")
@@ -485,7 +539,7 @@ def rsvd_core(ops, n_components, n_iter, random_state, oversampling=10,
                     info["criterion"] = crit
                     break
         if not converged:
-            Q, _ = np.linalg.qr(Y)
+            Q, _ = dense.qr(Y)
             log("B = Q^T X")
             Z = ops.xty(Q)
             info["iterations"] = n_iter
@@ -495,7 +549,8 @@ def rsvd_core(ops, n_components, n_iter, random_state, oversampling=10,
         raise ValueError(f"method must be 'power' or 'krylov', got {method!r}")
 
     U_B, S, Vt = np.linalg.svd(B, full_matrices=False)
-    U = Q @ U_B[:, :n_components]
+    U = dense.mul(Q, U_B[:, :n_components])
     info["passes"] = n_pass
     _report(info)
-    return U * S[:n_components], S[:n_components], Vt[:n_components], info
+    emb, Vt = _fix_signs(U * S[:n_components], Vt[:n_components])
+    return emb, S[:n_components], Vt, info

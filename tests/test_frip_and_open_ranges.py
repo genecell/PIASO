@@ -24,6 +24,9 @@ def _atac_cytome(path, n=10):
         var=pd.DataFrame(index=[f"chr1:{i*100}-{i*100+50}" for i in range(4)]),
     )
     ds = cytome.from_anndata(a, modality="ATAC", output=str(path))
+    # the matrix counts fragments in peaks: say so (a matrix without the record
+    # is taken as insertions, two per fragment, the pipeline's stage-2 rule)
+    ds.metadata["counting:ATAC_counts"] = "overlaps"
     ds.flush()
     return ds
 
@@ -84,3 +87,16 @@ def test_as_range_helper():
     assert _as_range(("a", "b")) is None        # non-numeric → not a range
     assert _as_range((1, 2, 3)) is None         # wrong length
     assert _as_range(5) is None                 # scalar
+
+
+def test_frip_without_a_counting_record_warns_and_takes_insertions(tmp_path):
+    import piaso
+    ds = _atac_cytome(tmp_path / "a.cytome")
+    del ds.metadata["counting:ATAC_counts"]
+    ds.flush()
+    with pytest.warns(UserWarning, match="does not record how it counted"):
+        piaso.pp.calculateCellMetrics(ds, modality="ATAC", verbose=False)
+    assert np.allclose(np.asarray(ds.cells["frip"], dtype=float), 0.25)
+    piaso.pp.calculateCellMetrics(ds, modality="ATAC", verbose=False, counting="overlaps")
+    assert np.allclose(np.asarray(ds.cells["frip"], dtype=float), 0.5)
+    ds.close()

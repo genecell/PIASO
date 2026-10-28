@@ -57,6 +57,61 @@ def calculate_jaccard(set1: set, set2: set) -> float:
     # Jaccard index is 0 if union is 0 (both sets empty)
     return intersection / union if union > 0 else 0.0 
 
+def _version_tuple(v: str):
+    """``'1.16.3'`` -> ``(1, 16, 3)``; non-numeric parts end the tuple."""
+    out = []
+    for part in str(v).split("."):
+        num = ""
+        for ch in part:
+            if ch.isdigit():
+                num += ch
+            else:
+                break
+        if not num:
+            break
+        out.append(int(num))
+    return tuple(out)
+
+
+def _installed_version(dist: str):
+    """The installed version of ``dist``, or None. (pkg_resources, used before,
+    is deprecated and gone from new setuptools, where its ImportError read as
+    "BBKNN is required".)"""
+    try:
+        from importlib.metadata import version, PackageNotFoundError
+    except ImportError:                       # pragma: no cover
+        return None
+    try:
+        return version(dist)
+    except PackageNotFoundError:
+        return None
+
+
+def _markers_from_names(names_df, labels, n_markers):
+    """``{label: set of the first n_markers marker names}`` from a COSG names table."""
+    out = {}
+    for lab in labels:
+        if lab in names_df.columns:
+            out[lab] = set(names_df[lab].dropna().astype(str).tolist()[:n_markers])
+        else:
+            out[lab] = set()
+    return out
+
+
+def _cosg_store_markers(store, labels_key, mask, n_markers, cosg_args):
+    """COSG markers of each group of ``labels_key`` among the cells of ``mask``, read
+    from a store's own expression (``run_cosg_cytome``, streaming)."""
+    from cosg import run_cosg_cytome
+    ds, modality, layer = store["ds"], store["modality"], store["layer"]
+    res = run_cosg_cytome(
+        cytome_path=str(ds.path), groupby=labels_key, cell_mask=np.asarray(mask, dtype=bool),
+        n_genes_user=n_markers, mu=cosg_args["mu"], expressed_pct=cosg_args["expressed_pct"],
+        remove_lowly_expressed=cosg_args["remove_lowly_expressed"], modality=modality,
+        layer=layer, verbose=False)
+    groups = [str(g) for g in res["groups_order"]]
+    return pd.DataFrame(np.asarray(res["names"], dtype=object), columns=groups)
+
+
 # Helper Function for Building the Pruned Graph
 def _build_marker_filtered_graph_dual(
     adata: AnnData,
@@ -80,7 +135,8 @@ def _build_marker_filtered_graph_dual(
     bbknn_trim: typing.Union[int, None],
     bbknn_computation: str = 'annoy', 
     bbknn_metric: str = 'euclidean',
-    verbosity: int = 0 # Control internal verbosity of this helper
+    verbosity: int = 0, # Control internal verbosity of this helper
+    cosg_store: typing.Union[dict, None] = None, # a store's own expression for COSG
     ) -> typing.Tuple[ # Return graph, compatibility dict, local markers, global markers
         typing.Union[sp.csr_matrix, None], 
         typing.Union[dict, None],
@@ -110,123 +166,55 @@ def _build_marker_filtered_graph_dual(
     
     
     
-    # Import and version check for BBKNN
+    # BBKNN, and its version. Every failure here raises: it used to print a
+    # message and return None, which is also what success returns.
     try:
         import bbknn
         import bbknn.matrix
-        import pkg_resources
-
-        # Get BBKNN version
-        bbknn_version = pkg_resources.get_distribution("bbknn").version
-        is_old_version = pkg_resources.parse_version(bbknn_version) <= pkg_resources.parse_version('1.5.1')
-
-        if verbosity > 0: 
-            print(f"Successfully imported BBKNN version {bbknn_version}")
-            print(f"Using parameters for version {'<= 1.5.1' if is_old_version else '> 1.5.1'}")
-
     except ImportError as e:
-        print(f"Error importing BBKNN: {e}")
-        print("BBKNN is required for this function. Please install it with 'pip install bbknn'.")
-        return None, None, None, None
-    
-    
-    
-    # Step 1: Build Initial BBKNN Graph using bbknn.matrix.bbknn with version checking
+        raise ImportError("piaso.tl.stitchSpace needs BBKNN: pip install bbknn") from e
+    bbknn_version = _installed_version("bbknn") or getattr(bbknn, "__version__", "0")
+    is_old_version = _version_tuple(bbknn_version) <= (1, 5, 1)
+    if verbosity > 0:
+        print(f"BBKNN version {bbknn_version} ({'<= 1.5.1' if is_old_version else '> 1.5.1'} parameters)")
+
+    # Step 1: Build Initial BBKNN Graph using bbknn.matrix.bbknn
     if verbosity > 0: print(f"Building initial graph via BBKNN (neighbors_within_batch={neighbors_within_batch})...")
-
-
+    cell_embeddings = adata.obsm[use_rep]
+    batch_list = adata.obs[batch_key].values
+    base_params = {
+        'neighbors_within_batch': neighbors_within_batch,
+        'trim': bbknn_trim,
+        'metric': bbknn_metric,
+        'n_pcs': cell_embeddings.shape[1],  # Use all available dimensions
+    }
+    computation = bbknn_computation or 'annoy'
+    if computation == 'annoy':
+        # Annoy >= 1.17 makes BBKNN segfault (a crash, not an error to catch).
+        annoy_version = _installed_version("annoy")
+        if annoy_version is not None and _version_tuple(annoy_version) >= (1, 17, 0):
+            raise ImportError(
+                f"stitchSpace: annoy {annoy_version} is installed, and annoy >= 1.17.0 makes BBKNN "
+                f"crash (segmentation fault). Install annoy 1.16.3 (pip install annoy==1.16.3, then "
+                f"restart the kernel), or pass filter_bbknn_computation='pynndescent' or 'faiss'.")
+    if is_old_version:
+        # BBKNN <= 1.5.1 names the computation with flags instead
+        params_to_use = {**base_params, 'approx': computation in ('annoy', 'faiss'),
+                         'annoy_n_trees': 10, 'use_annoy': computation == 'annoy',
+                         'use_faiss': computation == 'faiss'}
+    else:
+        params_to_use = {**base_params, 'computation': computation, 'annoy_n_trees': 10}
+    params_to_use = {k: v for k, v in params_to_use.items() if v is not None}
+    if verbosity > 0:
+        print(f"Calling bbknn.matrix.bbknn with parameters: {params_to_use}")
     try:
-        # Check BBKNN version
-        import pkg_resources
-        bbknn_version = pkg_resources.get_distribution("bbknn").version
-        is_old_version = pkg_resources.parse_version(bbknn_version) <= pkg_resources.parse_version('1.5.1')
-        if verbosity > 0: print(f"Detected BBKNN version: {bbknn_version} (is_old_version={is_old_version})")
-
-        # Extract cell embeddings and batch information
-        cell_embeddings = adata.obsm[use_rep]
-        batch_list = adata.obs[batch_key].values
-
-        # Base parameters for all versions
-        base_params = {
-            'neighbors_within_batch': neighbors_within_batch,
-            'trim': bbknn_trim,
-            'metric': bbknn_metric,
-            'n_pcs': cell_embeddings.shape[1],  # Use all available dimensions
-        }
-
-        # Version-specific parameter handling
-        if is_old_version:
-            # For versions <= 1.5.1, use the older parameter set
-            params_to_use = {
-                **base_params,
-                'approx': True,
-                'annoy_n_trees': 10,
-                'use_annoy': True,
-                'use_faiss': False if 'use_faiss' in locals() and use_faiss is not None else True
-            }
-
-            if verbosity > 0: 
-                print(f"Using parameters for version <= 1.5.1: approx=True, use_annoy=True")
-        else:
-            computation_param = 'annoy'  # Default
-            # For versions > 1.5.1 (e.g., 1.6.0+), use 'computation' parameter
-            if hasattr(locals(), 'bbknn_computation') and bbknn_computation is not None:
-                computation_param = bbknn_computation
-            
-            if computation_param == 'annoy':
-                try:
-                    import pkg_resources
-                    annoy_version = pkg_resources.get_distribution("annoy").version
-
-                    # Check if version is >= 1.17.0
-                    if pkg_resources.parse_version(annoy_version) >= pkg_resources.parse_version('1.17.0'):
-                        error_msg = (
-                            f"\n\nCRITICAL ERROR: Incompatible Annoy version detected ({annoy_version}).\n"
-                            "Annoy versions >= 1.17.0 are known to cause Segmentation Faults (Core Dumps) with BBKNN.\n"
-                            "--------------------------------------------------------\n"
-                            "PLEASE RUN THE FOLLOWING COMMAND TO FIX THIS:\n"
-                            "pip install annoy==1.16.3\n"
-                            "--------------------------------------------------------\n"
-                            "(Remember to restart your kernel after installing!)\n"
-                        )
-                        raise ImportError(error_msg)
-
-                except pkg_resources.DistributionNotFound:
-                    # If annoy isn't installed, BBKNN will raise its own error later, so we can skip
-                    pass
-                
-
-            params_to_use = {
-                **base_params,
-                'computation': computation_param,
-                'annoy_n_trees': 10
-            }
-
-            if verbosity > 0: 
-                print(f"Using parameters for version > 1.5.1: computation={computation_param}")
-
-        # Remove any None values
-        params_to_use = {k: v for k, v in params_to_use.items() if v is not None}
-
-        # Call bbknn.matrix.bbknn with the appropriate parameters
-        if verbosity > 0: 
-            print(f"Calling bbknn.matrix.bbknn with parameters: {params_to_use}")
-
         distances, connectivities, parameters = bbknn.matrix.bbknn(
-            cell_embeddings,
-            batch_list,
-            **params_to_use
-        )
-
-        # Check if results were generated correctly
-        if connectivities is None:
-            raise ValueError("BBKNN did not return valid connectivities.")
-
-        if verbosity > 0: print("Initial graph built using bbknn.matrix.bbknn successfully.")
-
+            cell_embeddings, batch_list, **params_to_use)
     except Exception as e:
-        print(f"Error during BBKNN graph construction: {e}")
-        return None, None, None, None
+        raise RuntimeError(f"stitchSpace: BBKNN failed to build the graph ({type(e).__name__}: {e})") from e
+    if connectivities is None:
+        raise RuntimeError("stitchSpace: BBKNN returned no connectivities")
+    if verbosity > 0: print("Initial graph built using bbknn.matrix.bbknn successfully.")
         
     
 
@@ -297,9 +285,10 @@ def _build_marker_filtered_graph_dual(
                     print(f"Batch {batch}: Found {n_clusters} clusters from {n_cells_in_batch} cells")
 
             except Exception as e:
-                print(f"Error clustering batch {batch}: {str(e)}")
-                print(f"Assigning '{batch}{delimiter}NA' to all cells in this batch")
-                adata.obs.loc[batch_mask, cluster_key_added] = f"{batch}{delimiter}NA"
+                # Raised, no longer turned into an 'NA' batch: such a batch lost
+                # every edge to the other batches, silently.
+                raise RuntimeError(f"stitchSpace: clustering batch {batch!r} failed "
+                                   f"({type(e).__name__}: {e})") from e
 
             finally:
                 # Clean up temporary objects and references
@@ -312,8 +301,10 @@ def _build_marker_filtered_graph_dual(
                             del adata_batch.obsp[key]
                     del adata_batch
 
+    except RuntimeError:
+        raise
     except Exception as e:
-        print(f"Error during batch clustering process: {str(e)}")
+        raise RuntimeError(f"stitchSpace: the within-batch clustering failed ({type(e).__name__}: {e})") from e
 
     # Convert result to categorical
     adata.obs[cluster_key_added] = adata.obs[cluster_key_added].astype('category')
@@ -349,60 +340,47 @@ def _build_marker_filtered_graph_dual(
         except ImportError:
             if verbosity > 0: print("tqdm not available, not showing progress bar")
 
+    if cosg_store is not None:
+        # The batch-cluster labels go to the store's cells table, which COSG
+        # reads them from (they are also this function's documented output).
+        cosg_store["ds"].cells[cluster_key_added] = adata.obs[cluster_key_added].astype(str).values
+        cosg_store["ds"].flush()
+
     # Process each batch
     for batch in iterator:
         batch_mask = (adata.obs[batch_key] == batch)
-        if not np.any(batch_mask): continue 
-        adata_batch = adata[batch_mask].copy() 
-        if cluster_key_added not in adata_batch.obs: continue
-         
-        # Use the combined label for grouping
-        adata_batch.obs['groupby_col'] = adata_batch.obs[cluster_key_added].astype('category')
-        valid_clusters_in_batch = [str(c) for c in adata_batch.obs['groupby_col'].cat.categories if not str(c).endswith(f"{delimiter}NA")]
-        if len(valid_clusters_in_batch) <= 1: continue 
-         
-        
+        if not np.any(batch_mask): continue
+        labels_b = adata.obs[cluster_key_added][batch_mask].astype(str)
+        valid_clusters_in_batch = sorted({c for c in labels_b if not c.endswith(f"{delimiter}NA")})
+        if len(valid_clusters_in_batch) <= 1: continue
 
+        # Errors raise: they used to become a warning and empty marker sets,
+        # which pruned every edge of the batch's clusters to the other batches.
         try:
-            # Check if layer exists and update COSG args appropriately
-            if cosg_layer is not None:
-                if cosg_layer in adata_batch.layers:
-                    current_cosg_args['layer'] = cosg_layer
-                else:
-                    warnings.warn(f"Layer '{cosg_layer}' not found in batch {batch}. Using adata.X for COSG.")
-                    current_cosg_args.pop('layer', None)
-
-            # Run COSG directly on adata_batch with appropriate parameters
-            cosg.cosg(adata_batch, 
-                      key_added='cosg_temp', 
-                      groupby='groupby_col', 
-                      n_genes_user=n_markers,
-                      use_raw=False, 
-                      **current_cosg_args)
-
-            # Process results
-            if 'cosg_temp' in adata_batch.uns and 'names' in adata_batch.uns['cosg_temp']:
-                cosg_names_df = pd.DataFrame(adata_batch.uns['cosg_temp']['names'])
-
-                # Process in a more vectorized way
-                for bc_label in valid_clusters_in_batch:
-                    if bc_label in cosg_names_df.columns:
-                        markers = cosg_names_df[bc_label].dropna().tolist()[:n_markers]
-                        local_marker_genes[bc_label] = set(markers)
+            if cosg_store is not None:
+                names_df = _cosg_store_markers(cosg_store, cluster_key_added, batch_mask.values,
+                                               n_markers, current_cosg_args)
+            else:
+                adata_batch = adata[batch_mask].copy()
+                adata_batch.obs['groupby_col'] = adata_batch.obs[cluster_key_added].astype('category')
+                args = dict(current_cosg_args)
+                if cosg_layer is not None:
+                    if cosg_layer in adata_batch.layers:
+                        args['layer'] = cosg_layer
                     else:
-                        local_marker_genes[bc_label] = set()
-
-            del adata_batch  # Delete original copy when done
-
-        except Exception as e:
-            warnings.warn(f"Error running Local COSG for batch {batch}: {e}")
-            if 'adata_batch' in locals(): 
+                        warnings.warn(f"Layer '{cosg_layer}' not found in batch {batch}. Using adata.X for COSG.")
+                cosg.cosg(adata_batch,
+                          key_added='cosg_temp',
+                          groupby='groupby_col',
+                          n_genes_user=n_markers,
+                          use_raw=False,
+                          **args)
+                names_df = pd.DataFrame(adata_batch.uns['cosg_temp']['names'])
                 del adata_batch
-
-            # Initialize empty marker sets for this batch
-            for bc_label in valid_clusters_in_batch:
-                if bc_label not in local_marker_genes:
-                    local_marker_genes[bc_label] = set()
+        except Exception as e:
+            raise RuntimeError(f"stitchSpace: COSG failed on batch {batch!r} "
+                               f"({type(e).__name__}: {e})") from e
+        local_marker_genes.update(_markers_from_names(names_df, valid_clusters_in_batch, n_markers))
 
     if verbosity > 0: print("Local marker identification finished.")
 
@@ -416,25 +394,22 @@ def _build_marker_filtered_graph_dual(
 
         if not np.any(valid_mask): 
             print("Skipping Global COSG: No valid batch-clusters found.")
+        elif adata.obs[cluster_key_added][valid_mask].nunique() <= 1:
+            print("Skipping Global COSG: Not enough distinct valid batch-clusters found.")
         else:
-            adata_valid_clusters = adata[valid_mask].copy() 
-
-            if len(adata_valid_clusters.obs[cluster_key_added].unique()) > 1:
-                try:
+            try:
+                if cosg_store is not None:
+                    names_df = _cosg_store_markers(cosg_store, cluster_key_added, valid_mask.values,
+                                                   n_markers, current_cosg_args)
+                else:
+                    adata_valid_clusters = adata[valid_mask].copy()
                     adata_valid_clusters.obs['groupby_col'] = adata_valid_clusters.obs[cluster_key_added].astype('category')
-
-                    # Update COSG args based on layer availability
-                    global_cosg_args = current_cosg_args.copy()
+                    global_cosg_args = dict(current_cosg_args)
                     if cosg_layer is not None:
                         if cosg_layer in adata_valid_clusters.layers:
                             global_cosg_args['layer'] = cosg_layer
                         else:
                             warnings.warn(f"Layer '{cosg_layer}' not found in full data. Using adata.X for Global COSG.")
-                            # If layer not present, don't add to args - default to X
-                            if 'layer' in global_cosg_args:
-                                del global_cosg_args['layer']
-
-                    # Run COSG directly on filtered AnnData
                     cosg.cosg(
                         adata_valid_clusters, 
                         key_added='cosg_global_temp', 
@@ -443,30 +418,12 @@ def _build_marker_filtered_graph_dual(
                         use_raw=False, 
                         **global_cosg_args
                     )
-
-                    # Process results efficiently
-                    if ('cosg_global_temp' in adata_valid_clusters.uns and 
-                        'names' in adata_valid_clusters.uns['cosg_global_temp']):
-
-                        cosg_global_names_df = pd.DataFrame(adata_valid_clusters.uns['cosg_global_temp']['names'])
-
-                        # Extract markers for each batch-cluster in one pass
-                        for bc_label in cosg_global_names_df.columns:
-                            if bc_label in global_marker_genes:
-                                markers = cosg_global_names_df[bc_label].dropna().tolist()
-                                global_marker_genes[bc_label] = set(markers[:n_markers])
-
-
-
+                    names_df = pd.DataFrame(adata_valid_clusters.uns['cosg_global_temp']['names'])
                     del adata_valid_clusters
-
-                except Exception as e:
-                    warnings.warn(f"Error running Global COSG: {e}. Global markers might be missing.")
-                    if 'adata_valid_clusters' in locals(): 
-                        del adata_valid_clusters
-            else: 
-                print("Skipping Global COSG: Not enough distinct valid batch-clusters found.")
-                del adata_valid_clusters
+            except Exception as e:
+                raise RuntimeError(f"stitchSpace: the global COSG failed ({type(e).__name__}: {e})") from e
+            global_marker_genes.update(_markers_from_names(
+                names_df, [c for c in names_df.columns if c in global_marker_genes], n_markers))
 
         # Ensure all batch-clusters have an entry (even if empty)
         for bc_label in all_valid_batch_clusters:
@@ -623,12 +580,15 @@ def stitchSpace(
     # --- BBKNN specific params ---
     filter_bbknn_neighbors_within_batch: int = 3, 
     filter_bbknn_trim: typing.Union[int, None] = None,
+    filter_bbknn_computation: str = 'annoy',
+    filter_bbknn_metric: str = 'euclidean',
     random_state: typing.Union[int, None] = 1927, # Seed for clustering, default 1927
     # --- Correction Params ---
     correction_smooth_within_batch: bool = True,
     correction_use_mutual_sqrt_weights: bool = False, 
     copy: bool = False,
-    verbosity: int = 0 # Control overall verbosity (0=minimal, 1+=more info)
+    verbosity: int = 0, # Control overall verbosity (0=minimal, 1+=more info)
+    modality: str = 'RNA',
 ) -> typing.Union[AnnData, None]:
     """
     Performs a batch correction using a BBKNN graph that has been pruned based on marker gene overlap between batch-specific 
@@ -682,6 +642,11 @@ def stitchSpace(
         `neighbors_within_batch` parameter for the initial `bbknn.bbknn` call.
     filter_bbknn_trim
         Optional `trim` parameter passed to the initial `bbknn.bbknn` call.
+    filter_bbknn_computation
+        BBKNN's neighbour search: ``'annoy'`` (default), ``'pynndescent'``, ``'faiss'`` or
+        ``'cKDTree'``. It was always ``'annoy'`` before, whatever was asked.
+    filter_bbknn_metric
+        Distance for BBKNN's neighbour search.
     random_state
         Seed for the random number generator used in Leiden clustering for reproducibility.
         Default: 1927.
@@ -695,6 +660,15 @@ def stitchSpace(
     verbosity
         Level of detail to print: 0 (minimal), 1 or higher (more progress messages 
         and intermediate storage locations). Default: 0. Controls BBKNN logging level.
+    modality
+        Cytome only: the modality whose embedding ``use_rep`` names and whose expression COSG
+        reads (``filter_cosg_layer`` names a layer of it; ``None`` reads what ``cosg`` reads
+        by default, ``layer='auto'``). The batch-cluster labels are written to the store's
+        cells table and the corrected embedding as ``{modality}_{key_added without 'X_'}``.
+
+    A failure of BBKNN, of a batch's clustering or of COSG raises: it used to print a
+    message and leave the graph without that batch's links, or return ``None``, which is
+    also what success returns.
 
     Returns
     -------
@@ -740,38 +714,39 @@ def stitchSpace(
     """
         
     # --- Cytome dispatch ---
-    # For cytome inputs, read the embedding + batch column into a lightweight
-    # AnnData, run stitchSpace in-memory, and write corrected embedding back.
+    # A store's embedding and batch column go into a lightweight AnnData for
+    # BBKNN, the clustering and the correction; COSG reads the store's own
+    # expression (run_cosg_cytome, per batch). Before, the embedding was looked
+    # up as use_rep minus 'X_' (a name PIASO never writes), COSG ran on a dummy
+    # one-column matrix and failed into empty marker sets (every edge between
+    # batches pruned: no integration), and the write-back assigned into an
+    # accessor that does not support it.
     from ._normalization import _is_cytome_dataset, _open_cytome
     _is_cytome = _is_cytome_dataset(adata) or isinstance(adata, str)
     _cytome_ds = None
+    _cosg_store = None
     if _is_cytome:
         import anndata
+        from ._neighbors import _load_embedding_from_cytome
         _cytome_ds = _open_cytome(adata) if isinstance(adata, str) else adata
-        # Read embedding
-        emb_key = use_rep.lstrip('X_') if use_rep.startswith('X_') else use_rep
-        X_emb_arr = np.array(_cytome_ds.embeddings[emb_key])
-        # Read batch column
+        from ..utils._cytome_compat import require_writable as _require_writable
+        _require_writable(_cytome_ds, "piaso.tl.stitchSpace")
+        X_emb_arr = np.asarray(_load_embedding_from_cytome(_cytome_ds, use_rep, modality))
         cols = {r[1] for r in _cytome_ds._conn.execute("PRAGMA table_info(cells)").fetchall()}
         if batch_key not in cols:
             raise ValueError(f"batch_key '{batch_key}' not found in cytome cells table. Available: {sorted(cols)}")
-        batch_vals = [r[0] for r in _cytome_ds._conn.execute(
-            f"SELECT [{batch_key}] FROM cells ORDER BY cell_idx"
-        ).fetchall()]
-        # Build minimal AnnData
+        batch_vals = np.asarray(_cytome_ds.cells[batch_key])
         n_cells = X_emb_arr.shape[0]
+        if len(batch_vals) != n_cells:
+            raise ValueError(f"stitchSpace: the embedding has {n_cells} rows and the cells table "
+                             f"{len(batch_vals)}")
         adata = anndata.AnnData(
-            X=sp.csr_matrix((n_cells, 1)),  # dummy X
-            obs=pd.DataFrame({batch_key: batch_vals}),
+            X=sp.csr_matrix((n_cells, 1), dtype=np.float32),   # placeholder: COSG reads the store
+            obs=pd.DataFrame({batch_key: pd.Series(batch_vals).astype(str).values}),
         )
         adata.obsm[use_rep] = X_emb_arr
-        # If COSG layer is needed, it runs on the tile matrix — not supported
-        # in this cytome shim. Use filter_cosg_layer=None (default).
-        if filter_cosg_layer is not None:
-            raise ValueError(
-                "filter_cosg_layer is not supported for cytome inputs. "
-                "stitchSpace on cytome uses the embedding only."
-            )
+        _cosg_store = {"ds": _cytome_ds, "modality": modality,
+                       "layer": filter_cosg_layer if filter_cosg_layer is not None else "auto"}
         copy = False  # operate in-place on the temporary AnnData
 
     # --- Input Validation ---
@@ -828,19 +803,11 @@ def stitchSpace(
         cosg_expressed_pct=filter_cosg_expressed_pct,
         cosg_remove_lowly_expressed=filter_cosg_remove_lowly_expressed,
         bbknn_trim=filter_bbknn_trim,
-        verbosity=verbosity # Pass main verbosity level down
-        # Pass other bbknn params if needed, e.g.:
-        # bbknn_computation='annoy', bbknn_metric='euclidean'
+        bbknn_computation=filter_bbknn_computation,
+        bbknn_metric=filter_bbknn_metric,
+        verbosity=verbosity, # Pass main verbosity level down
+        cosg_store=_cosg_store,
     )
-
-    if pruned_connectivities is None:
-        print("Graph building/filtering failed. Aborting correction.")
-        # Attempt cleanup of cluster key if it exists and copy=False
-        if not copy and filter_cluster_key_added in adata_original.obs:
-            # Check if the key actually exists before deleting
-            if filter_cluster_key_added in adata_original.obs:
-                 del adata_original.obs[filter_cluster_key_added]
-        return None
         
     # Store intermediate results
     adata.uns[f'{key_added}_hypergraph_compatibility'] = hypergraph_compatibility
@@ -1026,9 +993,15 @@ def stitchSpace(
     # Return the modified adata if copy=False, otherwise return the copy
     # Write corrected embedding back to cytome if applicable
     if _is_cytome and _cytome_ds is not None and key_added in adata.obsm:
-        corrected_emb = adata.obsm[key_added]
-        emb_out_key = key_added.lstrip('X_') if key_added.startswith('X_') else key_added
-        _cytome_ds.embeddings[emb_out_key] = corrected_emb
+        from ._embedding_names import storage_name
+        from ..settings import _resolve_layer_dtype
+        emb_out_key = storage_name(key_added, modality)
+        _cytome_ds.add_embedding(
+            emb_out_key, np.asarray(adata.obsm[key_added]),
+            dtype=_resolve_layer_dtype(None),
+            provenance={"modality": modality, "function": "piaso.tl.stitchSpace",
+                        "use_rep": use_rep, "batch_key": batch_key, "key_added": key_added,
+                        "cluster_key": filter_cluster_key_added})
         _cytome_ds.flush()
         if verbosity > 0:
             print(f"Corrected embedding written to cytome: embeddings['{emb_out_key}']")

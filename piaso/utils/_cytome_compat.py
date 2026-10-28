@@ -260,7 +260,14 @@ def resolve_cytome_conn(source) -> Tuple["sqlite3.Connection", bool]:  # noqa: F
     """
     import sqlite3
     if _is_path_like(source):
-        return sqlite3.connect(os.fspath(source)), True
+        # mode=rw never creates: sqlite3.connect(path) made an empty file at a
+        # mistyped path, which then failed with "no such table: cells" and
+        # stayed behind looking like a store.
+        path = os.fspath(source)
+        if not os.path.isfile(path):
+            raise FileNotFoundError(f"No cytome at {path!r}.")
+        from pathlib import Path
+        return sqlite3.connect(Path(path).resolve().as_uri() + "?mode=rw", uri=True), True
     if _is_cytome_dataset_obj(source):
         return source._conn, False
     raise TypeError(

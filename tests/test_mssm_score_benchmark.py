@@ -8,10 +8,10 @@ import sys, os, time
 import numpy as np
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-sys.path.insert(0, "/path/to/project")
-sys.path.insert(0, "/path/to/project/COSG")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-MSSM_CYTOME = "/path/to/project/results/brain_7M/MSSM_4.1M.cytome"
+from conftest import results_path  # noqa: E402
+MSSM_CYTOME = results_path("brain_7M", "MSSM_4.1M.cytome")
 
 
 def get_rss_mb():

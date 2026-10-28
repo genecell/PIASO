@@ -7,13 +7,13 @@ from ._clustering import leiden_local
 
 from ._normalization import infog, score
 
-from ._predictCellType import predictCellTypeByGDR, smoothCellTypePrediction, predictCellTypeByMarker
+from ._predictCellType import predictCellTypeByGDR, smoothCellTypePrediction, kamon, predictCellTypeByMarker
 
 from ._integration import stitchSpace
 
 from ._ligandReceptor import runSCALAR
 
-from ._markerdb import queryPIASOmarkerDB, getMarkers, analyzeMarkers, PIASOmarkerDB
+from ._markerdb import queryPIASOmarkerDB, getMarkers, getMarkerRegions, analyzeMarkers, PIASOmarkerDB
 
 # --- not in the public distribution: import if present, else install a
 # forwarder that raises an actionable ImportError at call time (see
@@ -76,12 +76,18 @@ from ._cospecificity_core import (  # noqa: F401
 try:
     from ._cospecificity import cospecificity_map, cospecificity_genome_wide
 except ImportError:
+    # imported here too: _forward_many is otherwise bound only when an earlier held
+    # module was missing, so this branch alone raised NameError
+    from .._internal_shim import forward_many as _forward_many
     globals().update(_forward_many("piaso.tools._cospecificity", ['cospecificity_map', 'cospecificity_genome_wide'], "tl"))
 try:
     from ._inferGeneActivity import _infer_gene_specificity as infer_feature_specificity
 except ImportError:      # pragma: no cover - public-package path
     from .._internal_shim import forward_many as _forward_many
-    globals().update(_forward_many("piaso.tools._inferGeneActivity", ['_infer_gene_specificity'], "tl"))
+    # under its public name (it was forwarded as _infer_gene_specificity, so the
+    # public package had no infer_feature_specificity)
+    globals().update(_forward_many("piaso.tools._inferGeneActivity",
+                                   {'infer_feature_specificity': '_infer_gene_specificity'}, "tl"))
 from ._clustering import _read_selected_mask as read_selected_mask
 try:
     from ._specificity_hotspot import (

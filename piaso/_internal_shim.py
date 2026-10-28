@@ -47,8 +47,20 @@ def _forward(module: str, attr: str, public_name: str):
 def forward_many(module: str, names, prefix: str):
     """Return ``{name: forwarder}`` for every name in ``names``.
 
+    ``names`` is a list of attribute names, each forwarded under its own name,
+    or a mapping ``{public name: attribute}`` for a function the package
+    exports under another name (``infer_feature_specificity`` is
+    ``_infer_gene_specificity``; forwarded under the attribute's name it was
+    missing from the public package).
+
     ``module`` is resolved lazily, so a missing module costs nothing at import
     time — which is the whole point: ``import piaso`` must succeed whether or
     not the unpublished modules are present.
     """
-    return {n: _forward(module, n, f"{prefix}.{n}") for n in names}
+    pairs = names.items() if hasattr(names, "items") else ((n, n) for n in names)
+    out = {}
+    for public, attr in pairs:
+        fwd = _forward(module, attr, f"{prefix}.{public}")
+        fwd.__name__ = fwd.__qualname__ = public
+        out[public] = fwd
+    return out

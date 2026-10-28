@@ -11,7 +11,7 @@ def as_bool_mask(values, *, name="column", source=None, warn_all_true=True):
         'True' / 'False' TEXT     -- a pandas object column, str(bool)
         'true' / 'false' TEXT     -- some JSON / R round-trips
         1.0 / 0.0        REAL     -- a float mask
-        NULL / ''                 -- missing
+        NULL / '' / NaN           -- missing, read as False
 
     `np.asarray(col).astype(bool)` is correct for exactly the first and last of
     those and catastrophically wrong for the middle ones, because a non-empty
@@ -30,7 +30,10 @@ def as_bool_mask(values, *, name="column", source=None, warn_all_true=True):
     if arr.dtype == bool:
         mask = arr
     elif np.issubdtype(arr.dtype, np.number):
-        mask = arr != 0
+        # NaN is a missing value, not "selected": NaN != 0 is True, which put
+        # every missing entry of a REAL column in the mask (the text branch
+        # already reads 'nan' as False).
+        mask = (arr != 0) & ~np.isnan(arr) if np.issubdtype(arr.dtype, np.floating) else arr != 0
     else:
         flat = np.asarray([("" if v is None else str(v)).strip().lower() for v in arr])
         truthy = {"1", "true", "t", "yes", "y"}

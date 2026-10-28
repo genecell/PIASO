@@ -262,77 +262,55 @@ def _calculate_y_values(df_plot: pd.DataFrame, col_ligand_specificity: str,
     return df_plot
 
 
-def _apply_score_range_limits(df_plot: pd.DataFrame, score_range_min: float, 
+def _apply_score_range_limits(df_plot: pd.DataFrame, score_range_min: float,
                              score_range_max: float, vertical_layout: bool) -> pd.DataFrame:
-    """Apply score range limits and mark clipped values"""
-    if score_range_min is not None:
-        if vertical_layout:
-            # For vertical: ligand values are negative, need to clip at -score_range_max
-            ligand_mask = df_plot['ligand_y'] < (-score_range_max if score_range_max else df_plot['ligand_y'].min())
-            df_plot.loc[ligand_mask, 'ligand_clipped'] = True
-            df_plot['ligand_y'] = df_plot['ligand_y'].clip(lower=-score_range_max if score_range_max else None)
-            
-            receptor_mask = df_plot['receptor_y'] < score_range_min
-            df_plot.loc[receptor_mask, 'receptor_clipped'] = True
-            df_plot['receptor_y'] = df_plot['receptor_y'].clip(lower=score_range_min)
-        else:
-            # For horizontal: receptor values are negative
-            ligand_mask = df_plot['ligand_y'] < score_range_min
-            df_plot.loc[ligand_mask, 'ligand_clipped'] = True
-            df_plot['ligand_y'] = df_plot['ligand_y'].clip(lower=score_range_min)
-            
-            receptor_mask = df_plot['receptor_y'] < (-score_range_max if score_range_max else df_plot['receptor_y'].min())
-            df_plot.loc[receptor_mask, 'receptor_clipped'] = True
-            df_plot['receptor_y'] = df_plot['receptor_y'].clip(lower=-score_range_max if score_range_max else None)
-    
-    if score_range_max is not None:
-        if vertical_layout:
-            # For vertical: ligand values are negative, receptor values are positive
-            ligand_mask = df_plot['ligand_y'] > (-score_range_min if score_range_min else 0)
-            df_plot.loc[ligand_mask, 'ligand_clipped'] = True
-            df_plot['ligand_y'] = df_plot['ligand_y'].clip(upper=-score_range_min if score_range_min else None)
-            
-            receptor_mask = df_plot['receptor_y'] > score_range_max
-            df_plot.loc[receptor_mask, 'receptor_clipped'] = True
-            df_plot['receptor_y'] = df_plot['receptor_y'].clip(upper=score_range_max)
-        else:
-            # For horizontal: ligand values are positive, receptor values are negative
-            ligand_mask = df_plot['ligand_y'] > score_range_max
-            df_plot.loc[ligand_mask, 'ligand_clipped'] = True
-            df_plot['ligand_y'] = df_plot['ligand_y'].clip(upper=score_range_max)
-            
-            receptor_mask = df_plot['receptor_y'] > (-score_range_min if score_range_min else 0)
-            df_plot.loc[receptor_mask, 'receptor_clipped'] = True
-            df_plot['receptor_y'] = df_plot['receptor_y'].clip(upper=-score_range_min if score_range_min else None)
-    
+    """Clip each end of each stem to ``[score_range_min, score_range_max]`` in
+    magnitude, on its own side of zero, and mark the ends that were clipped.
+
+    The ligand end lies left of zero in the vertical layout and above it in
+    the horizontal one; the receptor end opposite. Both limits act on both
+    ends, and either may be given alone. The previous version applied each
+    limit to one end only unless the other limit was also given, so
+    ``score_range_max`` alone left the ligand ends unclipped in the vertical
+    layout (and ``score_range_min`` alone left them in the horizontal one).
+    """
+    if score_range_min is None and score_range_max is None:
+        return df_plot
+    lig_side = -1.0 if vertical_layout else 1.0
+    for end, side in (('ligand', lig_side), ('receptor', -lig_side)):
+        dist = side * df_plot[f'{end}_y']          # distance from zero on its side
+        clipped = dist.clip(lower=score_range_min, upper=score_range_max)
+        df_plot.loc[(clipped != dist) & dist.notna(), f'{end}_clipped'] = True
+        df_plot[f'{end}_y'] = side * clipped
     return df_plot
 
 
-def _prepare_labels(df_plot: pd.DataFrame, col_ligand_receptor_pair: str, 
-                   max_label_length: int, ligand_receptor_sep: str,
-                   vertical_layout: bool) -> List[str]:
-    """Prepare formatted labels for display"""
+def _prepare_labels(df_plot: pd.DataFrame, col_ligand_receptor_pair: str,
+                   max_label_length: int, ligand_receptor_sep: str) -> List[str]:
+    """One formatted label per row of ``df_plot``, in ``df_plot``'s order.
+
+    The labels follow the rows they are given and are never reordered here.
+    They used to be reversed for the vertical layout, on a frame the caller had
+    already reversed, so the second reversal put every label but the middle
+    one on another row (scores 5/4/3/2 for A/B/C/D drew 2 in the row labelled
+    A). The caller now reverses rows and labels together, in one place.
+
+    A label repeated within the panel (a duplicated pair, or two long names
+    that truncate alike) gets `` (2)``, `` (3)``... in the order given, which
+    the caller passes as rank order, so the lower-ranked row carries the
+    suffix in both layouts.
+    """
     formatted_labels = []
     seen_labels = {}
     for label in df_plot[col_ligand_receptor_pair]:
         formatted_label = _format_label(label, max_label_length, ligand_receptor_sep)
-        # If we've seen this label before, add a small indicator to make it unique
         if formatted_label in seen_labels:
             seen_labels[formatted_label] += 1
             formatted_label = f"{formatted_label} ({seen_labels[formatted_label]})"
         else:
             seen_labels[formatted_label] = 1
         formatted_labels.append(formatted_label)
-    
-    # Prepare labels for display based on layout
-    if vertical_layout:
-        # For vertical layout, we need to reverse the labels since we reversed the dataframe
-        formatted_labels_display = formatted_labels[::-1]
-    else:
-        # For horizontal layout, use labels as is
-        formatted_labels_display = formatted_labels
-    
-    return formatted_labels_display
+    return formatted_labels
 
 
 def _plot_vertical_layout(ax, df_plot: pd.DataFrame, circle_sizes: np.ndarray, 
@@ -404,9 +382,10 @@ def _plot_vertical_layout(ax, df_plot: pd.DataFrame, circle_sizes: np.ndarray,
         # Receptor side (right half) - from center line to right edge
         ax.axvspan(0, actual_xlim[1], ymin=0, ymax=1, alpha=0.1, color='red', zorder=0)
     
-    # Color y-axis labels if requested
+    # Color y-axis labels if requested. Tick k sits on row k, so its colour is
+    # row k's annotation -- in the frame's own order, not reversed.
     if color_labels_by_annotation:
-        for tick, annotation in zip(ax.get_yticklabels(), df_plot[col_annotation].iloc[::-1]):
+        for tick, annotation in zip(ax.get_yticklabels(), df_plot[col_annotation]):
             tick.set_color(color_map.get(annotation, 'black'))
     
     # Add grid for better readability
@@ -521,6 +500,7 @@ def _create_legends(fig, color_map: dict, filtered_df: pd.DataFrame, col_circle_
                    circle_size_title: str, base_circle_size: float, size_dramatic_level: float,
                    logfc_range: float, vertical_layout: bool) -> None:
     """Create and position legends"""
+    from . import _figure
     legend_patches = [mpatches.Patch(color=color, label=label) for label, color in color_map.items()]
     
     # Create circle size legend if the column exists - using SAME calculation function
@@ -533,25 +513,21 @@ def _create_legends(fig, color_map: dict, filtered_df: pd.DataFrame, col_circle_
         for val, label in zip(logfc_values, logfc_labels):
             # Use the EXACT SAME function as in the main plot
             actual_plot_size = _calculate_circle_size(val, base_circle_size, size_dramatic_level, logfc_range)
-            
-            # For scatter plots: 's' parameter is the marker area in points^2
-            # For Line2D in legend: 'markersize' is the marker diameter in points
-            # Mathematical relationship: area = π * (diameter/2)^2
-            # Therefore: diameter = 2 * sqrt(area/π)
-            
-            # Direct conversion from scatter area to Line2D diameter
-            marker_diameter = 2.0 * np.sqrt(actual_plot_size / np.pi)
-            
-            # NO correction factor - use the exact mathematical conversion
-            # If circles appear different, we may need to adjust, but let's start with pure math
-            marker_size = marker_diameter
-            
-            # Ensure reasonable bounds for display
-            marker_size = np.clip(marker_size, 1, 50)
-            
-            size_legend_elements.append(plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='gray', 
+
+            # scatter's `s` is the square of the marker size in points, the
+            # same unit as Line2D's `markersize`: s=36 draws the marker that
+            # markersize=6 draws. So the key's marker is sqrt(s). It was
+            # 2*sqrt(s/pi), the diameter of a circle whose AREA is s, which
+            # drew every key dot 1.13x wider than the dots it explains; the
+            # clip to [1, 50] then misdrew the extremes as well.
+            marker_size = float(np.sqrt(actual_plot_size))
+
+            size_legend_elements.append(plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='gray',
                                                   markersize=marker_size, label=label, 
-                                                  markeredgecolor='gray', markeredgewidth=0.5))
+                                                  markeredgecolor='gray',
+                                                  # the plotted dots' own stroke, so the
+                                                  # key dot and the data dot are one size
+                                                  markeredgewidth=plt.rcParams['patch.linewidth']))
     
     if vertical_layout:
         # Position legends for vertical layout (multiple plots side by side)
@@ -560,7 +536,7 @@ def _create_legends(fig, color_map: dict, filtered_df: pd.DataFrame, col_circle_
         if size_legend_elements:
             size_legend = fig.legend(handles=size_legend_elements, title=circle_size_title, 
                                    bbox_to_anchor=(1.01, 0.45), loc='upper left', frameon=False)
-        plt.tight_layout(rect=[0, 0.03, 0.82, 0.97])
+        _figure.layout(fig, quiet=False, rect=[0, 0.03, 0.82, 0.97])
     else:
         # Position legends for horizontal layout (multiple plots stacked vertically)
         if size_legend_elements:
@@ -569,12 +545,12 @@ def _create_legends(fig, color_map: dict, filtered_df: pd.DataFrame, col_circle_
             # Annotation legend below the circle size legend with more spacing
             fig.legend(handles=legend_patches, title='Annotation', bbox_to_anchor=(0.5, -0.15), 
                       loc='upper center', ncol=min(len(legend_patches), 4), frameon=False)
-            plt.tight_layout(rect=[0, 0.20, 1, 0.98])
+            _figure.layout(fig, quiet=False, rect=[0, 0.20, 1, 0.98])
         else:
             # Only annotation legend if no circle size legend
             fig.legend(handles=legend_patches, title='Annotation', bbox_to_anchor=(0.5, -0.02), 
                       loc='upper center', ncol=min(len(legend_patches), 4), frameon=False)
-            plt.tight_layout(rect=[0, 0.08, 1, 0.98])
+            _figure.layout(fig, quiet=False, rect=[0, 0.08, 1, 0.98])
 
 
 def _lollipop_tick_fmt(tick_values):
@@ -616,14 +592,15 @@ def plotLigandReceptorLollipop(
     col_circle_size: str = 'avg_log2FC',
     circle_size_title: str = 'avg_log2FC',
     base_circle_size: float = 15,
-    circle_size_scale: float = 20,
+    circle_size_scale: float = None,
     logfc_range: float = 1.0,
     size_dramatic_level: float = 1.5,
     show_grid: bool = True,
     score_range_min: float = None,
     score_range_max: float = None,
     range_padding: float = 0.15,
-    specificity_df: pd.DataFrame = None
+    specificity_df: pd.DataFrame = None,
+    show: bool = None,
 ):
     """
     Generates advanced bidirectional lollipop plots for one or more cell-type interactions
@@ -655,7 +632,9 @@ def plotLigandReceptorLollipop(
         col_circle_size (str): Column name for controlling circle sizes (default: 'avg_log2FC').
         circle_size_title (str): Title for the circle size legend.
         base_circle_size (float): Base size for circles when col_circle_size value is 0.
-        circle_size_scale (float): Scaling factor for circle sizes based on col_circle_size values.
+        circle_size_scale (float): Has no effect, and never had: sizes come from
+            ``base_circle_size``, ``logfc_range`` and ``size_dramatic_level``.
+            Passing it warns. *Changed*: the default is None (was 20, unused).
         logfc_range (float): Expected range of logFC values for proper scaling (e.g., 1.0 for -1 to +1 range).
         size_dramatic_level (float): Controls how dramatic the size differences are (0.5=subtle, 1.0=moderate, 2.0=very dramatic).
         show_grid (bool): If True, show grid lines on the plot.
@@ -664,6 +643,11 @@ def plotLigandReceptorLollipop(
         range_padding (float): Padding to add beyond the score range to accommodate circles (default 0.15 = 15%).
         specificity_df (pd.DataFrame, optional): DataFrame with gene names as index and cell types as columns containing specificity scores. 
                                                If provided, will override col_ligand_specificity and col_receptor_specificity columns.
+        show (bool, optional): Call ``plt.show()`` (default). When not shown,
+            the figure is returned (and closed if it was saved).
+
+    Returns:
+        The figure when it is not shown, else None.
     
     Examples:
         # Vertical layout with default settings
@@ -684,6 +668,12 @@ def plotLigandReceptorLollipop(
     """
     
     # --- 1. Error Handling and Validation ---
+    if circle_size_scale is not None:
+        import warnings
+        warnings.warn(
+            "plotLigandReceptorLollipop: circle_size_scale has no effect; circle "
+            "sizes are set by base_circle_size, logfc_range and size_dramatic_level.",
+            UserWarning, stacklevel=2)
     _validate_inputs(interactions_df, cell_type_pairs, col_interaction_score, 
                     col_ligand_specificity, col_receptor_specificity, 
                     col_ligand_receptor_pair, col_cell_type_pair, col_annotation, 
@@ -746,23 +736,28 @@ def plotLigandReceptorLollipop(
         # Apply score range limits if specified
         df_plot = _apply_score_range_limits(df_plot, score_range_min, score_range_max, vertical_layout)
         
-        # For horizontal layout, we want highest scores on the LEFT, so don't reverse
-        # For vertical layout, we want highest scores on TOP, so reverse
+        # Labels are made in rank order (highest score first), before any
+        # reordering for display, so a repeated label's suffix lands on the
+        # same row whichever layout is drawn.
+        formatted_labels_display = _prepare_labels(df_plot, col_ligand_receptor_pair,
+                                                   max_label_length, ligand_receptor_sep)
+
+        # Horizontal layout: highest score on the LEFT, rows as ranked.
+        # Vertical layout: row j is drawn at y=j, so the highest score goes on
+        # TOP by reversing the rows -- and their labels with them, here and
+        # only here. (Reversing the labels a second time elsewhere is what
+        # mislabelled this plot from SCALAR's first commit, 2025-08-27.)
         if vertical_layout:
             df_plot = df_plot.iloc[::-1].reset_index(drop=True)
+            formatted_labels_display = formatted_labels_display[::-1]
 
         # Calculate circle sizes using the CONSISTENT function
         if col_circle_size in df_plot.columns:
-            circle_sizes = [_calculate_circle_size(val, base_circle_size, size_dramatic_level, logfc_range) 
+            circle_sizes = [_calculate_circle_size(val, base_circle_size, size_dramatic_level, logfc_range)
                            for val in df_plot[col_circle_size]]
             circle_sizes = np.array(circle_sizes)
         else:
             circle_sizes = np.array([base_circle_size] * len(df_plot))
-
-        # Prepare labels for display
-        formatted_labels_display = _prepare_labels(df_plot, col_ligand_receptor_pair, 
-                                                  max_label_length, ligand_receptor_sep, 
-                                                  vertical_layout)
 
         # Plotting logic based on layout
         if vertical_layout:
@@ -790,8 +785,7 @@ def plotLigandReceptorLollipop(
                    base_circle_size, size_dramatic_level, logfc_range, vertical_layout)
 
     # --- 6. Save and Display ---
-    if save_path:
-        plt.savefig(save_path, dpi=300, bbox_inches='tight', facecolor='white', edgecolor='none')
-        print(f"Lollipop plot saved to {save_path}")
-
-    plt.show()
+    from . import _figure
+    return _figure.finish(fig, created=True, show=_figure.resolve_show(show),
+                          save=save_path, writekey="lollipop", dpi=300, literal=True,
+                          savefig_kw=dict(facecolor='white', edgecolor='none'))

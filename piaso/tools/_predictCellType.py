@@ -12,6 +12,50 @@ from anndata import AnnData
 from sklearn.decomposition import TruncatedSVD
 from typing import Optional
 
+
+def _holds_integer_counts(X, n_sample: int = 10_000) -> bool:
+    """True when the stored values of ``X`` (a sample of them) are integers."""
+    from ._normalization import _sample_stored_values
+    vals = _sample_stored_values(X, n=n_sample)
+    if vals.size == 0 or np.issubdtype(vals.dtype, np.integer):
+        return True
+    vals = np.asarray(vals, dtype=np.float64)
+    vals = vals[np.isfinite(vals)]
+    return bool(vals.size == 0 or np.allclose(vals, np.round(vals)))
+
+
+def _missing_log1p_layer(adata, layer, what):
+    """True when ``layer`` is absent and is the ``'log1p'`` this module can build.
+
+    ``predictCellTypeByGDR`` reads ``layers['log1p']`` by default. A cytome
+    query arrives as raw counts, and many AnnData objects hold counts in
+    ``.X`` with no log1p layer, so the default raised ``KeyError: 'log1p'``.
+    The one layer built here is the one the default names: ``log1p`` of the
+    counts normalised to 1e4 per cell (:func:`piaso.pp.normalize_log1p`),
+    and only from a ``.X`` that holds integer counts -- applied to values that
+    are already normalised it would log them twice. Any other missing layer is
+    an error that names what is there.
+    """
+    if layer is None or layer in adata.layers:
+        return False
+    if layer == "log1p" and _holds_integer_counts(adata.X):
+        return True
+    hint = (" .X does not hold integer counts, so 'log1p' is not computed from it; "
+            "add the layer, or pass the name of the one to use."
+            if layer == "log1p" else "")
+    raise KeyError(
+        f"predictCellTypeByGDR: {what} has no layer {layer!r} "
+        f"(layers: {list(adata.layers)}).{hint}")
+
+
+def _log1p_of_counts(X):
+    """``piaso.pp.normalize_log1p`` of a counts matrix, over all of its genes."""
+    from ..preprocessing._normalize_log1p import normalize_log1p
+    tmp = AnnData(X=X)
+    normalize_log1p(tmp, key_added="log1p")
+    return tmp.layers["log1p"]
+
+
 ### Predict cell types using GDR
 ### Firstly packaged as a function on April 10, 2024
 def predictCellTypeByGDR(
@@ -31,7 +75,7 @@ def predictCellTypeByGDR(
     scoring_method:str=None,
     key_added:str=None,
     verbosity: int=0,
-    modality: Optional[str] = None,
+    modality: Optional[str] = "RNA",
     cytome_layer: str = "counts",
 ):
     """
@@ -48,9 +92,13 @@ def predictCellTypeByGDR(
 
     layer : str, optional (default: 'log1p')
         The layer in `adata` to use for gene expression data. If `None`, uses the `.X` matrix.
+        When the layer is ``'log1p'`` and absent, it is computed from ``.X``
+        (library size normalised to 1e4, then log1p) provided ``.X`` holds
+        integer counts, as a cytome query does; any other absent layer raises.
 
     layer_reference : str, optional (default: 'log1p')
         The layer in `adata_ref` to use for reference gene expression data. If `None`, uses the `.X` matrix.
+        An absent ``'log1p'`` is computed as for ``layer``.
 
     reference_groupby : str, optional (default: 'CellTypes')
         The column in `adata_ref.obs` used to define reference cell type groupings.
@@ -87,10 +135,11 @@ def predictCellTypeByGDR(
 
     verbosity : int, optional (default: 0)
         The level of logging output. Higher values produce more detailed logs for debugging and monitoring progress.
-    modality : str, optional
-        Cytome only: the modality of the query to read; ``None`` is ``'RNA'``.
+    modality : str, default 'RNA'
+        Cytome only: the modality of the query to read (``None`` also means ``'RNA'``).
     cytome_layer : str, default 'counts'
-        Cytome only: the layer to read from the query.
+        Cytome only: the layer read from the query into ``.X``; ``layer``
+        is then taken from it (a ``'log1p'`` layer is computed from these counts).
 
     Returns
     -------
@@ -130,18 +179,41 @@ def predictCellTypeByGDR(
     >>> print(adata.obs['CellTypes_gdr'])
     """
     # --- Cytome dispatch ---
+    # A path is opened here and closed on the way out; an open Dataset belongs
+    # to the caller and stays open.
+    from ..utils._cytome_compat import _is_path_like
+    if _is_path_like(adata):
+        from ..utils._cytome_compat import open_cytome
+        with open_cytome(adata) as _ds:
+            return predictCellTypeByGDR(
+                _ds, adata_ref, layer=layer, layer_reference=layer_reference,
+                reference_groupby=reference_groupby, query_groupby=query_groupby,
+                mu=mu, n_genes=n_genes, return_integration=return_integration,
+                use_highly_variable=use_highly_variable,
+                n_highly_variable_genes=n_highly_variable_genes,
+                n_svd_dims=n_svd_dims, resolution=resolution,
+                scoring_method=scoring_method, key_added=key_added,
+                verbosity=verbosity, modality=modality, cytome_layer=cytome_layer)
     _cytome_ds = None
-    if isinstance(adata, str) or _is_cytome(adata):
-        _cytome_ds = _open_cytome(adata) if isinstance(adata, str) else adata
+    if _is_cytome(adata):
+        _cytome_ds = adata
         _modality_for_dispatch = modality if modality is not None else "RNA"
         adata = _cytome_ds.to_anndata(
             modality=_modality_for_dispatch, layer=cytome_layer,
         )
 
     shared_genes=np.intersect1d(adata_ref.var_names, adata.var_names)
+    # A missing 'log1p' is built from the counts over all of a cell's genes,
+    # before the reference is cut to the genes it shares with the query, so
+    # its library sizes are the ones a stored log1p layer would have used.
+    _ref_log1p = None
+    if _missing_log1p_layer(adata_ref, layer_reference, "adata_ref"):
+        _ref_log1p = _log1p_of_counts(adata_ref.X)[:, adata_ref.var_names.get_indexer(shared_genes)]
     ### Make a copy of the reference anndata before any mutations
     adata_ref=adata_ref[:,shared_genes].copy()
     if layer_reference is not None:
+        if _ref_log1p is not None:
+            adata_ref.layers[layer_reference] = _ref_log1p
         adata_ref.X=adata_ref.layers[layer_reference]
 
     adata_ref.obs['gdr_by']=adata_ref.obs[reference_groupby]
@@ -154,10 +226,20 @@ def predictCellTypeByGDR(
     adata.obs['gdr_by']=adata.obs[query_groupby]
 
     if layer is not None:
+        # A cytome query arrives as counts in .X, and so does many an AnnData:
+        # the default 'log1p' is built from them on this copy, the same way for
+        # both (never on the caller's object).
+        if _missing_log1p_layer(adata, layer, "the cytome query" if _cytome_ds is not None else "adata"):
+            adata.layers[layer] = _log1p_of_counts(adata.X)
         adata.X=adata.layers[layer]
         
     import anndata as ad
-    adata_combine = ad.concat([adata_ref, adata[:, adata_ref.var_names]], label='batch', keys=['0', '1'])
+    # index_unique: a query and a reference from the same platform share barcodes
+    # (10x's AAACCTGAG...-1 in both), and runGDR finds each cell by name, so
+    # duplicated names put every shared barcode in twice (X_gdr of shape 2n).
+    # The rows keep their order, which is all the code below relies on.
+    adata_combine = ad.concat([adata_ref, adata[:, adata_ref.var_names]], label='batch', keys=['0', '1'],
+                              index_unique='-')
     ### Needs to be categorical variable
     adata_combine.obs['gdr_by']=adata_combine.obs['gdr_by'].astype('category')
     
@@ -357,210 +439,37 @@ def smoothCellTypePrediction(
     # Input validation
     if groupby not in adata.obs:
         raise ValueError(f"Group key '{groupby}' not found in adata.obs")
-    
+
     if verbosity > 0:
         print(f"Smoothing cell type predictions from '{groupby}' using {k_nearest_neighbors}-nearest neighbors")
-    
+
     # Get original predictions
     original_predictions = adata.obs[groupby]
-    
+
     # Create result
     adata = adata.copy() if not inplace else adata
-    
-    # Check if we can use existing neighborhood graph
-    has_neighbors = 'neighbors' in adata.uns and 'connectivities' in adata.obsp and use_existing_adjacency_graph
-    
+
+    has_neighbors = ('neighbors' in adata.uns and 'connectivities' in adata.obsp
+                     and use_existing_adjacency_graph)
     if verbosity > 1:
         if has_neighbors:
-            print("Using existing neighborhood graph from adata.obsp['connectivities']")
+            print("Using existing neighborhood graph from adata.obsp['connectivities'] "
+                  "(each cell and its strongest connections)")
         else:
             print(f"Computing new neighborhood graph using embedding from adata.obsm['{use_rep}']")
-            if use_faiss:
-                print("Using FAISS for accelerated nearest neighbor search")
-            else:
-                print(f"Using scikit-learn NearestNeighbors with n_jobs={n_jobs}")
-    
-    # Initialize arrays for storing results
-    smoothed_predictions = np.empty(len(adata), dtype=object)
-    if return_confidence:
-        confidence_scores = np.empty(len(adata))
-    
-    # Track cells with insufficient neighbors
-    cells_with_insufficient_neighbors = 0
-    
-    if has_neighbors:
-        # Use existing connectivity matrix from adata (CSR format)
-        # Check if the connectivity matrix is in CSR format
-        from scipy.sparse import csr_matrix
-        if not isinstance(adata.obsp['connectivities'], csr_matrix):
-            raise ValueError(
-                f"Expected adata.obsp['connectivities'] to be a CSR matrix, but got {type(adata.obsp['connectivities']).__name__}. "
-                f"Please convert it using `.tocsr()` method."
-            )
-        conn_matrix = adata.obsp['connectivities']
-        
-        if verbosity > 1:
-            print(f"Processing {len(adata)} cells using CSR connectivity matrix...")
-        
-        # Process each cell
-        for i in range(conn_matrix.shape[0]):
-            # Direct access to CSR data structures - memory efficient
-            row_start, row_end = conn_matrix.indptr[i], conn_matrix.indptr[i+1]
-            data = conn_matrix.data[row_start:row_end]
-            col_indices = conn_matrix.indices[row_start:row_end]
-            
-            # Check if we have enough connections
-            if len(data) < k_nearest_neighbors:
-                cells_with_insufficient_neighbors += 1
-                # Use all available connections
-                top_k = col_indices
-            else:
-                # Get top k connections by strength
-                top_k_idx = np.argsort(data)[::-1][:k_nearest_neighbors]
-                top_k = col_indices[top_k_idx]
-            
-            # Get neighbor types for this cell
-            neighbor_types = original_predictions.iloc[top_k] if hasattr(original_predictions, 'iloc') else original_predictions[top_k]
-            
-            # Get most common type
-            try:
-                most_common = stats.mode(neighbor_types, keepdims=False)
-                majority_type = most_common.mode
-                
-            except (TypeError, AttributeError):
-                # Alternative using numpy's unique function
-                unique_values, counts = np.unique(neighbor_types, return_counts=True)
-                majority_type = unique_values[np.argmax(counts)]
-            
-            # Store results directly
-            smoothed_predictions[i] = majority_type
-            if return_confidence:
-                confidence_scores[i] = np.mean(neighbor_types == majority_type)
-            
-            # Print progress periodically
-            if verbosity > 1 and i > 0 and i % 10000 == 0:
-                print(f"  Processed {i}/{conn_matrix.shape[0]} cells...")
-        
-    else:
-        # We need to compute neighbors
-        if use_rep not in adata.obsm:
-            # `use_rep` defaults to 'X_gdr', which only exists if runGDR was run.
-            # Marker-based prediction itself needs no GDR, so a plain SVD
-            # pipeline lands here -- name what is actually available.
-            available = list(adata.obsm.keys())
-            raise ValueError(
-                f"Embedding key '{use_rep}' not found in adata.obsm. "
-                f"Available: {available if available else 'none'}. "
-                f"Pass use_rep= one of these (e.g. use_rep='X_svd'), or "
-                f"smooth_prediction=False to skip smoothing."
-            )
-        
-        # Get embedding
-        X_embed = adata.obsm[use_rep]
-        
-        if verbosity > 1:
-            print(f"Embedding shape: {X_embed.shape}")
-        
-        if use_faiss and k_nearest_neighbors < len(adata):
-            try:
-                import faiss
-                # Use FAISS for faster neighbor search
-                n_features = X_embed.shape[1]
-                
-                # Check if already float32 before conversion to avoid unnecessary memory allocation
-                if X_embed.dtype == np.float32:
-                    X_embed_float32 = X_embed
-                else:
-                    X_embed_float32 = X_embed.astype('float32')
-                
-                # Build index
-                index = faiss.IndexFlatL2(n_features)
-                index.add(X_embed_float32)
-                
-                # Search for nearest neighbors
-                distances, indices = index.search(X_embed_float32, k_nearest_neighbors)
-                
-                if verbosity > 1:
-                    print(f"Processing {len(adata)} cells to determine majority labels...")
-                
-                # Process each cell
-                for i in range(len(adata)):
-                    neighbor_indices_i = indices[i]
-                    neighbor_types = original_predictions.iloc[neighbor_indices_i] if hasattr(original_predictions, 'iloc') else original_predictions[neighbor_indices_i]
-                    
-                    # Get most common type
-                    try:
-                        most_common = stats.mode(neighbor_types, keepdims=False)
-                        majority_type = most_common.mode
-                        
-                    except (TypeError, AttributeError):
-                        # Alternative using numpy's unique function
-                        unique_values, counts = np.unique(neighbor_types, return_counts=True)
-                        majority_type = unique_values[np.argmax(counts)]
-                        
-                        
-  
-                        
-                    # except TypeError:
-                    #     most_common = stats.mode(neighbor_types)
-                    #     majority_type = most_common[0][0]
-                    
-                    # Store results
-                    smoothed_predictions[i] = majority_type
-                    if return_confidence:
-                        confidence_scores[i] = np.mean(neighbor_types == majority_type)
-                    
-                    # Print progress periodically
-                    if verbosity > 1 and i > 0 and i % 10000 == 0:
-                        print(f"  Processed {i}/{len(adata)} cells...")
-                
-            except ImportError:
-                print("FAISS not available, falling back to scikit-learn NearestNeighbors")
-                if verbosity > 1:
-                    print("To use FAISS (much faster for large datasets), install it with: pip install faiss-cpu")
-                use_faiss = False
-        
-        if not use_faiss:
-            # Use scikit-learn NearestNeighbors with parallel processing
-            from sklearn.neighbors import NearestNeighbors
-            
-            nn = NearestNeighbors(n_neighbors=k_nearest_neighbors, n_jobs=n_jobs)
-            nn.fit(X_embed)
-            _, indices = nn.kneighbors(X_embed)
-            
-            if verbosity > 1:
-                print(f"Processing {len(adata)} cells to determine majority labels...")
-            
-            # Process each cell
-            for i in range(len(adata)):
-                neighbor_indices_i = indices[i]
-                neighbor_types = original_predictions.iloc[neighbor_indices_i] if hasattr(original_predictions, 'iloc') else original_predictions[neighbor_indices_i]
-                
-                    
-                    
-                # Get most common type
-                try:
-                    most_common = stats.mode(neighbor_types, keepdims=False)
-                    majority_type = most_common.mode
 
-                except (TypeError, AttributeError):
-                    # Alternative using numpy's unique function
-                    unique_values, counts = np.unique(neighbor_types, return_counts=True)
-                    majority_type = unique_values[np.argmax(counts)]
-                
-                # Store results
-                smoothed_predictions[i] = majority_type
-                if return_confidence:
-                    confidence_scores[i] = np.mean(neighbor_types == majority_type)
-                
-                # Print progress periodically
-                if verbosity > 1 and i > 0 and i % 10000 == 0:
-                    print(f"  Processed {i}/{len(adata)} cells...")
-    
+    # The neighbors -- each cell itself and its k - 1 nearest (or strongest)
+    # others -- are chosen by the one helper smooth_by='scores' also uses, so the
+    # two smoothing modes always pool the same cells.
+    nbrs = _smoothing_neighbors(adata, use_rep, k_nearest_neighbors, use_existing_adjacency_graph,
+                                use_faiss, n_jobs, verbosity)
+    smoothed_predictions, confidence_scores, n_votes = _majority_vote(nbrs, original_predictions)
+    cells_with_insufficient_neighbors = int((n_votes < min(int(k_nearest_neighbors), adata.n_obs)).sum())
+
     # Add smoothed predictions to the result
     smoothed_key = key_added if key_added is not None else f"{groupby}_smoothed"
-    
-    # Convert array to pandas categorical 
+
+    # Convert array to pandas categorical
     if hasattr(original_predictions, 'cat'):
         adata.obs[smoothed_key] = pd.Categorical(
             smoothed_predictions,
@@ -568,51 +477,96 @@ def smoothCellTypePrediction(
         )
     else:
         adata.obs[smoothed_key] = smoothed_predictions
-    
+
     # Add confidence scores if requested
     if return_confidence:
         confidence_key = f"{smoothed_key}_confidence" if key_added is None else f"{key_added}_confidence"
         adata.obs[confidence_key] = confidence_scores
-    
+
     # Report results
     if verbosity > 0:
         print(f"Smoothed predictions stored in adata.obs['{smoothed_key}']")
         if return_confidence:
             print(f"Confidence scores stored in adata.obs['{confidence_key}']")
-        
+
         # Calculate how many labels changed
         changed = (adata.obs[smoothed_key] != original_predictions).sum()
         change_percent = (changed / len(adata)) * 100
         print(f"Modified {changed} cell labels ({change_percent:.2f}% of total)")
-        
+
         # Report cells with insufficient neighbors
         if cells_with_insufficient_neighbors > 0:
             insufficient_percent = (cells_with_insufficient_neighbors / len(adata)) * 100
-            print(f"Warning: {cells_with_insufficient_neighbors} cells ({insufficient_percent:.2f}%) had fewer than {k_nearest_neighbors} neighbors in the connectivity matrix")
-        
+            print(f"Warning: {cells_with_insufficient_neighbors} cells ({insufficient_percent:.2f}%) had fewer than "
+                  f"{k_nearest_neighbors} cells to pool (themselves included) in the connectivity matrix")
+
         if verbosity > 1:
             # Show distribution of confidence scores
             if return_confidence:
-                confidence_mean = np.mean(confidence_scores)
-                confidence_median = np.median(confidence_scores)
+                confidence_mean = np.nanmean(confidence_scores)
+                confidence_median = np.nanmedian(confidence_scores)
                 print(f"Confidence scores: mean={confidence_mean:.3f}, median={confidence_median:.3f}")
-            
+
             # Show before/after distribution of labels
             orig_counts = original_predictions.value_counts()
             new_counts = adata.obs[smoothed_key].value_counts()
             print("\nLabel distribution before and after smoothing:")
-            for cat in sorted(set(list(orig_counts.index) + list(new_counts.index))):
+            for cat in sorted(set(list(orig_counts.index) + list(new_counts.index)), key=str):
                 orig_count = orig_counts.get(cat, 0)
                 new_count = new_counts.get(cat, 0)
                 diff = new_count - orig_count
                 diff_sign = "+" if diff > 0 else ""
                 print(f"  {cat}: {orig_count} → {new_count} ({diff_sign}{diff})")
-    
+
     if not inplace:
         return adata
-    
-    
-    
+
+
+def _majority_vote(nbrs, labels, block_cells: int = 1 << 24):
+    """Each cell's most common label among its neighbors (rows of ``nbrs``).
+
+    ``nbrs`` is the cells x cells indicator of :func:`_smoothing_neighbors`.
+    Ties go to the smallest label in sort order, which is what the per-cell
+    loop this replaces did (``np.unique`` sorts, and ``scipy.stats.mode``
+    returns the smallest mode). A missing label (NaN / None) casts no vote; a
+    cell whose neighbors are all unlabelled stays unlabelled. The confidence
+    is the winning label's count over the number of neighbors pooled, as
+    before. Done as one sparse product over blocks of cells instead of a
+    Python loop with a ``mode`` per cell.
+
+    Returns ``(labels, confidence, n_pooled)``.
+    """
+    import scipy.sparse as sp
+    lab = pd.Series(np.asarray(labels, dtype=object))
+    n = len(lab)
+    valid = lab.notna().to_numpy()
+    uniq = np.unique(lab[valid].to_numpy())
+    codes = np.full(n, -1, dtype=np.int64)
+    if uniq.size:
+        codes[valid] = np.searchsorted(uniq, lab[valid].to_numpy())
+    n_labels = max(int(uniq.size), 1)
+    onehot = sp.csr_matrix((np.ones(int(valid.sum())), (np.flatnonzero(valid), codes[valid])),
+                           shape=(n, n_labels))
+    nbrs = sp.csr_matrix(nbrs)
+    n_pooled = np.asarray(nbrs.sum(axis=1)).ravel()
+    best = np.full(n, -1, dtype=np.int64)
+    best_count = np.zeros(n, dtype=np.float64)
+    step = max(1, int(block_cells) // n_labels)
+    for a in range(0, n, step):
+        b = min(a + step, n)
+        counts = (nbrs[a:b] @ onehot).toarray()
+        best[a:b] = counts.argmax(axis=1)
+        best_count[a:b] = counts.max(axis=1)
+    best[best_count == 0] = -1
+    out = np.empty(n, dtype=object)
+    out[:] = np.nan
+    has = best >= 0
+    out[has] = uniq[best[has]]
+    with np.errstate(invalid="ignore", divide="ignore"):
+        conf = np.where(has, best_count / np.maximum(n_pooled, 1.0), np.nan)
+    return out, conf, n_pooled
+
+
 import numpy as np
 import pandas as pd
 from typing import Literal, List, Dict, Union, Optional, Tuple
@@ -709,11 +663,18 @@ def _resolve_marker_weights(marker_gene_set, marker_gene_weights):
 
 def _smoothing_neighbors(adata, use_rep, k_nearest_neighbors, use_existing_adjacency_graph, use_faiss, n_jobs,
                          verbosity):
-    """Each cell's smoothing neighbors, chosen as ``smoothCellTypePrediction`` chooses them for its vote: the
-    ``k_nearest_neighbors`` strongest connections of ``adata.obsp['connectivities']`` when
-    ``use_existing_adjacency_graph`` and the graph exists (all of a row's connections when it has fewer), else the
-    ``k_nearest_neighbors`` nearest cells in ``adata.obsm[use_rep]``, the cell itself included (FAISS when asked and
-    installed, else scikit-learn). Returns a cells x cells CSR indicator, one row per cell."""
+    """Each cell's smoothing neighbors, the cell itself included, as one cells x cells CSR indicator.
+
+    With ``use_existing_adjacency_graph`` and a graph in ``adata.obsp['connectivities']``: the cell and its
+    ``k_nearest_neighbors - 1`` strongest connections (all of them when it has fewer; equal strengths keep the
+    graph's order). Otherwise the ``k_nearest_neighbors`` nearest cells in ``adata.obsm[use_rep]``, which include
+    the cell itself (FAISS when asked and installed, else scikit-learn).
+
+    Both rules pool the same number of cells, the cell itself among them, as ``k_nearest_neighbors`` is
+    documented. The graph rule used to take ``k_nearest_neighbors`` connections and leave the cell out, since a
+    connectivity graph has no self-loops, so a cell's own label never counted there and its vote differed from
+    the embedding rule's.
+    """
     import scipy.sparse as sp
     n = adata.n_obs
     if use_existing_adjacency_graph and 'neighbors' in adata.uns and 'connectivities' in adata.obsp:
@@ -722,16 +683,28 @@ def _smoothing_neighbors(adata, use_rep, k_nearest_neighbors, use_existing_adjac
             raise ValueError(
                 f"Expected adata.obsp['connectivities'] to be a CSR matrix, but got {type(conn).__name__}. "
                 f"Please convert it using `.tocsr()` method.")
-        rows, cols = [], []
-        for i in range(n):
-            s, e = conn.indptr[i], conn.indptr[i + 1]
-            idx = conn.indices[s:e]
-            if e - s > k_nearest_neighbors:
-                idx = idx[np.argsort(conn.data[s:e])[::-1][:k_nearest_neighbors]]
-            rows.append(np.full(len(idx), i))
-            cols.append(idx)
-        rows, cols = np.concatenate(rows), np.concatenate(cols)
-        return sp.csr_matrix((np.ones(len(rows)), (rows, cols)), shape=(n, n))
+        _graph_rep = (adata.uns.get('neighbors', {}).get('params', {}) or {}).get('use_rep')
+        if _graph_rep is not None and use_rep is not None and str(_graph_rep) != str(use_rep):
+            import warnings as _warnings
+            _warnings.warn(
+                f"Smoothing on the existing graph, adata.obsp['connectivities'], which was built from "
+                f"{_graph_rep!r}, not from use_rep={use_rep!r}. Pass use_existing_adjacency_graph=False to "
+                f"smooth on {use_rep!r}.", UserWarning, stacklevel=3)
+        k_other = max(int(k_nearest_neighbors) - 1, 0)
+        rows = np.repeat(np.arange(n, dtype=np.int64), np.diff(conn.indptr))
+        cols = np.asarray(conn.indices, dtype=np.int64)
+        vals = np.asarray(conn.data, dtype=np.float64)
+        off = (cols != rows) & (vals > 0)          # the cell itself is added below, once
+        rows, cols, vals = rows[off], cols[off], vals[off]
+        # strongest first within each row; equal strengths keep the graph's order
+        order = np.lexsort((np.arange(rows.size), -vals, rows))
+        rows, cols = rows[order], cols[order]
+        first = np.searchsorted(rows, np.arange(n))
+        rank = np.arange(rows.size) - first[rows]
+        keep = rank < k_other
+        rows = np.concatenate([np.arange(n, dtype=np.int64), rows[keep]])
+        cols = np.concatenate([np.arange(n, dtype=np.int64), cols[keep]])
+        return sp.csr_matrix((np.ones(rows.size), (rows, cols)), shape=(n, n))
     if use_rep not in adata.obsm:
         available = list(adata.obsm.keys())
         raise ValueError(
@@ -760,7 +733,23 @@ def _smoothing_neighbors(adata, use_rep, k_nearest_neighbors, use_existing_adjac
                          shape=(n, n))
 
 
-def predictCellTypeByMarker(
+def _best_type_index(primary, secondary):
+    """Each row's column of the largest ``primary``; among columns tied at it,
+    the one with the largest ``secondary`` (then the first). NaN never wins."""
+    P = np.asarray(primary, dtype=np.float64)
+    S = np.asarray(secondary, dtype=np.float64)
+    P = np.where(np.isnan(P), -np.inf, P)
+    tied = P == P.max(axis=1, keepdims=True)
+    S = np.where(tied & ~np.isnan(S), S, -np.inf)
+    # a row whose tied columns all lack a score falls back to the first tied column
+    no_score = ~np.isfinite(S).any(axis=1)
+    out = np.argmax(S, axis=1)
+    if no_score.any():
+        out[no_score] = np.argmax(tied[no_score], axis=1)
+    return out
+
+
+def kamon(
     adata,
     marker_gene_set: Union[List, Dict, pd.DataFrame],
     marker_gene_weights: Optional[Union[List, Dict, pd.DataFrame]] = None,
@@ -782,12 +771,16 @@ def predictCellTypeByMarker(
     exclude_set_genes: bool = True,
     verbosity: int = 1,
     n_jobs: int = -1,
-    modality: Optional[str] = None,
-    cytome_layer: str = "counts",
+    modality: Optional[str] = "RNA",
+    cytome_layer: Optional[str] = None,
     smooth_by: Literal["labels", "scores"] = "labels",
+    n_ctrl_set: int = 100,
 ):
     """
-    Predict cell types using marker genes and optionally smooth predictions.
+    KAMON: name cells from marker genes, and optionally smooth the names over each cell's neighbors.
+
+    ``piaso.tl.kamon`` is also available as ``piaso.tl.predictCellTypeByMarker``, its earlier,
+    descriptive name: the two names are the same function.
     
     This function performs cell type prediction using marker genes in two steps:
     1. Calculate gene set scores for marker genes
@@ -815,9 +808,20 @@ def predictCellTypeByMarker(
     score_method : {'scanpy', 'piaso'}, default='piaso'
         Method to use for scoring marker genes
     score_layer : str or None, default='infog'
-        Layer of the AnnData object to use for scoring
+        The matrix to score, on either input: ``adata.layers[score_layer]``
+        on an AnnData, ``{modality}_{score_layer}`` on a cytome (``'infog'``
+        is normalised on the fly from the parameters ``piaso.tl.infog(ds)``
+        stores). ``None`` is ``adata.X`` / the cytome's ``{modality}_counts``.
     use_score : bool, default=True
-        Whether to use scores (True) or p-values (False) for cell type prediction
+        Whether to use scores (True) or p-values (False) for cell type
+        prediction. P-values take ``n_ctrl_set + 1`` values, so a cell's best
+        p-value is often shared by several cell types (it is at least
+        ``1 / (n_ctrl_set + 1)``); among those, the type with the higher score
+        is taken. Needs ``score_method='piaso'``.
+    n_ctrl_set : int, default=100
+        With ``score_method='piaso'``, the number of control gene sets per
+        marker set, which also sets the p-values' resolution (see
+        ``piaso.tl.score``).
     max_workers : int or None, default=None
         Number of parallel workers for score calculation
     smooth_prediction : bool, default=True
@@ -868,24 +872,32 @@ def predictCellTypeByMarker(
     n_jobs : int, default=-1
         Number of jobs for parallel processing during smoothing
         
-    modality : str, optional
-        Cytome only: the modality of the query to read; ``None`` is ``'RNA'``.
-    cytome_layer : str, default 'counts'
-        Cytome only: the layer to read from the query.
+    modality : str, default 'RNA'
+        Cytome only: the modality to score (``None`` also means ``'RNA'``).
+    cytome_layer : str, optional
+        Cytome only: score this layer instead of ``score_layer``. ``None``
+        (default) scores ``score_layer`` on both inputs, so an AnnData and a
+        cytome of the same counts get the same scores. (It used to default to
+        ``'counts'``, so a cytome scored raw counts where an AnnData scored
+        INFOG.)
 
     Returns
     -------
     If inplace=False:
         AnnData: Copy of adata with cell type predictions added
     If inplace=True:
-        None, but adata is modified in place
+        None, but adata is modified in place. On a cytome, the per-cell
+        columns an AnnData gets in ``.obs`` are written to ``ds.cells``:
+        ``key_added``, ``{key_added}_score`` (or ``{key_added}_nlog10pvals``),
+        and with smoothing ``{key_added}_raw`` and
+        ``{key_added}_confidence_smoothed``.
         
     Examples
     --------
     >>> import piaso
     >>> 
     >>> # Basic usage
-    >>> piaso.tl.predictCellTypeByMarker(
+    >>> piaso.tl.kamon(
     ...     adata,
     ...     marker_gene_set=cosgMarkerDB,
     ...     score_method='piaso',
@@ -896,11 +908,26 @@ def predictCellTypeByMarker(
     """
     if smooth_by not in ("labels", "scores"):
         raise ValueError(f"smooth_by must be 'labels' or 'scores', not {smooth_by!r}.")
+    if not use_score and score_method != "piaso":
+        raise ValueError(
+            f"use_score=False predicts from p-values, which only score_method='piaso' computes "
+            f"(score_method={score_method!r}). Pass use_score=True, or score_method='piaso'.")
+    if modality is None:
+        modality = "RNA"
+
+    # A path is opened here and closed on the way out; an open Dataset belongs
+    # to the caller and stays open.
+    from ..utils._cytome_compat import _is_path_like
+    if _is_path_like(adata):
+        from ..utils._cytome_compat import open_cytome
+        _kw = {k: v for k, v in locals().items() if k not in ("adata", "_is_path_like", "open_cytome")}
+        with open_cytome(adata) as _ds:
+            return kamon(_ds, **_kw)
 
     # --- Cytome dispatch: build a minimal AnnData shim ---
     _cytome_ds = None
-    if isinstance(adata, str) or _is_cytome(adata):
-        _cytome_ds = _open_cytome(adata) if isinstance(adata, str) else adata
+    if _is_cytome(adata):
+        _cytome_ds = adata
         # Build minimal AnnData with embedding for KNN smoothing
         import anndata
         _n_cells = _cytome_ds.n_cells
@@ -938,25 +965,20 @@ def predictCellTypeByMarker(
     _score_input = _cytome_ds if _cytome_ds is not None else adata
     _marker_weights = _resolve_marker_weights(marker_gene_set, marker_gene_weights)
     if score_method == 'piaso':
-        marker_results = calculateScoreParallel(
-            _score_input,
-            gene_set=marker_gene_set,
-            gene_weights=_marker_weights,
-            score_method=score_method,
-            score_layer=score_layer,
-            max_workers=max_workers,
-            return_pvals=True,
-            random_seed=random_seed,
-            exclude_set_genes=exclude_set_genes,
-            verbosity=verbosity,
-            **({"modality": modality, "cytome_layer": cytome_layer}
-               if modality is not None or cytome_layer != "counts" else {})
+        # score() directly, as calculateScoreParallel does for this method, so
+        # that n_ctrl_set reaches it and the layer is the same on both inputs:
+        # score_layer, unless cytome_layer overrides it on a cytome.
+        from ._normalization import score as _score
+        _layer = (cytome_layer if (_cytome_ds is not None and cytome_layer is not None)
+                  else score_layer)
+        marker_gene_score, gene_set_names, _pvals = _score(
+            _score_input, gene_list=marker_gene_set, gene_weights=_marker_weights,
+            compute_pvalues=True, layer=_layer, random_seed=random_seed,
+            n_ctrl_set=n_ctrl_set, exclude_set_genes=exclude_set_genes,
+            max_workers=max_workers if max_workers is not None else 1,
+            verbosity=verbosity, modality=modality,
         )
-
-        # Extract results
-        marker_gene_score = marker_results[0]
-        gene_set_names = marker_results[1]
-        marker_gene_nlog10pvals = marker_results[2]
+        marker_gene_nlog10pvals = -np.log10(_pvals) if _pvals is not None else None
     else:
         # For scanpy method
         marker_results = calculateScoreParallel(
@@ -968,10 +990,8 @@ def predictCellTypeByMarker(
             max_workers=max_workers,
             random_seed=random_seed,
             verbosity=verbosity,
-            **({"modality": modality, "cytome_layer": cytome_layer}
-               if modality is not None or cytome_layer != "counts" else {})
         )
-        
+
         # Extract results
         marker_gene_score = marker_results[0]
         gene_set_names = marker_results[1]
@@ -1017,8 +1037,12 @@ def predictCellTypeByMarker(
         pval_df = pd.DataFrame(marker_gene_nlog10pvals)
         pval_df.columns = gene_set_names
         
-        # Predict cell types based on maximum -log10(p-value)
-        adata.obs[key_added] = pval_df.idxmax(axis=1).values
+        # Predict cell types based on maximum -log10(p-value). P-values come
+        # in steps of 1/(n_ctrl_set + 1), so the best one is often shared;
+        # the tie goes to the higher score, not to whichever type the marker
+        # table happens to list first.
+        adata.obs[key_added] = np.asarray(gene_set_names, dtype=object)[
+            _best_type_index(marker_gene_nlog10pvals, marker_gene_score)]
         
         # Extract cell type name if requested
         if extract_cell_type:
@@ -1051,8 +1075,14 @@ def predictCellTypeByMarker(
             _deg = np.asarray(_nbrs.sum(axis=1)).ravel()
             _avg = (_sp.diags(1.0 / np.maximum(_deg, 1.0)) @ _nbrs) @ _matrix
             adata.obsm[f"{key_added}_{_name}_smoothed"] = _avg
-            _avg_df = pd.DataFrame(_avg, columns=gene_set_names)
-            _smoothed = _avg_df.idxmax(axis=1).values
+            if use_score:
+                _avg_df = pd.DataFrame(_avg, columns=gene_set_names)
+                _smoothed = _avg_df.idxmax(axis=1).values
+            else:
+                # averaged -log10 p-values can still tie; the averaged score decides
+                _avg_s = (_sp.diags(1.0 / np.maximum(_deg, 1.0)) @ _nbrs) @ np.asarray(
+                    marker_gene_score, dtype=np.float64)
+                _smoothed = np.asarray(gene_set_names, dtype=object)[_best_type_index(_avg, _avg_s)]
             if extract_cell_type:
                 _smoothed = np.array([np.str_.rsplit(i, delimiter_cell_type, 1)[0] for i in _smoothed])
             adata.obs[smoothed_key] = _smoothed
@@ -1095,7 +1125,7 @@ def predictCellTypeByMarker(
         adata.obs[key_added] = adata.obs[smoothed_key].copy()
     
         
-    if verbosity > 0:
+    if verbosity > 0 and _cytome_ds is None:
         print(f"Cell type prediction completed. Results saved to:")
         print(f"  - adata.obs['{key_added}']: predicted cell types")
         
@@ -1117,16 +1147,33 @@ def predictCellTypeByMarker(
 
     
     # --- Write predictions back to cytome ---
+    # The per-cell columns an AnnData gets in .obs; the score matrices stay
+    # in memory (a cytome keeps per-cell matrices as embeddings, and these are
+    # one call's intermediate results).
     if _cytome_ds is not None:
-        _cytome_ds.cells[key_added] = adata.obs[key_added].values
-        if f"{key_added}_confidence_smoothed" in adata.obs:
-            _cytome_ds.cells[f"{key_added}_confidence_smoothed"] = adata.obs[f"{key_added}_confidence_smoothed"].values
+        _written = [key_added, f"{key_added}_score" if use_score else f"{key_added}_nlog10pvals"]
+        if smooth_prediction:
+            _written.append(f"{key_added}_raw")
+            if return_confidence:
+                _written.append(f"{key_added}_confidence_smoothed")
+        for _col in _written:
+            _vals = adata.obs[_col]
+            _cytome_ds.cells[_col] = (np.asarray(_vals, dtype=np.float64)
+                                      if pd.api.types.is_numeric_dtype(_vals)
+                                      else np.asarray(_vals.astype(object)))
         _cytome_ds.flush()
         if verbosity > 0:
-            print(f"Predictions written to cytome cells table column '{key_added}'")
+            print("Cell type prediction completed. Written to the cytome's cells table:")
+            for _col in _written:
+                print(f"  - ds.cells['{_col}']")
         return None
 
     if not inplace:
         return adata
     return None
+
+
+# The descriptive name the function had before the method was named KAMON: the same object, kept for
+# every existing script and tutorial.
+predictCellTypeByMarker = kamon
 

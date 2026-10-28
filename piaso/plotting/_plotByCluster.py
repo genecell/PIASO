@@ -5,7 +5,7 @@ import pandas as pd
 
 
 from ..utils._cytome_compat import is_cytome_input as _is_cytome_input
-from ..utils._cytome_compat import read_cells_columns as _read_cells_columns
+from ._store_io import read_cells_columns as _read_cells_columns  # read-only
 
 
 def _read_cytome_features(source, feature_list, groupby=None):
@@ -67,13 +67,7 @@ def _get_feature_values(
                 )
             values = np.asarray(values, dtype=float)
         if groupby and df is not None and groupby in df.columns:
-            group_labels = df[groupby].values
-            groups = resolve_group_order(df[groupby])
-            mask_for = lambda g: np.array(
-                [str(x) == g for x in group_labels], dtype=bool,
-            )
-            groups_dict = {g: values[mask_for(g)] for g in groups}
-            return values, groups_dict
+            return values, _split_by_group(data, groupby, df[groupby], values)
         return values, None
 
     # AnnData path
@@ -93,49 +87,33 @@ def _get_feature_values(
     values = np.asarray(values, dtype=float)
 
     if groupby and groupby in adata.obs.columns:
-        group_labels = adata.obs[groupby].values
-        groups = resolve_group_order(adata.obs[groupby])
-        groups_dict = {g: values[np.array([str(x) == g for x in group_labels])]
-                       for g in groups}
-        return values, groups_dict
+        return values, _split_by_group(adata, groupby, adata.obs[groupby], values)
     return values, None
 
 
+def _split_by_group(data, groupby, labels, values):
+    """``{group: values}`` in the column's order (stored or categorical, else
+    natural) -- on a store the stored ``set_categories`` order was ignored."""
+    from ._categories import resolve_category_style, label_strings
+    lab = label_strings(labels)
+    groups = resolve_category_style(data, groupby, labels).present(labels)
+    return {g: values[lab == g] for g in groups}
+
+
 def _resolve_group_palette(data, groupby, groups, palette):
-    """Resolve color palette for groups.
+    """``{group: colour}`` for the violins, by name.
 
-    Priority:
-    1. User-supplied palette (list or dict)
-    2. adata.uns[f'{groupby}_colors'] (AnnData convention)
-    3. Default PIASO palette (d_color4)
+    From the resolver every plot uses: a user palette (list or dict), else the
+    stored colours (``adata.uns``, a cytome's ``set_categories``, the colours
+    an AnnData carried into the store), else the PIASO default, matched to the
+    column's own order. The previous list was matched to the groups drawn, so
+    a dropped group shifted every colour after it.
     """
-    from . import color as _color_mod
-
-    if palette is not None:
-        if isinstance(palette, dict):
-            return [palette.get(g, _color_mod.d_color4[i % len(_color_mod.d_color4)])
-                    for i, g in enumerate(groups)]
-        return list(palette)
-
-    # Check adata.uns for stored palette
-    if not _is_cytome_input(data):
-        palette_key = f'{groupby}_colors'
-        if hasattr(data, 'uns') and palette_key in data.uns:
-            stored = data.uns[palette_key]
-            if len(stored) >= len(groups):
-                return list(stored[:len(groups)])
-
-    # Check cytome metadata for stored palette via the public API
-    if _is_cytome_input(data):
-        from ..utils._cytome_compat import get_metadata as _get_metadata
-        try:
-            stored = _get_metadata(data, f'{groupby}_colors')
-            if stored is not None and len(stored) >= len(groups):
-                return list(stored[:len(groups)])
-        except Exception:
-            pass
-
-    return [_color_mod.d_color4[i % len(_color_mod.d_color4)] for i in range(len(groups))]
+    from ._categories import resolve_category_style
+    if groupby is None:
+        return None
+    style = resolve_category_style(data, groupby, palette=palette)
+    return {str(g): style.color(g) for g in groups}
 
 
 def _plot_violin_on_ax(ax, values, groups_dict, feature, size, show_grid,
@@ -161,13 +139,19 @@ def _plot_violin_on_ax(ax, values, groups_dict, feature, size, show_grid,
         groups, group_data = zip(*non_empty)
         groups, group_data = list(groups), list(group_data)
 
-        # Resolve colors for each group
-        if palette is None:
-            from . import color as _color_mod
+        # Colours by group name: after empty groups are dropped, a list
+        # indexed by position put each later group in the colour of the one
+        # before it.
+        from . import color as _color_mod
+        if isinstance(palette, dict):
+            default = _color_mod.d_color4
+            colors = [palette.get(str(g), default[i % len(default)])
+                      for i, g in enumerate(groups)]
+        elif palette is not None:
+            colors = list(palette)[:len(groups)]
+        else:
             colors = [_color_mod.d_color4[i % len(_color_mod.d_color4)]
                       for i in range(len(groups))]
-        else:
-            colors = palette[:len(groups)]
 
         parts = ax.violinplot(group_data, positions=range(len(groups)),
                               widths=violin_width,
@@ -280,8 +264,9 @@ def plot_features_violin(data,
     layer : str, optional
         AnnData layer to use. Ignored for cytome.
     palette : list or dict, optional
-        Color palette for groups. If None, checks ``adata.uns['{groupby}_colors']``
-        first, then falls back to the default PIASO palette.
+        Color palette for groups. If None, the column's stored colours by name
+        (``adata.uns['{groupby}_colors']``, a cytome's ``set_categories``),
+        then the default PIASO palette.
     jitter : bool, optional
         Show jitter scatter points on violins. Default is False.
     width_single : float, optional
@@ -308,7 +293,8 @@ def plot_features_violin(data,
     median_color : str, optional
         Color of the median line. Default is ``'lightgrey'``.
     show_figure : bool, optional
-        Show figure (plt.show()). Default is True.
+        Show figure (plt.show()). Default is True. When not shown the figure
+        is returned, and closed only if it was saved.
     save : str, optional
         Path to save the figure. Default is None.
     return_fig : bool, optional
@@ -317,14 +303,19 @@ def plot_features_violin(data,
     show : bool, optional
         Show the figure; ``None`` follows ``show_figure``.
     modality : str, optional
-        Cytome only: which modality the data was stored under (``'RNA'``,
-        ``'ATAC'``, ``'tiles'``, ``'GA'``). ``None`` takes the store's first
-        modality.
+        Cytome only: the modality whose features to read (``'RNA'``,
+        ``'ATAC'``, ``'tiles'``, ``'GA'``). ``None`` finds the modality that
+        holds the feature, and raises if several do.
     cytome_layer : str, default 'counts'
-        Cytome only: the layer to read the values from.
+        Cytome only: the layer to read the values from. The default is the
+        raw counts -- unlike AnnData's ``.X``, which is usually normalised, so
+        the same data can read differently; pass ``'log1p'`` or ``'infog'``
+        (RNA) or ``'tfidf'`` (ATAC) for normalised values.
     compute_on_fly : bool, default True
-        Cytome only: normalise the raw layer while streaming (INFOG for RNA,
-        TF-IDF for ATAC) instead of requiring a materialised layer.
+        Cytome only: when ``cytome_layer`` names a normalised layer the store
+        does not hold (``'log1p'``, ``'infog'``, ``'tfidf'``), compute it per
+        feature from the counts. It does not normalise the default
+        ``'counts'``.
     use_cached_stats : bool, default True
         Cytome only: reuse normalisation statistics already stored in the
         cytome's metadata rather than recomputing them.
@@ -333,16 +324,22 @@ def plot_features_violin(data,
         show_figure = show
 
     n_features = len(feature_list)
+    _kw = dict(modality=modality, cytome_layer=cytome_layer,
+               compute_on_fly=compute_on_fly, use_cached_stats=use_cached_stats)
+    # Each feature is read once. The first was read three times (to count the
+    # groups, to peek at them for the palette, and to draw), each a pass over
+    # the store's matrix for a gene. The others are read as they are drawn, so
+    # only one feature's values are held at a time.
+    first = (_get_feature_values(data, feature_list[0], groupby, use_raw, layer, **_kw)
+             if feature_list else (None, None))
 
     # Width from the number of groups, not a constant. A fixed 14 inches is
     # right for ~30 Leiden clusters and absurd for two samples: the same plot
     # then arrives as a wide strip with two violins lost in it. Scale with the
     # group count, clamped so one group is still readable and eighty do not
     # produce a figure no screen can show.
-    n_groups = _count_groups(data, feature_list[0], groupby, use_raw, layer,
-                             modality=modality, cytome_layer=cytome_layer,
-                             compute_on_fly=compute_on_fly,
-                             use_cached_stats=use_cached_stats)
+    _first_groups = first[1]
+    n_groups = 1 if groupby is None else max(1, len(_first_groups or {}))
     if width_single is None:
         # The floor used to be 3.0, which is most of a text column for a plot
         # holding one violin. An ungrouped QC panel needs far less than that.
@@ -364,25 +361,15 @@ def plot_features_violin(data,
     for extra_ax in axes[n_features:]:
         extra_ax.axis("off")
 
-    # Resolve palette once for all features
+    # Resolve palette once for all features, by group name
     resolved_palette = None
-    if groupby is not None:
-        # Peek at groups from first feature to build palette
-        _, groups_dict_peek = _get_feature_values(
-            data, feature_list[0], groupby, use_raw, layer,
-            modality=modality, cytome_layer=cytome_layer,
-            compute_on_fly=compute_on_fly, use_cached_stats=use_cached_stats,
-        )
-        if groups_dict_peek is not None:
-            groups_peek = list(groups_dict_peek.keys())
-            resolved_palette = _resolve_group_palette(data, groupby, groups_peek, palette)
+    if groupby is not None and _first_groups is not None:
+        resolved_palette = _resolve_group_palette(data, groupby, list(_first_groups),
+                                                  palette)
 
     for i, feature in enumerate(feature_list):
-        values, groups_dict = _get_feature_values(
-            data, feature, groupby, use_raw, layer,
-            modality=modality, cytome_layer=cytome_layer,
-            compute_on_fly=compute_on_fly, use_cached_stats=use_cached_stats,
-        )
+        values, groups_dict = (first if i == 0 else
+                               _get_feature_values(data, feature, groupby, use_raw, layer, **_kw))
         # x labels belong on the bottom row of the grid, which is not the
         # last feature once ncol > 1.
         is_last = (i >= n_features - ncol)
@@ -393,20 +380,13 @@ def plot_features_violin(data,
                            median_color=median_color,
                            violin_width=violin_width)
 
-    plt.tight_layout()
-
-    from ..settings import _savefig
-    _savefig(fig, save, writekey='violin')
+    from . import _figure
+    _figure.layout(fig)
+    out = _figure.finish(fig, created=True, show=bool(show_figure), save=save,
+                         writekey='violin')
     if return_fig:
-        # Hand the figure back before closing it, so the panel can be composed
-        # into a larger one. embedding() and stackedBarplot() already do this.
-        if show_figure:
-            plt.show()
         return fig, axes[:n_features]
-    if show_figure:
-        plt.show()
-    else:
-        plt.close(fig)
+    return out
 
 
 from functools import wraps

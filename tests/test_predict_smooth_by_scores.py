@@ -100,7 +100,9 @@ def test_an_unknown_value_is_refused(adata):
 
 
 def test_the_existing_graph_is_used_when_asked(adata):
-    # a graph that sends every cell to cells 0 to 6 (all type A): the average is theirs, so every call is the same
+    # a graph that sends every cell to cells 0 to 6 (all type A), strongest first. Each cell pools itself and
+    # its K - 1 strongest other connections (the K cells k_nearest_neighbors counts, the cell itself included,
+    # as on the embedding): cells 0 to 5 for a cell outside them, and the six others of 0 to 6 for one inside.
     n = adata.n_obs
     rows = np.repeat(np.arange(n), K)
     cols = np.tile(np.arange(K), n)
@@ -109,8 +111,11 @@ def test_the_existing_graph_is_used_when_asked(adata):
     adata.uns["neighbors"] = {"connectivities_key": "connectivities"}
     _run(adata, smooth_by="scores", use_existing_adjacency_graph=True)
     S = np.asarray(adata.obsm["p_score"], dtype=float)
-    assert np.allclose(adata.obsm["p_score_smoothed"], np.tile(S[:K].mean(axis=0), (n, 1)))
-    assert adata.obs["p"].astype(str).nunique() == 1
+    want = np.empty_like(S)
+    for i in range(n):
+        others = [j for j in range(K) if j != i][:K - 1]
+        want[i] = S[[i] + others].mean(axis=0)
+    assert np.allclose(adata.obsm["p_score_smoothed"], want)
 
 
 def test_cell_type_extraction_works_on_the_average(adata):

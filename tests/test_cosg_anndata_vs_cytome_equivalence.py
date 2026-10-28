@@ -25,7 +25,7 @@ import pytest
 import scipy.sparse as sp
 
 
-MTG_H5AD = "/path/to/project/mtg_sub_10000.h5ad"
+from conftest import MTG_SUB_H5AD as MTG_H5AD, require
 
 
 def _jaccard_top_k(a, b, k):
@@ -42,8 +42,7 @@ def mtg_anndata_and_cytome(tmp_path_factory):
     """One fixture: load h5ad → use raw counts as .X → write a fresh cytome
     from the SAME data so both code paths see the identical matrix."""
     import anndata, cytome
-    if not __import__("os").path.exists(MTG_H5AD):
-        pytest.skip(f"MTG fixture h5ad not found at {MTG_H5AD}")
+    require(MTG_H5AD, what="the MTG fixture h5ad")
 
     src = anndata.read_h5ad(MTG_H5AD)
     # MTG mtg_sub_10000.h5ad has normalised values in .X; raw counts in .raw.X.
@@ -468,8 +467,8 @@ def test_runGDR_anndata_vs_cytome_equivalent_X_gdr(mtg_anndata_and_cytome):
     ret = piaso.tl.runGDR(
         cytome_path, groupby="CrossArea_subclass",
         n_gene=10, mu=1.0,
-        modality="RNA", cytome_layer="infog",
-        score_cytome_layer="infog",
+        modality="RNA", layer="infog",
+        score_layer="infog",
         scoring_method="piaso",
         max_workers=1, verbosity=0, random_seed=42,
     )
@@ -488,8 +487,8 @@ def test_runGDR_anndata_vs_cytome_equivalent_X_gdr(mtg_anndata_and_cytome):
     ret_tuple = piaso.tl.runGDR(
         cytome_path, groupby="CrossArea_subclass",
         n_gene=10, mu=1.0,
-        modality="RNA", cytome_layer="infog",
-        score_cytome_layer="infog",
+        modality="RNA", layer="infog",
+        score_layer="infog",
         scoring_method="piaso",
         max_workers=1, verbosity=0, random_seed=42,
         write_to_cytome=False,
@@ -669,7 +668,7 @@ def test_runGDR_cytome_score_layer_independent(mtg_anndata_and_cytome):
     res_mirror = piaso.tl.runGDR(
         cytome_path, groupby="CrossArea_subclass",
         n_gene=10, mu=1.0,
-        modality="RNA", cytome_layer="infog",
+        modality="RNA", layer="infog",
         scoring_method="piaso",
         max_workers=1, verbosity=0, random_seed=42,
         write_to_cytome=False,
@@ -681,8 +680,8 @@ def test_runGDR_cytome_score_layer_independent(mtg_anndata_and_cytome):
     res_override = piaso.tl.runGDR(
         cytome_path, groupby="CrossArea_subclass",
         n_gene=10, mu=1.0,
-        modality="RNA", cytome_layer="infog",
-        score_cytome_layer="counts",
+        modality="RNA", layer="infog",
+        score_layer="counts",
         scoring_method="piaso",
         max_workers=1, verbosity=0, random_seed=42,
         write_to_cytome=False,

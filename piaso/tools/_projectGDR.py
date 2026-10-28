@@ -219,9 +219,18 @@ def _infog_apply_cytome(ds, stats, *, modality="RNA", counts_layer="counts",
             print(f"projectGDR: aligning the query cytome to the reference gene space by name — "
                   f"{int(found.sum())}/{len(ref_names)} reference genes found", flush=True)
     thr = float(stats["threshold"])
-    chunks, rows = [], 0
-    for chunk, _idx in ds.iter_chunks(modality=modality, layer=counts_layer,
-                                      batch_size=batch_size):
+    name = f"{modality}_{key_added}"
+    # Written chunk by chunk as it is computed. Collecting every chunk and
+    # then handing the whole matrix to add_matrix held the query matrix in
+    # memory twice, which the streaming path exists to avoid.
+    from cytome import modality_feature_table_info as _mfi
+    from ._normalization import _safe_n_cells
+    _n_alloc, n_rows = _safe_n_cells(ds, modality, counts_layer)
+    writer = ds.create_layer_writer(name, n_rows=int(n_rows), n_cols=len(q_names), dtype=np.float64,
+                                    col_entity=_mfi(ds, modality)[0], overwrite=True)
+    shape = (0, len(q_names))
+    for chunk, idx in ds.iter_chunks(modality=modality, layer=counts_layer,
+                                     batch_size=batch_size):
         c = chunk.tocsr() if sparse.issparse(chunk) else sparse.csr_matrix(chunk)
         # depth over the REFERENCE-matched genes only (c @ mask == masked row sums), matching
         # _infog_apply, which reindexes to the reference space before summing.
@@ -233,17 +242,90 @@ def _infog_apply_cytome(ds, stats, *, modality="RNA", counts_layer="counts",
         out.data *= np.repeat(pc, np.diff(out.indptr)) * per_gene_q[out.indices]
         out.data[out.data > thr] = thr
         out.eliminate_zeros()      # unmatched genes got factor 0; drop them from the structure
-        chunks.append(out); rows += out.shape[0]
-    M = sparse.vstack(chunks, format="csr")
-    name = f"{modality}_{key_added}"
-    # add_matrix only BUFFERS the write (ds._pending_writes); without the flush the layer is
-    # invisible to the very next iter_chunks that the scoring pass makes.
-    ds.add_matrix(name, M)
+        writer.write_chunk(out, row_offset=int(np.asarray(idx)[0]))
+        shape = (shape[0] + out.shape[0], shape[1])
+    writer.finalize()
+    # the scoring pass that follows must see the layer
+    ds._conn.commit()
     ds.flush()
     if verbosity:
-        print(f"projectGDR: wrote frozen-INFOG layer '{name}' ({M.shape}) using the reference's "
+        print(f"projectGDR: wrote frozen-INFOG layer '{name}' ({shape}) using the reference's "
               f"constants", flush=True)
     return key_added, gene_recovery
+
+
+def _reference_knn_cytome(ds, modality, layer, n_nearest_neighbors=30, leaf_size=40):
+    """The frozen control-gene neighbours of a store reference.
+
+    The same statistics, the same blocks and the same tree as the first pass of
+    ``score()`` on a store (``_score_streaming_multi``), queried for every
+    feature, so a store reference projected onto itself draws the control
+    genes runGDR drew. Without them every query was scored with its own
+    control genes, and a projection moved with the query's size (the same 200
+    cells scored in a 2,000- and a 200-cell query differ by up to 0.288).
+    """
+    from cytome.core.measurement import MeasurementLayer
+    from ._normalization import _precompute_stats_streaming, _safe_n_cells, _PASS1_BLOCK_ROWS
+    from ..utils._cytome_compat import column_major_layer
+    read_layer, norm = layer, None
+    if layer in ("infog",):
+        from ._runSVD import _infog_chunk_normalizer
+        read_layer, norm = _infog_chunk_normalizer(ds, modality, layer, True)
+    n_alloc, _n_true = _safe_n_cells(ds, modality, read_layer)
+    n_features = MeasurementLayer(ds._conn, f"{modality}_{read_layer}").shape[1]
+    cm = column_major_layer(ds, modality, read_layer)
+    if cm is not None:
+        rows = np.arange(n_alloc)
+
+        def factory():
+            for cs, ce, chunk in cm.iter_columns():
+                yield (chunk if norm is None else norm(chunk.tocsr(), rows).tocsc()), rows, (cs, ce)
+    else:
+        def factory():
+            for c, i in ds.iter_chunks(modality=modality, layer=read_layer,
+                                       batch_size=_PASS1_BLOCK_ROWS):
+                yield (c if norm is None else norm(c, i)), i
+    return np.asarray(_precompute_stats_streaming(factory, n_alloc, n_features,
+                                                  2 * n_nearest_neighbors, leaf_size))
+
+
+def _frozen_knn_for_query(knn_idx, ref_names, query_names):
+    """The reference's control-gene neighbours in the query's gene order.
+
+    ``knn_idx`` holds reference gene positions, row by reference gene. It used
+    to be applied whenever the two gene counts matched, so a query with the
+    same genes in another order drew other genes as controls while reporting
+    them frozen (up to 0.386 off on unit rows). Remapped here by name: each
+    query gene that is a reference gene gets its reference row, with every
+    neighbour moved to its query position; rows of genes the reference does
+    not have are never read (marker sets name reference genes) and point at
+    themselves. With the genes in the same order the table is returned as it
+    is.
+
+    Returns ``(knn or None, reason)``: ``None`` when the query lacks reference
+    genes (pass ``counts_layer``, which aligns the query to the reference's
+    gene space) or names a reference gene twice.
+    """
+    knn_idx = np.asarray(knn_idx)
+    ref_names = np.asarray(ref_names).astype(str)
+    query_names = np.asarray(query_names).astype(str)
+    if knn_idx.shape[0] != len(ref_names):
+        return None, (f"the frozen KNN covers {knn_idx.shape[0]} genes and the reference "
+                      f"names {len(ref_names)}")
+    if len(ref_names) == len(query_names) and np.array_equal(ref_names, query_names):
+        return knn_idx, ""
+    qpos = pd.Series(np.arange(len(query_names)), index=query_names)
+    if qpos.index.has_duplicates and qpos.index[qpos.index.duplicated()].isin(ref_names).any():
+        return None, "the query names a reference gene more than once"
+    take = qpos[~qpos.index.duplicated()].reindex(ref_names).to_numpy()
+    missing = int(pd.isna(take).sum())
+    if missing:
+        return None, (f"the query lacks {missing} of the reference's {len(ref_names)} genes "
+                      f"(pass counts_layer to align it to the reference's gene space)")
+    take = take.astype(np.int64)                       # reference gene -> query column
+    out = np.repeat(np.arange(len(query_names), dtype=np.int64)[:, None], knn_idx.shape[1], axis=1)
+    out[take] = take[knn_idx]
+    return out.astype(knn_idx.dtype if np.issubdtype(knn_idx.dtype, np.integer) else np.int64), ""
 
 
 def _reference_knn(matrix, n_nearest_neighbors=30, leaf_size=40):
@@ -419,7 +501,8 @@ def _decode_state_cytome(ds, enc, modality=None):
             ds.cells.to_pandas()[ref["column"]].to_numpy(), dtype=np.float64)
     ref = st.pop("knn_idx_ref", None)
     if ref is not None:
-        st["knn_idx"] = np.asarray(ds.var_embeddings[ref["name"]])
+        # stored as a dense array, whose type may come back as float
+        st["knn_idx"] = np.rint(np.asarray(ds.var_embeddings[ref["name"]])).astype(np.int32)
     if "var_names" not in st.get("infog", {}) and "infog" in st:
         st["infog"]["var_names"] = _var_names(ds, modality)
     return st
@@ -540,25 +623,58 @@ def _make_reference_recipe(marker_gene, *, block_indices=None, layer="infog", gr
     }
 
 
+#: How the novelty null is computed (see `_complete_reference`); a fitted state
+#: without it was calibrated the old way and is completed again.
+_NOVELTY_NULL = "projected_vs_stored"
+
+
+def _novelty_null(X, Xref, k):
+    """Each reference cell's mean distance from its projection ``X[i]`` to its
+    ``k`` nearest stored coordinates other than its own, ``Xref`` without row i.
+
+    This is exactly what a query cell from the reference's own distribution
+    gets: projected the same way, measured against the same stored embedding.
+    The null used to be the reference's leave-one-out distances within the
+    RECOMPUTED embedding. For a reference built with batch_key that is another
+    space -- runGDR scaled each batch by its own norms and its own control
+    genes, the projection by the pooled ones -- so held-out cells from the
+    reference's own distribution came out as novel (Mann-Whitney p 9e-72, KS
+    0.34). For a single-batch reference the projection is the stored embedding
+    (``X == Xref``), and this is the leave-one-out distance as before.
+    """
+    from sklearn.neighbors import NearestNeighbors
+    n = X.shape[0]
+    kk = int(min(k + 1, Xref.shape[0]))
+    d, idx = NearestNeighbors(n_neighbors=kk).fit(Xref).kneighbors(X)
+    drop = idx == np.arange(n)[:, None]               # the cell's own stored coordinate
+    none = ~drop.any(axis=1)
+    drop[none, -1] = True                             # not among the nearest: the farthest goes
+    return d[~drop].reshape(n, kk - 1).mean(axis=1)
+
+
 def _complete_reference(reference_data, state, *, max_workers=8, counts_layer=None,
-                        novelty_k=15, batch_size=1024, verbosity=1) -> dict:
+                        novelty_k=15, batch_size=1024, verbosity=1, embedding_key="X_gdr") -> dict:
     """Fill in the parts that need a pass over the reference, then cache back into the object.
 
     Computed here rather than in ``runGDR`` so that running GDR costs nothing extra; the one-time
     cost lands on the first ``projectGDR`` call, where a scoring pass is happening anyway.
     """
-    if state.get("fitted"):
+    if state.get("fitted") and state.get("novelty_null") == _NOVELTY_NULL:
         return state
     layer = state.get("layer", "infog")
     modality = state.get("modality", "RNA")
     if verbosity:
         print("projectGDR: completing reference state (first use; cached afterwards)", flush=True)
 
+    # The frozen control-gene neighbours, from the reference itself: its matrix
+    # on AnnData, its streaming statistics on a store (which never had them, so
+    # every query was scored with its own control genes there).
     if _is_cytome(reference_data):
-        matrix = None      # knn from the streaming stats path inside score()
+        state["knn_idx"] = _reference_knn_cytome(
+            reference_data, modality, layer, state["n_nearest_neighbors"],
+            state["leaf_size"]).astype(np.int32)
     else:
         matrix = reference_data.layers[layer] if layer is not None else reference_data.X
-    if matrix is not None:
         state["knn_idx"] = _reference_knn(matrix, state["n_nearest_neighbors"],
                                           state["leaf_size"]).astype(np.int32)
 
@@ -582,33 +698,36 @@ def _complete_reference(reference_data, state, *, max_workers=8, counts_layer=No
         except (KeyError, TypeError):
             pass
 
-    # novelty calibration: leave-one-out mean kNN distance over the reference, ALL cells kept
-    from sklearn.neighbors import NearestNeighbors
-    k = int(min(novelty_k + 1, X.shape[0]))
-    d, _ = NearestNeighbors(n_neighbors=k).fit(X).kneighbors(X)
-    self_nov = d[:, 1:].mean(axis=1)
+    # Novelty calibration: each reference cell projected as a query is, measured
+    # against the stored embedding without its own coordinate (`_novelty_null`).
+    Xref, used_key = _reference_embedding(reference_data, state, embedding_key, with_key=True)
+    self_nov = _novelty_null(X, np.asarray(Xref, dtype=np.float64), int(novelty_k))
     state["novelty_reference"] = self_nov
     # string keys: float-keyed dicts cannot be written to h5ad
     state["novelty_thresholds"] = {f"{q:g}": float(np.quantile(self_nov, q))
                                    for q in (0.95, 0.99, 0.995, 0.999)}
     state["novelty_k"] = int(novelty_k)
+    state["novelty_null"] = _NOVELTY_NULL
+    state["novelty_embedding"] = str(used_key)
     # X_gdr_reference is NOT stored: it is already obsm['X_gdr'] / ds.embeddings on the object
     state["fitted"] = True
     return state
 
 
-def _reference_embedding(reference_data, state, key="X_gdr"):
+def _reference_embedding(reference_data, state, key="X_gdr", with_key=False):
     """The reference coordinates — read from the object rather than duplicated in the state."""
     if _is_cytome(reference_data):
         for k in (key, "X_gdr"):
             try:
-                return np.asarray(reference_data.embeddings[k])
+                X = np.asarray(reference_data.embeddings[k])
             except (KeyError, TypeError):
                 continue
+            return (X, k) if with_key else X
         raise KeyError(f"reference cytome has no '{key}' embedding")
     for k in (key, "X_gdr"):
         if k in reference_data.obsm:
-            return np.asarray(reference_data.obsm[k])
+            X = np.asarray(reference_data.obsm[k])
+            return (X, k) if with_key else X
     raise KeyError(f"reference AnnData has no obsm['{key}']")
 
 
@@ -649,6 +768,14 @@ def projectGDR(
         ``'self'`` uses the query's own, i.e. treats it as a new batch (what ``runGDR`` does for each
         reference batch when ``batch_key`` is set). Falls back to ``'reference'`` below
         ``min_cells_self_mode`` cells, where self-scaling is measurably worse.
+
+        For a reference built with ``batch_key``, runGDR scaled each batch by that batch's own
+        norms; ``'reference'`` scales by the norms of all reference cells together, which no
+        reference batch had, so a reference cell projected this way lands near, not on, its
+        stored coordinate (up to 0.25 off on unit rows on a test reference). ``'self'`` scales a
+        query the way runGDR scaled each batch, and is the closer match when the query is one
+        sample of ``min_cells_self_mode`` cells or more. The novelty test is calibrated for
+        either: its null is the reference's own cells projected as a query is.
     modality
         Modality of the **query**. Cytome only — ignored for AnnData inputs, which have a single
         feature space (``var_names``).
@@ -678,6 +805,18 @@ def projectGDR(
     ``obs['<key>_novelty']`` and ``uns['<key>_projection']['novelty_test']` before interpreting the
     coordinates.** The per-cell flag is well calibrated on false positives but low-powered (TPR 0.12
     at q99); the population-level shift is the reliable readout.
+
+    A cell's novelty is its mean distance to its ``novelty_k`` nearest reference coordinates (the
+    stored embedding). The null it is tested against is the same quantity for the reference's own
+    cells, each projected exactly as a query cell is and measured against the stored embedding
+    without its own coordinate, so cells drawn from the reference's own distribution are not
+    novel, whatever the reference's batches. A reference completed before this calibration (an
+    older cached state) is completed again on its next use.
+
+    The frozen control genes go by gene name: a query with the reference's genes in another order,
+    or with more genes, draws the reference's controls. A query that lacks some of the reference's
+    genes is scored with its own unless ``counts_layer`` aligns it to the reference's gene space
+    (``uns['<key>_projection']['control_genes_frozen']`` says which).
     """
     data = _open(data)
     reference = _open(reference)
@@ -717,10 +856,17 @@ def projectGDR(
         print(f"projectGDR: query modality {modality!r}, reference modality {ref_mod!r}",
               flush=True)
 
+    # A null computed against another stored embedding than this call's is redone.
+    _ref_key = _reference_embedding(reference, state, key_added, with_key=True)[1]
+    if state.get("fitted") and state.get("novelty_embedding") not in (None, str(_ref_key)):
+        state["novelty_null"] = None
+    _was_fitted = bool(state.get("fitted")) and state.get("novelty_null") == _NOVELTY_NULL
     state = _complete_reference(reference, state, max_workers=max_workers,
                                 counts_layer=counts_layer, novelty_k=novelty_k,
-                                batch_size=batch_size, verbosity=verbosity)
-    _set_state(reference, state)                      # cache the completed state back
+                                batch_size=batch_size, verbosity=verbosity,
+                                embedding_key=key_added)
+    if not _was_fitted:
+        _set_state(reference, state)                  # cache the completed state back
 
     n_query = _n_obs(data)
     if mode == "self" and n_query < min_cells_self_mode:
@@ -767,17 +913,16 @@ def projectGDR(
         raise ValueError("projectGDR: over half the marker sets recover <20% of their genes in the "
                          "query; the gene spaces are not compatible.")
 
-    # 3. score + frozen normalisation
+    # 3. score + frozen normalisation. The frozen control genes are applied by
+    # gene name, in the query's gene order (`_frozen_knn_for_query`).
     knn_idx = state.get("knn_idx")
     if knn_idx is not None:
-        knn_idx = np.asarray(knn_idx)
-        n_q_genes = len(_var_names(query_use, modality))
-        if knn_idx.shape[0] != n_q_genes:
-            if verbosity:
-                print(f"projectGDR: frozen KNN covers {knn_idx.shape[0]} genes but the query has "
-                      f"{n_q_genes}; scoring without it (pass `counts_layer` to realign).",
-                      flush=True)
-            knn_idx = None
+        _ref_names = state.get("var_names")
+        if _ref_names is None:
+            _ref_names = _var_names(reference, ref_mod)
+        knn_idx, _why = _frozen_knn_for_query(knn_idx, _ref_names, _var_names(query_use, modality))
+        if knn_idx is None and verbosity:
+            print(f"projectGDR: scoring with the query's own control genes: {_why}.", flush=True)
     S, _ = _raw_scores(query_use, mg, use_layer, max_workers, state["random_seed"], 0,
                        knn_idx, modality, batch_size)
     col_norm = None if mode == "self" else np.asarray(state["col_norm"])

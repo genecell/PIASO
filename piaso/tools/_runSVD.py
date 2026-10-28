@@ -379,8 +379,44 @@ def _streaming_rsvd(chunk_iter_factory, n_cells, n_features, n_components, n_ite
     return embeddings, S, Vt
 
 
+def _warn_no_engine(entry):
+    """Say that the products are computed in Python because the extension lacks ``entry``.
+
+    The result is the same to rounding, but a pass costs ten times more on one
+    core; before, nothing said so unless verbosity was on."""
+    warnings.warn(
+        f"runSVD: the Rust extension has no {entry}, so the SVD's products are computed in "
+        f"Python, one chunk at a time on one core (the same result to rounding, several times "
+        f"slower). Rebuild or reinstall PIASO's extension, or pass use_engine=False to silence this.",
+        RuntimeWarning, stacklevel=4)
+
+
+def _check_tfidf_params(tfidf_params, n_rows=None, n_cols=None):
+    """Refuse TF-IDF statistics with a non-finite or negative entry (see
+    ``_runTFIDF.check_tfidf_arrays``), before any pass is spent on them."""
+    from ._runTFIDF import check_tfidf_arrays
+    check_tfidf_arrays(tfidf_params, n_rows=n_rows, n_cols=n_cols)
+
+
+def _matrix_n_cols(ds, matrix_name):
+    """The stored column count of ``matrix_name``; raises if the store has no such matrix."""
+    row = ds._conn.execute(
+        "SELECT n_cols FROM matrix_meta WHERE matrix_name = ?", (matrix_name,)).fetchone()
+    if row is None:
+        raise KeyError(f"runSVD: this cytome has no matrix {matrix_name!r}")
+    return int(row[0])
+
+
 def _mask_to_indices(cell_mask, n_rows):
-    """Normalise a cell mask to sorted row indices within ``n_rows``."""
+    """Normalise a cell mask to sorted row indices within ``n_rows``.
+
+    A boolean mask may be shorter or longer than ``n_rows`` (a store can
+    allocate more rows than it has cells), and indices from ``n_rows`` on are
+    dropped, as a long mask's tail is. Indices must be distinct and not
+    negative: a negative one used to pass through to the engine's row map
+    (where -1 means "not kept"), and a repeated one made the output one row
+    longer than the cells it held.
+    """
     arr = np.asarray(cell_mask)
     if arr.dtype == bool:
         if arr.shape[0] < n_rows:
@@ -390,7 +426,22 @@ def _mask_to_indices(cell_mask, n_rows):
         elif arr.shape[0] > n_rows:
             arr = arr[:n_rows]
         return np.flatnonzero(arr).astype(np.int64)
-    return np.sort(arr[arr < n_rows].astype(np.int64))
+    if arr.ndim != 1:
+        raise TypeError(f"runSVD: cell_mask must be one-dimensional, got shape {arr.shape}")
+    if arr.size == 0:
+        return np.zeros(0, dtype=np.int64)
+    if not np.issubdtype(arr.dtype, np.number) or (
+            not np.issubdtype(arr.dtype, np.integer) and not np.array_equal(arr, np.round(arr))):
+        raise TypeError("runSVD: cell_mask must be a boolean mask or an array of integer cell "
+                        f"indices, got dtype {arr.dtype}")
+    idx = np.sort(arr.astype(np.int64))
+    if idx.size and idx[0] < 0:
+        raise IndexError(f"runSVD: cell_mask holds a negative index ({int(idx[0])})")
+    idx = idx[idx < n_rows]
+    if idx.size > 1 and (np.diff(idx) == 0).any():
+        raise ValueError("runSVD: cell_mask holds a cell index more than once "
+                         "(a mask of 0s and 1s must have a boolean dtype)")
+    return idx
 
 
 def _assert_enough_features(n_features, n_components, oversampling, column):
@@ -505,7 +556,12 @@ def _get_svd_chunk_iterator(source, hvg_indices, batch_size, layer, measurement,
 
             _layer_for_check = _read_layer if _read_layer != "infog" else "counts"
             n_alloc, _n_true = _safe_n_cells(ds, modality, _layer_for_check)
-            n_features = len(hvg_indices) if hvg_indices is not None else ds.n_genes
+            # The columns of the matrix this factory reads. `ds.n_genes` is the
+            # RNA gene table's length whatever the modality, so it answered 0 on
+            # an ATAC-only store (and the RNA gene count on a multiome one) for
+            # peaks, tiles and gene activity.
+            n_features = (len(hvg_indices) if hvg_indices is not None
+                          else _matrix_n_cols(ds, f"{modality}_{_read_layer}"))
             _keep = None if cell_mask is None else _mask_to_indices(cell_mask, n_alloc)
             def factory():
                 # idx stays global, so the normalizer's per-cell lookups
@@ -652,6 +708,11 @@ def _runSVD_streaming(
 
     # When tfidf_params has col_mask, skip HVG lookup (TF-IDF handles column slicing)
     _tfidf_col_mask = tfidf_params.get("col_mask", None) if tfidf_params else None
+    if _tfidf_col_mask is not None:
+        # A mask of 0s and 1s indexed as integers selects columns 0 and 1.
+        from ..utils._bool_mask import as_bool_mask
+        _tfidf_col_mask = as_bool_mask(_tfidf_col_mask, name="tfidf_params['col_mask']",
+                                       warn_all_true=False)
 
     # Determine HVG/selected-peak indices
     hvg_indices = None
@@ -684,11 +745,59 @@ def _runSVD_streaming(
 
     if hvg_indices_override is not None:
         hvg_indices = np.asarray(hvg_indices_override)
+    if tfidf_params is not None:
+        _check_tfidf_params(tfidf_params)
+    if tfidf_params is not None and hvg_indices is not None:
+        # TF-IDF reads a value's column (its IDF) by the column's stored index,
+        # so the columns must reach it as stored and the selection go in its
+        # column mask, applied after the transform. Slicing them first, as the
+        # selected column (or explicit indices) did whenever `tfidf_params`
+        # came without a `col_mask`, gave every kept column the IDF of the
+        # first n_selected features. Explicit indices replace a `col_mask`, as
+        # they do on an AnnData.
+        _n_idf = len(tfidf_params["idf"])
+        _hv = np.asarray(hvg_indices, dtype=np.int64)
+        if _hv.size and (_hv.min() < 0 or _hv.max() >= _n_idf):
+            raise IndexError(f"runSVD: selected feature indices outside 0..{_n_idf - 1}")
+        _tfidf_col_mask = np.zeros(_n_idf, dtype=bool)
+        _tfidf_col_mask[_hv] = True
+        tfidf_params = {**tfidf_params, "col_mask": _tfidf_col_mask}
+        hvg_indices = None
     n_cells, n_features, chunk_factory, _mask_pushed_down = _get_svd_chunk_iterator(
         source, hvg_indices, batch_size, layer, measurement,
         modality=modality, compute_on_fly=compute_on_fly, cell_mask=cell_mask,
         infog_params=infog_params,
     )
+
+    # Inline TF-IDF, wrapped around the reader BEFORE the cell mask renumbers
+    # the rows: the per-cell depth is looked up by the cell's global index.
+    # Wrapped after it, as it was, a masked run read the depths of the first
+    # n_masked cells instead of its own (the Python path only; the engine
+    # takes the depth by global row).
+    if tfidf_params is not None:
+        from ._runTFIDF import _normalize_chunk_tfidf
+        _td_cell_depth = tfidf_params["cell_depth"]
+        _td_idf = tfidf_params["idf"]
+        _td_scale = tfidf_params.get("scale_factor", 1e4)
+        _tfidf_reader = chunk_factory
+
+        # Recompute n_features if col_mask is applied
+        if _tfidf_col_mask is not None:
+            n_features = int(_tfidf_col_mask.sum())
+
+        def chunk_factory():
+            for chunk, indices in _tfidf_reader():
+                tfidf_chunk = _normalize_chunk_tfidf(
+                    chunk, _td_cell_depth[indices], _td_idf, _td_scale
+                )
+                if _tfidf_col_mask is not None:
+                    tfidf_chunk = tfidf_chunk[:, _tfidf_col_mask]
+                yield tfidf_chunk, indices
+        chunk_factory.read_layer = getattr(_tfidf_reader, "read_layer", None)
+        chunk_factory.identity = False
+
+        if verbosity > 0:
+            print(f"  Fused TF-IDF+SVD: inline TF-IDF on {n_features} features")
 
     # cell_mask: filter chunk rows before SVD ingests them. The SVD sees
     # only masked rows; output shape is (n_masked, n_components). Used by
@@ -734,30 +843,6 @@ def _runSVD_streaming(
 
             n_cells = n_masked_cells
 
-    # Wrap chunk_factory with inline TF-IDF if tfidf_params provided
-    if tfidf_params is not None:
-        from ._runTFIDF import _normalize_chunk_tfidf
-        _td_cell_depth = tfidf_params["cell_depth"]
-        _td_idf = tfidf_params["idf"]
-        _td_scale = tfidf_params.get("scale_factor", 1e4)
-        _original_factory = chunk_factory
-
-        # Recompute n_features if col_mask is applied
-        if _tfidf_col_mask is not None:
-            n_features = int(_tfidf_col_mask.sum())
-
-        def chunk_factory():
-            for chunk, indices in _original_factory():
-                tfidf_chunk = _normalize_chunk_tfidf(
-                    chunk, _td_cell_depth[indices], _td_idf, _td_scale
-                )
-                if _tfidf_col_mask is not None:
-                    tfidf_chunk = tfidf_chunk[:, _tfidf_col_mask] if sparse.issparse(tfidf_chunk) else tfidf_chunk[:, _tfidf_col_mask]
-                yield tfidf_chunk, indices
-
-        if verbosity > 0:
-            print(f"  Fused TF-IDF+SVD: inline TF-IDF on {n_features} features")
-
     # Every path lands here with its final feature count, so one guard covers
     # the selected-column path, explicit hvg indices and the unfiltered case.
     _assert_enough_features(n_features, n_components, oversampling,
@@ -793,6 +878,8 @@ def _runSVD_streaming(
             _has_engine = hasattr(_ext, "svd_pass")
         except Exception:
             _has_engine = False
+        if not _has_engine:
+            _warn_no_engine("svd_pass")
         if _has_engine:
             from ._rsvd_core import EngineOps
             _ds_e = _open_cytome(source) if isinstance(source, str) else source
@@ -1090,6 +1177,7 @@ def _runSVD_anndata(
     # What the products do to each stored value.
     tf, chunk_norm, transform = None, None, "values as stored"
     if tfidf_params is not None:
+        _check_tfidf_params(tfidf_params, n_rows=n_obs, n_cols=n_vars)
         tf = {"cell_depth": np.asarray(tfidf_params["cell_depth"], dtype=np.float64),
               "idf": np.asarray(tfidf_params["idf"], dtype=np.float32),
               "scale_factor": tfidf_params.get("scale_factor", 1e4)}
@@ -1126,6 +1214,8 @@ def _runSVD_anndata(
             engine = hasattr(_ext, "svd_pass_source")
         except Exception:
             engine = False
+        if not engine:
+            _warn_no_engine("svd_pass_source")
     threads = _engine_threads(n_threads)
     src = None
     if engine:
@@ -1494,6 +1584,15 @@ def runSVD(
     time (``cache_chunks=True`` keeps the copies). Earlier releases computed
     an AnnData's embedding with scikit-learn's randomized SVD (seven fixed
     rounds, one core), so such an embedding changes once.
+
+    The result does not depend on the number of threads: the passes sum in a
+    fixed order, and the dense steps between them (QR, products,
+    reorthogonalisation) run on row blocks of a fixed height, each on one BLAS
+    thread, side by side. Before, OpenBLAS split them by the machine's core
+    count, and the last bits followed it. Each component's sign follows a rule:
+    its cell coordinate of largest magnitude is positive (``Vt`` flips with it).
+    Both changed the embeddings once: the bits by rounding, and the signs of
+    the components whose rule disagreed with the solver's choice before.
     """
     # A store that cannot be written fails here, not after the work.
     from ..utils._cytome_compat import require_writable as _require_writable

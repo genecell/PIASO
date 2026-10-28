@@ -18,6 +18,7 @@ chromosome, so a file whose chromosomes are spelled ``1`` rather than ``chr1``
 had nothing to divide by, skipped the guard entirely, and imported an all-zero
 matrix without a word.
 """
+import os
 import random
 import sqlite3
 import subprocess
@@ -259,9 +260,7 @@ def test_offsets_come_from_the_index_when_pass_one_did_not_run(tmp_path):
     assert _hashes(tbi) == _hashes(auto)
 
 
-def test_a_stale_index_is_refused(tmp_path):
-    """An offset from a .tbi that no longer matches the file is caught on the
-    first line rather than trusted."""
+def _stale_index_fixture(tmp_path):
     paths, prefixes = _fixture(tmp_path, n_files=1)
     p = paths[0]
     pysam.tabix_index(str(p), preset="bed", force=True)
@@ -274,9 +273,37 @@ def test_a_stale_index_is_refused(tmp_path):
     pysam.tabix_compress(str(plain), str(p), force=True)
     plain.unlink()
     wl = tmp_path / "wl.txt"; wl.write_text("S0:A0000\n")
-    r = _run("--fragments", p, "--fragment-prefixes", "S0", "--barcodes", wl,
-             "--output", tmp_path / "stale.cytome", "--genome", "hg38", "--layout", "csr",
-             "--threads", "2", "--chunk-size", "500")
+    return p, wl
+
+
+def _stale_run(tmp_path, p, wl):
+    return _run("--fragments", p, "--fragment-prefixes", "S0", "--barcodes", wl,
+                "--output", tmp_path / "stale.cytome", "--genome", "hg38", "--layout", "csr",
+                "--threads", "2", "--chunk-size", "500")
+
+
+def test_an_index_older_than_its_file_is_not_used(tmp_path):
+    """An index of an earlier version of the file is not read: the file is
+    read for its offsets, and every fragment is imported."""
+    p, wl = _stale_index_fixture(tmp_path)
+    t = os.stat(p).st_mtime
+    os.utime(str(p) + ".tbi", (t - 100, t - 100))
+    r = _stale_run(tmp_path, p, wl)
+    assert r.returncode == 0, r.stderr[-2000:]
+    assert "older than its file" in r.stderr
+    con = sqlite3.connect(str(tmp_path / "stale.cytome"))
+    assert con.execute("SELECT SUM(n_fragments) FROM fragment_chunks").fetchone()[0] == 600
+    con.close()
+
+
+def test_a_stale_index_newer_than_its_file_is_refused(tmp_path):
+    """An offset from a .tbi that no longer matches the file (here a copied
+    index, newer than the file) is caught on the first line rather than
+    trusted."""
+    p, wl = _stale_index_fixture(tmp_path)
+    t = os.stat(p).st_mtime
+    os.utime(str(p) + ".tbi", (t + 100, t + 100))
+    r = _stale_run(tmp_path, p, wl)
     assert r.returncode != 0
     assert "stale" in r.stderr, r.stderr[-2000:]
 

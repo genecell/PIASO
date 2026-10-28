@@ -76,8 +76,8 @@ def test_runGDRParallel_cytome():
         ds, groupby="CellTypes_Final", n_gene=30, mu=1.0,
         scoring_method='piaso', key_added=None, max_workers=4,
         random_seed=42, verbosity=1,
-        modality="RNA", cytome_layer="counts", batch_size_cytome=1024,
-        score_layer=None,
+        modality="RNA", cytome_layer="raw", batch_size_cytome=1024,
+        score_layer=None, write_to_cytome=False,
     )
 
     assert X_gdr.shape[0] == ds.n_cells, f"Expected {ds.n_cells} rows, got {X_gdr.shape[0]}"
@@ -107,7 +107,7 @@ def test_gdr_cytome_vs_anndata():
 
     # Load RNA into AnnData
     chunks = []
-    for chunk, ri in ds.iter_chunks(modality="RNA", layer="counts", batch_size=4096):
+    for chunk, ri in ds.iter_chunks(modality="RNA", layer="raw", batch_size=4096):
         chunks.append(chunk)
     X_full = sp.vstack(chunks, format='csr')
     del chunks
@@ -126,6 +126,7 @@ def test_gdr_cytome_vs_anndata():
         adata, groupby="CellTypes_Final", n_gene=30, mu=1.0,
         scoring_method='piaso', key_added='gdr',
         max_workers=4, random_seed=42, verbosity=1,
+        layer=None,   # X = the raw counts, the data the cytome call below reads (cytome_layer="raw")
     )
     X_gdr_adata = adata.obsm['gdr']
 
@@ -134,8 +135,8 @@ def test_gdr_cytome_vs_anndata():
         ds, groupby="CellTypes_Final", n_gene=30, mu=1.0,
         scoring_method='piaso', key_added=None, max_workers=4,
         random_seed=42, verbosity=1,
-        modality="RNA", cytome_layer="counts", batch_size_cytome=1024,
-        score_layer=None,
+        modality="RNA", cytome_layer="raw", batch_size_cytome=1024,
+        score_layer=None, write_to_cytome=False,
     )
 
     assert X_gdr_adata.shape == X_gdr_cytome.shape, \

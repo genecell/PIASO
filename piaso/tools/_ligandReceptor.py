@@ -85,6 +85,37 @@ def _scalar_var_names(data, modality="RNA"):
             ds._conn).n.astype(str))
 
 
+def _scalar_resolve_layer(data, layer, modality="RNA"):
+    """The layer SCALAR reads, the same matrix on both backends.
+
+    AnnData: ``None`` is ``.X``; a name must be a layer (a misspelt one used to
+    fall back to ``.X`` without a word). Cytome: a name is
+    ``{modality}_{name}``; ``None`` is the matrix that was the AnnData's ``.X``
+    when the store was converted (``_anndata_X_layer``), else the counts, so a
+    store read with ``layer=None`` gives what its AnnData gave (it always read
+    the counts, while the AnnData read ``.X``).
+    """
+    from ..utils._cytome_compat import is_cytome_input, open_cytome
+
+    if not is_cytome_input(data):
+        if layer is not None and layer not in data.layers:
+            raise KeyError(
+                f"runSCALAR: layer={layer!r} is not a layer of the AnnData "
+                f"(layers: {list(data.layers)}); pass None for .X")
+        return layer
+    if layer is not None:
+        return layer
+    with open_cytome(data, mode="r") as ds:
+        try:
+            recorded = ds.metadata.get("_anndata_X_layer")
+        except Exception:
+            recorded = None
+        if (isinstance(recorded, str) and recorded.startswith(f"{modality}_")
+                and ds.matrix_meta(recorded) is not None):
+            return recorded[len(modality) + 1:]
+    return "counts"
+
+
 def _scalar_gene_stats(data, layer, universe_mask_names, modality="RNA",
                        batch_size=2048):
     """Per-gene (mean, variance) for the matched-gene null, from AnnData or a cytome.
@@ -110,10 +141,7 @@ def _scalar_gene_stats(data, layer, universe_mask_names, modality="RNA",
 
     if not is_cytome_input(data):
         var_names = pd.Index(data.var_names)
-        if layer is not None and layer in getattr(data, "layers", {}):
-            X = data.layers[layer]
-        else:
-            X = data.X
+        X = data.X if layer is None else data.layers[layer]
         keep = pd.Index([g for g in var_names if g in universe_mask_names])
         X = X[:, var_names.get_indexer(keep)]
         n = X.shape[1]
@@ -224,7 +252,7 @@ def _scalar_detection_fraction(data, layer, groupby, universe_names,
 
     if not is_cytome_input(data):
         var_names = pd.Index(data.var_names)
-        X = data.layers[layer] if (layer is not None and layer in getattr(data, "layers", {})) else data.X
+        X = data.X if layer is None else data.layers[layer]
         keep = pd.Index(universe_names)
         X = X[:, var_names.get_indexer(keep)]
         counts = np.zeros((len(groups), len(keep)))
@@ -451,6 +479,7 @@ def runSCALAR(
     groupby: Optional[str] = None,
     statistic: str = 'product',
     enrichment_pseudocount: float = 1e-12,
+    verbose: bool = True,
 ) -> pd.DataFrame:
     """
     Calculates ligand-receptor interaction scores, computes permutation-based p-values
@@ -475,7 +504,10 @@ def runSCALAR(
         receiver_cell_types: List of cell types to use as receivers. If None, all are used.
         n_permutations: Number of permutations for the null distribution.
         n_nearest_neighbors: Number of control genes to sample from.
-        layer: Layer in adata to use for expression.
+        layer: Layer to use for expression. AnnData: ``None`` is ``.X``, a name
+            must be a layer. Cytome: ``None`` is the matrix that was the
+            AnnData's ``.X`` when the store was converted (else the counts), a
+            name is ``{modality}_{name}``; so both backends read the same matrix.
         random_seed: Seed for reproducibility.
         rank_by_score: If True, sorts the final output by interaction_score.
         chunk_size: The number of interactions to process in each vectorized chunk
@@ -502,6 +534,7 @@ def runSCALAR(
             two, so both sides must beat the controls' weaker sides — the
             "are both specific" question. Its exact null factorises into two
             one-sided counts and costs nothing extra.
+        verbose: Print the step messages and progress bars (default True).
         enrichment_pseudocount: Guard for ``log2_enrichment``: the null mean
             is floored at this value and it is added to the observation, so a
             zero never reaches the log. It is on the *product* scale, where
@@ -514,9 +547,10 @@ def runSCALAR(
         p-values, and two diagnostics: ``null_matchability`` (fraction of the
         matched sets sitting below the gene in mean space — >= 0.99 means the
         matched-set ceiling is active and the p-value overstates) and
-        ``call_breadth`` (fraction of tested sender-receiver pairs in which
-        this ligand-receptor pair is called at FDR < 0.05 — results calling
-        most of the grid carry no group-specific information). With a
+        ``call_breadth`` (fraction of the sender-receiver pairs in which this
+        ligand-receptor pair was tested, i.e. cleared the detection floor, that
+        call it at FDR < 0.05; NaN where it was tested nowhere — results
+        calling most of the grid carry no group-specific information). With a
         detection floor the table also carries ``testable`` (both genes clear
         the floor in their cell types) and ``ligand_expressed_pct`` /
         ``receptor_expressed_pct`` (the detection fractions the floor was
@@ -596,6 +630,7 @@ def runSCALAR(
         is selection on the test statistic itself and voids formal FDR control
         among the survivors — a warning says so if you set one.
     """
+    _say = print if verbose else (lambda *a, **k: None)
     if n_permutations != 1000:
         import warnings
         warnings.warn(
@@ -608,14 +643,15 @@ def runSCALAR(
     # process-global RNG was a side effect callers never asked for.
 
     # --- Step 1: Validate inputs and filter LR pairs ---
-    print("--- Step 1: Validating inputs and filtering LR pairs ---")
+    _say("--- Step 1: Validating inputs and filtering LR pairs ---")
+    layer = _scalar_resolve_layer(adata, layer, modality=modality)
     _var_names = _scalar_var_names(adata, modality=modality)
     genes_in_adata = set(_var_names)
     genes_in_spec = set(specificity_matrix.index)
     common_genes = genes_in_adata.intersection(genes_in_spec)
 
     if not common_genes:
-        print("Error: No common genes found between AnnData object and specificity matrix.")
+        _say("Error: No common genes found between AnnData object and specificity matrix.")
         return pd.DataFrame()
 
     # Input contract over the genes that can enter the test: finite and
@@ -666,14 +702,23 @@ def runSCALAR(
     ].copy()
 
     if len(lr_pairs_filtered) < original_pair_count:
-        print(f"Filtered out {original_pair_count - len(lr_pairs_filtered)} LR pairs that were not found in both the AnnData object and the specificity matrix.")
+        _say(f"Filtered out {original_pair_count - len(lr_pairs_filtered)} LR pairs that were not found in both the AnnData object and the specificity matrix.")
+    # a pair listed twice was scored, tested and BH-corrected twice
+    _dup = lr_pairs_filtered.duplicated(subset=[ligand_col, receptor_col])
+    if _dup.any():
+        import warnings
+        warnings.warn(
+            f"runSCALAR: {int(_dup.sum())} duplicated ligand-receptor pair(s) in lr_pairs; the first "
+            f"row of each is kept (a duplicate was tested, and counted in the FDR correction, twice).",
+            stacklevel=2)
+        lr_pairs_filtered = lr_pairs_filtered[~_dup]
 
     if lr_pairs_filtered.empty:
-        print("Warning: No valid ligand-receptor pairs found after filtering. Returning an empty DataFrame.")
+        _say("Warning: No valid ligand-receptor pairs found after filtering. Returning an empty DataFrame.")
         return pd.DataFrame()
 
     # --- Step 2: Calculate all observed interaction scores ---
-    print("\n--- Step 2: Calculating all observed interaction scores ---")
+    _say("\n--- Step 2: Calculating all observed interaction scores ---")
     all_cell_types = specificity_matrix.columns.tolist()
     senders = all_cell_types if sender_cell_types is None else [ct for ct in sender_cell_types if ct in all_cell_types]
     receivers = all_cell_types if receiver_cell_types is None else [ct for ct in receiver_cell_types if ct in all_cell_types]
@@ -690,12 +735,12 @@ def runSCALAR(
     )
 
     if interaction_scores_df.empty:
-        print("Warning: No valid interactions found. Returning an empty DataFrame.")
+        _say("Warning: No valid interactions found. Returning an empty DataFrame.")
         return pd.DataFrame()
-    print(f"Found {len(interaction_scores_df)} potential interactions to test.")
+    _say(f"Found {len(interaction_scores_df)} potential interactions to test.")
 
     # --- 3. Prepare background gene sets (one matcher per cell type under a floor) ---
-    print("\n--- Step 3: Preparing matched background gene sets ---")
+    _say("\n--- Step 3: Preparing matched background gene sets ---")
     lr_genes = pd.unique(pd.concat([
         lr_pairs_filtered[ligand_col], lr_pairs_filtered[receptor_col]]))
     types_used = sorted(set(senders) | set(receivers))
@@ -740,14 +785,14 @@ def runSCALAR(
                 genes_universe=set(universe_t), query_genes=lr_genes,
                 modality=modality, stats=stats,
             )
-        print(f"  - Detection floor {expressed_pct:.0%} on layer "
+        _say(f"  - Detection floor {expressed_pct:.0%} on layer "
               f"{layer or 'X'!r}: {min(sizes.values()):,}-"
               f"{max(sizes.values()):,} genes per cell type form the matched "
               f"universes")
 
     # --- 4. Exact p-values over the enumerated product support ---
     n_support = n_nearest_neighbors ** 2
-    print(f"\n--- Step 4: Exact p-values over the {n_nearest_neighbors}x"
+    _say(f"\n--- Step 4: Exact p-values over the {n_nearest_neighbors}x"
           f"{n_nearest_neighbors} matched product support "
           f"(floor 1/{n_support + 1}) ---")
 
@@ -758,7 +803,7 @@ def runSCALAR(
     null_mean_list = []
     grouped_interactions = interaction_scores_df.groupby(['sender', 'receiver'])
 
-    for (sender, receiver), group_df in tqdm(grouped_interactions, total=len(grouped_interactions), desc="Processing cell type pairs"):
+    for (sender, receiver), group_df in tqdm(grouped_interactions, total=len(grouped_interactions), desc="Processing cell type pairs", disable=not verbose):
         bs, br = bg_for.get(sender), bg_for.get(receiver)
         p_grp = np.ones(len(group_df), dtype=np.float64)
         m_grp = np.full(len(group_df), np.nan, dtype=np.float64)
@@ -821,18 +866,18 @@ def runSCALAR(
         interaction_scores_df['ligand_expressed_pct'] = detection.values[_li, _si]
         interaction_scores_df['receptor_expressed_pct'] = detection.values[_ri, _ci]
         _nt = int(interaction_scores_df['testable'].sum())
-        print(f"  - {_nt:,} of {len(interaction_scores_df):,} interactions "
+        _say(f"  - {_nt:,} of {len(interaction_scores_df):,} interactions "
               f"clear the detection floor in both cell types and were tested")
 
     # --- 5. FDR Correction per Cell-Type Pair ---
-    print("\n--- Step 5: Applying FDR (Benjamini/Hochberg) correction per cell-type pair ---")
+    _say("\n--- Step 5: Applying FDR (Benjamini/Hochberg) correction per cell-type pair ---")
     
     # Initialize the new column with NaNs
     interaction_scores_df['p_value_fdr'] = np.nan
     _floor_limited_groups = []
 
     # Iterate through each group to apply FDR and assign back correctly
-    for _, group_df in tqdm(interaction_scores_df.groupby(['sender', 'receiver']), desc="FDR Correction"):
+    for _, group_df in tqdm(interaction_scores_df.groupby(['sender', 'receiver']), desc="FDR Correction", disable=not verbose):
         
         p_values = group_df['p_value']
         if p_values.empty or p_values.isnull().all():
@@ -908,14 +953,15 @@ def runSCALAR(
     # pair is called at FDR < 0.05. Real cell-type-specific results are
     # narrow; an interaction called across most of the grid is a ubiquity
     # signature, whatever its p-value says.
-    called = interaction_scores_df['p_value_fdr'] < 0.05
-    n_groups_tested = interaction_scores_df.groupby(
-        ['ligand', 'receptor'], observed=True)['sender'].transform('size')
-    n_groups_called = called.groupby(
-        [interaction_scores_df['ligand'],
-         interaction_scores_df['receptor']]).transform('sum')
+    # over the groups where the pair was tested (cleared the detection floor):
+    # the denominator counted every group, tested or not
+    tested = interaction_scores_df['testable'].astype(bool)
+    called = (interaction_scores_df['p_value_fdr'] < 0.05) & tested
+    _keys = [interaction_scores_df['ligand'], interaction_scores_df['receptor']]
+    n_groups_tested = tested.groupby(_keys).transform('sum')
+    n_groups_called = called.groupby(_keys).transform('sum')
     interaction_scores_df['call_breadth'] = (
-        n_groups_called / n_groups_tested).astype(float)
+        n_groups_called / n_groups_tested.where(n_groups_tested > 0)).astype(float)
 
     saturated = interaction_scores_df.loc[
         (interaction_scores_df['p_value'] < 0.05)
@@ -939,5 +985,5 @@ def runSCALAR(
         sort_order = ['sender', 'receiver', 'interaction_score']
         interaction_scores_df = interaction_scores_df.sort_values(by=sort_order, ascending=[True, True, False])
 
-    print("\nAnalysis complete.")
+    _say("\nAnalysis complete.")
     return interaction_scores_df.reset_index(drop=True)

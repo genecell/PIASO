@@ -102,14 +102,16 @@ godsnot_102 = [
 d_color4 = list(np.hstack((d_color3, godsnot_102)))
 
 
-np.random.seed(30303) 
-d_color5=list(np.random.choice(d_color3, size=len(d_color3), replace=False,))
+# Each shuffled palette draws from its own seeded RandomState. The module
+# used to call np.random.seed() before each draw, so `import piaso` reset
+# numpy's global random stream for the whole session. RandomState(seed)
+# is the generator np.random.seed(seed) set up, so the palettes are the
+# same colours, in the same order, as before.
+d_color5=list(np.random.RandomState(30303).choice(d_color3, size=len(d_color3), replace=False,))
 
-np.random.seed(333) 
-d_color6=list(np.random.choice(d_color3, size=len(d_color3), replace=False,))
+d_color6=list(np.random.RandomState(333).choice(d_color3, size=len(d_color3), replace=False,))
 
-np.random.seed(333222) 
-d_color7=list(np.random.choice(d_color3, size=len(d_color3), replace=False,))
+d_color7=list(np.random.RandomState(333222).choice(d_color3, size=len(d_color3), replace=False,))
 
 
 #### Generate larger color set
@@ -170,17 +172,13 @@ colors_pool = [
 
 
 
-np.random.seed(5230) 
-d_color8=list(np.random.choice(colors_pool, size=36, replace=False,))
+d_color8=list(np.random.RandomState(5230).choice(colors_pool, size=36, replace=False,))
 
-np.random.seed(3691) 
-d_color9=list(np.random.choice(colors_pool, size=36, replace=False,))
+d_color9=list(np.random.RandomState(3691).choice(colors_pool, size=36, replace=False,))
 
-np.random.seed(305230) 
-d_color10=list(np.random.choice(colors_pool, size=36, replace=False,))
+d_color10=list(np.random.RandomState(305230).choice(colors_pool, size=36, replace=False,))
 
-np.random.seed(20250224) 
-d_color11=list(np.random.choice(colors_pool, size=36, replace=False,))
+d_color11=list(np.random.RandomState(20250224).choice(colors_pool, size=36, replace=False,))
 
 
 
@@ -233,11 +231,9 @@ d_color13=[colors_pool[i] for i in new_indices]
 
 
 colors_pool2=np.hstack((colors_pool, d_color4))
-np.random.seed(333) 
-d_color14=list(np.random.choice(colors_pool2, size=len(colors_pool2), replace=False,))
+d_color14=list(np.random.RandomState(333).choice(colors_pool2, size=len(colors_pool2), replace=False,))
 
-np.random.seed(1830) 
-d_color15=list(np.random.choice(colors_pool2, size=len(colors_pool2), replace=False,))
+d_color15=list(np.random.RandomState(1830).choice(colors_pool2, size=len(colors_pool2), replace=False,))
 
 
 ## celeste

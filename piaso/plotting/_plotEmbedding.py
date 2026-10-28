@@ -68,6 +68,26 @@ def _is_numeric_dtype(values) -> bool:
         return False
 
 
+def _style_for_values(values, palette=None, category_order=None, na_color="lightgray"):
+    """A CategoryStyle for bare values (no stored column), honouring a caller's
+    palette and order the way ``_render_embedding`` always has: a list palette
+    is positional over ``category_order`` followed by the other values in
+    natural order."""
+    from ._categories import resolve_category_style, label_strings
+    if category_order:
+        lab = label_strings(values)
+        present = {v for v in lab if v is not None}
+        cats, seen = [], set()
+        for c in [str(c) for c in category_order]:
+            if c not in seen:
+                seen.add(c)
+                cats.append(c)
+        cats += sorted(present - seen, key=natural_key)
+        values = pd.Categorical(lab, categories=cats)
+    return resolve_category_style(values=values, palette=palette, na_color=na_color,
+                                  read_stored=False)
+
+
 def _render_embedding(ax, coords, values, is_cat, *, color="value", palette=None,
                       point_size=1.0, alpha=1.0, rasterized=True, groups=None,
                       na_color="lightgray", na_label="other",
@@ -77,17 +97,31 @@ def _render_embedding(ax, coords, values, is_cat, *, color="value", palette=None
                       legend_fontbackground_alpha=0.7,
                       cmap=None, vmin=None, vmax=None,
                       add_colorbar=True, category_order=None, strict_groups=True,
-                      linewidths=0.0, edgecolors="none"):
+                      linewidths=0.0, edgecolors="none",
+                      style=None, sort_order="category", vcenter=None):
     """Render one embedding scatter (categorical or continuous) into ``ax`` from
     plain arrays — no AnnData / cytome dependency. Shared by ``plotEmbedding`` and
     ``plot_embeddings_split`` so the split needs no proxy-AnnData round-trip.
 
-    ``palette`` may be a **list** (indexed by the resolved category order) or a
-    **dict** mapping ``category -> hex`` (categories absent from the dict fall back
-    to the default palette). ``category_order`` overrides the default alphabetical
-    ordering — categories listed there come first (in that order), any remaining
-    present categories follow alphabetically. Both are populated from a cytome's
-    ``ds.set_categories`` store / AnnData categorical dtype + ``uns`` by the callers.
+    **Colours come from** ``style``, a :class:`~piaso.plotting._categories.CategoryStyle`
+    the caller resolved over the *whole* column (stored order and colours,
+    by name). The values drawn here may be a subset -- a ``cell_mask``, one
+    panel of a split -- and that subset must not move a colour: positional
+    colouring over the categories present here drew Inh in Exc's colour as
+    soon as a mask left Exc out. Without ``style`` (a direct call), one is
+    built from these values, ``palette`` (list or dict) and ``category_order``.
+
+    **Missing labels** (None, NaN, the text ``'nan'`` a store holds for a NaN)
+    are drawn first, behind everything, in ``na_color``, with a legend entry
+    ``"NA"``; they used to become a ``'nan'`` category with a palette colour.
+    Continuous NaN values are drawn in ``na_color`` too; matplotlib maps them
+    to a transparent colour, which hid them.
+
+    ``sort_order``: ``'category'`` (default) draws the categories in display
+    order, each over the ones before; ``'size'`` draws the largest first, so a
+    rare type ends on top (100 astrocytes among 20,000 neurons had no visible
+    pixel in category order); ``'random'`` draws every cell in one shuffled,
+    seeded pass, so no category covers another systematically.
 
     ``linewidths`` / ``edgecolors`` default to **no stroke**. Matplotlib
     otherwise strokes every marker at ``rcParams['patch.linewidth']`` (1.0 pt)
@@ -101,62 +135,73 @@ def _render_embedding(ax, coords, values, is_cat, *, color="value", palette=None
     Returns the continuous mappable (for a shared colorbar) or None.
     """
     from . import color as _color_mod
+    from ._categories import label_strings, draw_sequence, NA_LABEL, SORT_ORDERS
+    if sort_order is None:
+        sort_order = "category"
+    if sort_order not in SORT_ORDERS:
+        raise ValueError(f"sort_order={sort_order!r}: choose from {SORT_ORDERS}")
+    scatter_kw = dict(s=point_size, alpha=alpha, rasterized=rasterized,
+                      linewidths=linewidths, edgecolors=edgecolors)
     if is_cat:
-        present = set(str(v) for v in values)
-        # natural_key, not plain sorted: Leiden labels are strings, so a
-        # lexicographic sort gives 0, 1, 10, 11, 2 in the legend while the
-        # Sankey beside it -- which resolves order through resolve_group_order
-        # -- gives 0, 1, 2, and the two figures disagree about which cluster is
-        # which. A cytome round-trip stores the column as plain strings, so no
-        # categorical order survives to fall back on and this decides it.
-        if category_order:
-            ordered = [str(c) for c in category_order if str(c) in present]
-            categories = ordered + sorted(present - set(ordered), key=natural_key)
-        else:
-            categories = sorted(present, key=natural_key)
-        str_values = np.array([str(v) for v in values])
-        if palette is None:
-            palette = _color_mod.d_color4
-        _pal_is_dict = isinstance(palette, dict)
-
-        def _color_for(cat, i):
-            if _pal_is_dict:
-                return palette.get(
-                    str(cat), _color_mod.d_color4[i % len(_color_mod.d_color4)])
-            return palette[i % len(palette)]
+        if style is None:
+            style = _style_for_values(values, palette, category_order, na_color)
+        labels = label_strings(values)
+        missing = np.asarray(pd.isna(labels), dtype=bool)
+        # natural_key, not plain sorted, decides any category the stored
+        # order does not: Leiden labels are strings, so a lexicographic sort
+        # gives 0, 1, 10, 11, 2 in the legend while the Sankey beside it --
+        # which resolves order through resolve_group_order -- gives 0, 1, 2.
+        categories = style.present(labels)
+        codes = style.codes(labels)
+        index = {c: i for i, c in enumerate(style.order)}
 
         plot_categories = categories
         # Whether anything was pushed into the background. Only then does the
         # legend need to say what the grey means.
         greyed_out = False
+        groups_list = None
         if groups is not None:
             groups_list = [str(g) for g in (
                 groups if isinstance(groups, (list, tuple, set)) else [groups])]
-            unknown = [g for g in groups_list if g not in categories]
-            # In a split panel a requested group may be absent from THIS panel
-            # (present in another) — that's not an error, just nothing to
-            # highlight here. Only the single-plot path validates strictly.
+            # Validated against the whole column, not the cells drawn here: a
+            # group a cell_mask or a split panel leaves out is not a typo,
+            # just nothing to highlight in this view.
+            unknown = [g for g in groups_list if g not in index]
             if unknown and strict_groups:
                 raise ValueError(
                     f"plotEmbedding(): groups={unknown} not found among the "
-                    f"categories of color={color!r}. Available: {categories}."
+                    f"categories of color={color!r}. Available: {style.order}."
                 )
-            bg = ~np.isin(str_values, groups_list)
-            greyed_out = bool(bg.any())
-            if bg.any():
-                ax.scatter(coords[bg, 0], coords[bg, 1], c=na_color,
-                           s=point_size, alpha=alpha, rasterized=rasterized,
-                           linewidths=linewidths, edgecolors=edgecolors,
-                           label='_nolegend_')
             plot_categories = [c for c in categories if c in groups_list]
 
-        for cat in plot_categories:
-            i = categories.index(cat)               # stable palette index
-            mask = str_values == cat
-            ax.scatter(coords[mask, 0], coords[mask, 1],
-                       c=[_color_for(cat, i)],
-                       s=point_size, alpha=alpha, label=cat, rasterized=rasterized,
-                       linewidths=linewidths, edgecolors=edgecolors)
+        if missing.any():
+            # labelled, so a figure legend collected from the panels
+            # (split_embedding) lists it too; the axes legend below is built
+            # from its own handles either way
+            ax.scatter(coords[missing, 0], coords[missing, 1], c=[style.na_color],
+                       label=NA_LABEL, **scatter_kw)
+        if groups_list is not None:
+            keep = np.isin(codes, [index[c] for c in plot_categories])
+            bg = ~missing & ~keep
+            greyed_out = bool(bg.any())
+            if greyed_out:
+                ax.scatter(coords[bg, 0], coords[bg, 1], c=na_color,
+                           label='_nolegend_', **scatter_kw)
+
+        if sort_order == "random":
+            sel = np.flatnonzero(np.isin(codes, [index[c] for c in plot_categories]))
+            np.random.default_rng(0).shuffle(sel)
+            ax.scatter(coords[sel, 0], coords[sel, 1], c=style.rgba(labels[sel]),
+                       label='_nolegend_', **scatter_kw)
+            # one labelled, empty artist per category, so a figure legend that
+            # collects labels from the axes (split_embedding) still finds them
+            for cat in plot_categories:
+                ax.scatter([], [], c=[style.color(cat)], label=cat, **scatter_kw)
+        else:
+            for cat in draw_sequence(style, labels, sort_order, categories=plot_categories):
+                mask = codes == index[cat]
+                ax.scatter(coords[mask, 0], coords[mask, 1], c=[style.color(cat)],
+                           label=cat, **scatter_kw)
 
         if legend_loc in ("right", "both"):
             from matplotlib.lines import Line2D
@@ -169,17 +214,14 @@ def _render_embedding(ax, coords, values, is_cat, *, color="value", palette=None
             # cloud, so a legend listing all forty original labels in their full
             # palette claims colours that are nowhere on the plot -- and omits
             # the one colour that is.
-            _handles = [
-                Line2D([0], [0], marker='o', linestyle='None', markersize=_ms,
-                       markerfacecolor=_color_for(cat, categories.index(cat)),
-                       markeredgecolor='none', label=cat)
-                for cat in plot_categories
-            ]
+            def _handle(colour, label):
+                return Line2D([0], [0], marker='o', linestyle='None', markersize=_ms,
+                              markerfacecolor=colour, markeredgecolor='none', label=label)
+            _handles = [_handle(style.color(cat), cat) for cat in plot_categories]
+            if missing.any():
+                _handles.append(_handle(style.na_color, NA_LABEL))
             if greyed_out:
-                _handles.append(
-                    Line2D([0], [0], marker='o', linestyle='None', markersize=_ms,
-                           markerfacecolor=na_color, markeredgecolor='none',
-                           label=na_label))
+                _handles.append(_handle(na_color, na_label))
             _ncol = legend_ncol if legend_ncol is not None else max(1, -(-len(_handles) // 12))
             ax.legend(
                 handles=_handles, bbox_to_anchor=(1.05, 1), loc="upper left",
@@ -188,7 +230,7 @@ def _render_embedding(ax, coords, values, is_cat, *, color="value", palette=None
             )
         if legend_loc in ("on_data", "both"):
             for cat in plot_categories:
-                mask = str_values == cat
+                mask = codes == index[cat]
                 cx, cy = coords[mask, 0].mean(), coords[mask, 1].mean()
                 text_kwargs = dict(
                     fontsize=legend_fontsize - 1, ha="center", va="center",
@@ -213,25 +255,52 @@ def _render_embedding(ax, coords, values, is_cat, *, color="value", palette=None
                 ax.text(cx, cy, cat, **text_kwargs)
         return None
     else:
-        import matplotlib.pyplot as plt
         if cmap is None:
             cmap = _color_mod.c_color1
-        order = np.argsort(values)
-        sc = ax.scatter(coords[order, 0], coords[order, 1],
-                        c=values[order], cmap=cmap, s=point_size, alpha=alpha,
-                        rasterized=rasterized, vmin=vmin, vmax=vmax,
-                        linewidths=linewidths, edgecolors=edgecolors)
+        vals = pd.to_numeric(pd.Series(np.asarray(values, dtype=object).ravel()),
+                             errors="coerce").to_numpy(dtype=float, na_value=np.nan)
+        finite = np.isfinite(vals)
+        if (~finite).any():
+            ax.scatter(coords[~finite, 0], coords[~finite, 1], c=[na_color],
+                       label='_nolegend_', **scatter_kw)
+        idx = np.flatnonzero(finite)
+        idx = idx[np.argsort(vals[idx], kind="stable")]
+        if idx.size == 0 and vmin is None and vmax is None:
+            vmin, vmax = 0.0, 1.0           # nothing finite: an honest empty scale
+        norm_kw = dict(vmin=vmin, vmax=vmax)
+        if vcenter is not None:
+            # a diverging map centred on a value (0 for a signed score): the
+            # two sides are stretched separately, so the centre colour sits
+            # at vcenter whatever the range on either side
+            from matplotlib.colors import TwoSlopeNorm
+            lo = float(vmin) if vmin is not None else float(np.nanmin(vals[idx]))
+            hi = float(vmax) if vmax is not None else float(np.nanmax(vals[idx]))
+            if not lo < float(vcenter) < hi:
+                raise ValueError(f"vcenter={vcenter} must lie between the colour "
+                                 f"limits ({lo:g}, {hi:g}).")
+            norm_kw = dict(norm=TwoSlopeNorm(vcenter=float(vcenter), vmin=lo, vmax=hi))
+        sc = ax.scatter(coords[idx, 0], coords[idx, 1], c=vals[idx], cmap=cmap,
+                        **norm_kw, **scatter_kw)
         if add_colorbar:
-            plt.colorbar(sc, ax=ax, shrink=0.6, pad=0.02)
+            ax.figure.colorbar(sc, ax=ax, shrink=0.6, pad=0.02)
         return sc
 
 
-def _resolve_cytome_basis(ds, basis):
+def _resolve_cytome_basis(ds, basis, modality=None, max_rank=2):
     """Resolve a basis name against a cytome dataset's embeddings.
 
     Tries exact match first, then a substring lookup so callers can write
     ``basis='X_umap'`` even when the embedding is registered as
-    ``'RNA_obsm_X_umap'``.
+    ``'RNA_obsm_X_umap'`` or ``'RNA_umap'``.
+
+    A multiome store holds one embedding per modality (``RNA_umap`` and
+    ``ATAC_umap``), and ``'X_umap'`` matches both equally well. ``modality``
+    breaks the tie; without it the shorter name wins as before, and a warning
+    names the alternatives -- the choice used to be silent, so an ATAC panel
+    could be drawn on the RNA layout without a word.
+
+    ``max_rank=1`` accepts only a name that is the key behind a prefix
+    (``RNA_pca``, ``RNA_obsm_X_pca``), not one that merely contains it.
     """
     emb_names = ds.list_embeddings()
     if basis in emb_names:
@@ -250,14 +319,29 @@ def _resolve_cytome_basis(ds, basis):
         if low.endswith("_" + keyword):
             return 1                       # 'RNA_obsm_spatial'
         return 2                           # 'spatial_aligned', 'spatial_chip'
-    matches = [n for n in emb_names if keyword in n.lower()]
-    if matches:
-        matches.sort(key=lambda n: (_rank(n), len(n)))
-        return matches[0]
-    raise KeyError(f"Embedding '{basis}' not found. Available: {emb_names}")
+
+    def _prefix(name):
+        return name.split("_", 1)[0].lower() if "_" in name else ""
+
+    matches = [n for n in emb_names if keyword in n.lower() and _rank(n) <= max_rank]
+    if not matches:
+        raise KeyError(f"Embedding '{basis}' not found. Available: {emb_names}")
+    mod = str(modality).lower() if modality else None
+    matches.sort(key=lambda n: (0 if mod and _prefix(n) == mod else 1, _rank(n), len(n)))
+    best = matches[0]
+    if not (mod and _prefix(best) == mod):
+        rivals = [n for n in matches[1:] if _rank(n) == _rank(best)
+                  and _prefix(n) != _prefix(best) and _prefix(n)]
+        if rivals:
+            import warnings
+            warnings.warn(
+                f"basis={basis!r} matches {[best] + rivals} equally; using "
+                f"{best!r}. Pass the full name (basis={rivals[0]!r}) or "
+                f"modality= to choose.", UserWarning, stacklevel=3)
+    return best
 
 
-def _cytome_extract(source, basis, obs_columns=None):
+def _cytome_extract(source, basis, obs_columns=None, modality=None):
     """Extract embedding coords + requested obs columns from a cytome source.
 
     Reads via the public ``ds.list_embeddings`` / ``ds.cells[col]`` API, no
@@ -277,7 +361,7 @@ def _cytome_extract(source, basis, obs_columns=None):
     """
     obs_columns = list(obs_columns or [])
     with _open_cytome(source, mode="r") as ds:
-        emb_name = _resolve_cytome_basis(ds, basis)
+        emb_name = _resolve_cytome_basis(ds, basis, modality=modality)
         coords = np.asarray(ds.embeddings[emb_name])
         if coords.ndim == 1:
             coords = coords.reshape(-1, 2)
@@ -301,75 +385,45 @@ def _cytome_extract(source, basis, obs_columns=None):
 def _resolve_categorical_style(data, color, user_palette=None):
     """Resolve ``(palette, category_order)`` for a categorical colour.
 
+    The older interface, kept for callers outside the plotters: the plots now
+    take order and colours from
+    :func:`piaso.plotting._categories.resolve_category_style`, which assigns
+    colours by name. This reads the same stored style through the same reader
+    (``stored_category_style``: a cytome's ``set_categories``, else the
+    categorical order an AnnData carried into the store; AnnData's categorical
+    dtype order and ``uns``), so the two cannot drift apart.
+
     Honors, in priority order:
 
     1. an explicit ``user_palette`` (list or dict) — returned as-is for colour,
        and, when it is a **dict**, its key order becomes the category order,
-    2. a cytome ``ds.set_categories(color, order=, colors=)`` store
-       (``ds.metadata['categories'][color]`` → ``{order, colors}``),
-       or AnnData's categorical dtype order + ``uns[f'{color}_colors']``,
-    3. the legacy ``ds.metadata[f'{color}_colors']`` / ``uns[f'{color}_colors']``
-       palette list (no explicit order).
+    2. the stored order and colours (a dict by name, or a list positional over
+       the stored order),
 
-    Returns ``(palette, category_order)`` where ``palette`` is a dict
+    and returns ``(palette, category_order)`` where ``palette`` is a dict
     ``{cat: hex}``, a list, or None, and ``category_order`` is a list or None.
-    The shared renderer applies both.
 
     ``user_palette`` may also be the NAME of a matplotlib colormap, which is
     sampled evenly across the categories in their resolved order -- useful
     when the categories are ordered (ages, timepoints) and a sequential ramp
     carries that order.
     """
+    from ._categories import stored_category_style
     palette = user_palette
-    category_order = None
-    # A dict written out at the call site states an order as well as a colour.
-    # It used to supply only colour, so `palette={"Neuron": ..., "Glia": ...}`
-    # drew Glia first -- the categories were re-sorted alphabetically and the
-    # caller's sequence was dropped without a word. Python has preserved dict
-    # insertion order since 3.7, so the order is there to be read.
-    #
-    # It outranks the object's stored categorical order on purpose: both are
-    # deliberate, and the one typed into this call is the more specific. A
-    # partial dict still works -- its keys lead, anything it omits follows
-    # alphabetically (see `_render_embedding`).
     user_dict_order = ([str(k) for k in user_palette]
                        if isinstance(user_palette, dict) else None)
-    # A colormap NAME is a reasonable thing to pass for an ORDERED categorical
-    # -- ages, timepoints, stages -- where the categories have a direction and
-    # a sequential ramp says so. It used to be accepted and silently ignored,
-    # which is worse than refusing it. Expanded to one colour per category
-    # after the order is known, below.
     _cmap_palette = None
     if isinstance(palette, str):
         _cmap_palette = palette
         palette = None
     try:
-        if _is_cytome_input(data):
-            with _open_cytome(data, mode="r") as ds:
-                entry = None
-                getter = getattr(ds, "get_categories", None)
-                if getter is not None:
-                    entry = getter(color)
-                if entry:
-                    category_order = entry.get("order")
-                    if palette is None and entry.get("colors"):
-                        palette = dict(entry["colors"])
-                if palette is None:
-                    stored = ds.metadata.get(f"{color}_colors")
-                    if stored is not None:
-                        palette = list(stored)
-        elif hasattr(data, "obs") and color in getattr(data, "obs", {}):
-            col = data.obs[color]
-            if isinstance(col.dtype, pd.CategoricalDtype):
-                category_order = list(col.cat.categories)
-            if palette is None:
-                key = f"{color}_colors"
-                if getattr(data, "uns", None) is not None and key in data.uns:
-                    palette = list(data.uns[key])
+        category_order, stored = stored_category_style(data, color)
     except Exception:
-        # Styling is best-effort: never let a metadata read break plotting.
-        return ((None if isinstance(user_palette, str) else user_palette),
-                user_dict_order)
+        category_order, stored = None, None
+    if category_order is not None:
+        category_order = [str(c) for c in category_order]
+    if palette is None and stored is not None:
+        palette = dict(stored) if isinstance(stored, dict) else list(stored)
 
     if _cmap_palette is not None:
         # Sample the colormap once per category, in the resolved order, so the
@@ -538,6 +592,7 @@ def _create_global_legend(
     frameon:bool=False,
     marker_size:float=6.0,
     max_rows_per_col:int=12,
+    order=None,
     **legend_kwargs):
     """
     Collects unique legend entries from all subplots and creates a single global legend.
@@ -561,6 +616,10 @@ def _create_global_legend(
         Size of legend marker dots (diameter in points).
     max_rows_per_col : int, optional (default=12)
         Maximum number of rows before creating a new column in the legend.
+    order : sequence of str, optional
+        Order of the entries (labels not in it follow, as first seen). The
+        panels are drawn one category at a time, so first-seen order is the
+        order of the first panel, not of the column.
     **legend_kwargs : dict, optional
         Additional keyword arguments passed to `fig.legend()` for styling.
 
@@ -592,8 +651,14 @@ def _create_global_legend(
                 label_color[label] = 'gray'
 
     if not label_color:
-        plt.tight_layout()
+        from . import _figure
+        _figure.layout(fig)
         return
+
+    if order is not None:
+        rank = {str(c): i for i, c in enumerate(order)}
+        label_color = dict(sorted(label_color.items(),
+                                  key=lambda kv: rank.get(kv[0], len(rank))))
 
     # Build Line2D handles with explicit, fixed marker size
     legend_handles = []
@@ -624,7 +689,8 @@ def _create_global_legend(
         **legend_kwargs
     )
 
-    plt.tight_layout()
+    from . import _figure
+    _figure.layout(fig)
 
     
 ### Plot embeddings side by side
@@ -675,6 +741,9 @@ def plot_embeddings_split(data,
                           image_alpha=1.0,
                           linewidths: float = 0.0,
                           edgecolors="none",
+                          sort_order="category",
+                          na_color="lightgray",
+                          vcenter=None,
                           **kwargs):
     """
     Plot cell embeddings side by side based on a categorical variable.
@@ -707,7 +776,8 @@ def plot_embeddings_split(data,
     vmin : float or None, optional (default=None)
         Minimum value for the color scale. If not provided, the lower limit is determined automatically.
     show_figure : bool, optional (default=True)
-        Whether to display the figure after plotting.
+        Whether to display the figure after plotting. When it is not shown the
+        figure is returned, and closed only if it was saved.
     save : str or None, optional (default=None)
         File path to save the resulting figure. If None, the figure will not be saved.
     layer : str or None, optional (default=None)
@@ -788,6 +858,15 @@ def plot_embeddings_split(data,
         Marker stroke colour. Only meaningful with ``linewidths > 0``.
 
         *Changed in 1.2.4*: was matplotlib's ``'face'``.
+    sort_order : {'category', 'size', 'random'}, default ``'category'``
+        Drawing order of a categorical colour within each panel; see
+        :func:`plotEmbedding`. ``'size'`` puts rare types on top.
+    na_color : str, default ``'lightgray'``
+        Colour of cells whose value is missing (and of cells left out by
+        ``groups``); a categorical colour lists missing values as ``"NA"``.
+    vcenter : float, optional
+        Centre of a diverging map for a continuous colour; see
+        :func:`plotEmbedding`. Shared by every panel.
     **kwargs : dict
         Accepts the aliases ``ncols`` (→ ``ncol``), ``size``
         (→ ``point_size``) and ``show`` (→ ``show_figure``). Anything else
@@ -816,25 +895,36 @@ def plot_embeddings_split(data,
         Colour-scale limits as percentiles of the values, when ``vmin`` /
         ``vmax`` are not given.
     groups : sequence of str, optional
-        Which groups of ``splitby`` to draw; all when ``None``.
+        For a categorical ``color``: the categories to highlight in every
+        panel; the other cells are drawn grey (``na_color``), as in
+        :func:`plotEmbedding`. ``None`` highlights all. It does not choose
+        ``splitby`` panels (the docstring said it did), and a numeric
+        ``color`` has no categories to highlight, so there it warns and is
+        ignored.
     show_modality_in_title : bool, default False
         Cytome only: prefix panel titles with the modality.
     modality : str, optional
-        Cytome only: which modality the data was stored under (``'RNA'``,
-        ``'ATAC'``, ``'tiles'``, ``'GA'``). ``None`` takes the store's first
-        modality.
+        Cytome only: the modality whose features to read (``'RNA'``,
+        ``'ATAC'``, ``'tiles'``, ``'GA'``). ``None`` finds the modality that
+        holds the feature, and raises if several do.
     cytome_layer : str, default 'counts'
-        Cytome only: the layer to read the values from.
+        Cytome only: the layer to read the values from. The default is the
+        raw counts -- unlike AnnData's ``.X``, which is usually normalised, so
+        the same data can read differently; pass ``'log1p'`` or ``'infog'``
+        (RNA) or ``'tfidf'`` (ATAC) for normalised values.
     compute_on_fly : bool, default True
-        Cytome only: normalise the raw layer while streaming (INFOG for RNA,
-        TF-IDF for ATAC) instead of requiring a materialised layer.
+        Cytome only: when ``cytome_layer`` names a normalised layer the store
+        does not hold (``'log1p'``, ``'infog'``, ``'tfidf'``), compute it per
+        feature from the counts. It does not normalise the default
+        ``'counts'``.
     use_cached_stats : bool, default True
         Cytome only: reuse normalisation statistics already stored in the
         cytome's metadata rather than recomputing them.
 
     Returns
     -------
-    None.
+    matplotlib.figure.Figure or None
+        The figure when it is not shown (``show_figure=False``), else None.
 
     Examples
     --------
@@ -884,7 +974,7 @@ def plot_embeddings_split(data,
         coords, obs_df, palette_map = _cytome_extract(
             data, basis=basis,
             obs_columns=[splitby] + ([] if _is_value_array(color) else [color])
-            + ["barcode"],
+            + ["barcode"], modality=modality,
         )
         if splitby not in obs_df.columns:
             with _open_cytome(data, mode="r") as _ds:
@@ -902,7 +992,7 @@ def plot_embeddings_split(data,
             is_numeric = _is_numeric_dtype(full_color_data)
         elif color in obs_df.columns:
             full_color_data = obs_df[color].values
-            is_numeric = pd.api.types.is_numeric_dtype(obs_df[color])
+            is_numeric = _is_numeric_dtype(obs_df[color])
         else:
             with _open_cytome(data, mode="r") as _ds:
                 full_color_data, resolved_modality_for_title = (
@@ -930,7 +1020,7 @@ def plot_embeddings_split(data,
             is_numeric = _is_numeric_dtype(full_color_data)
         elif color in adata_input.obs.columns:
             full_color_data = adata_input.obs[color].values
-            is_numeric = pd.api.types.is_numeric_dtype(adata_input.obs[color])
+            is_numeric = _is_numeric_dtype(adata_input.obs[color])
         else:
             full_color_data = adata_input.obs_vector(color, layer=layer)
             is_numeric = True
@@ -991,6 +1081,12 @@ def plot_embeddings_split(data,
                 "subplots. This may be slow."
             )
 
+    if groups is not None and is_numeric:
+        import warnings
+        warnings.warn("plot_embeddings_split: groups= highlights categories of a "
+                      "categorical color; a numeric color has none, so it is ignored.",
+                      UserWarning, stacklevel=2)
+
     # --- 3. Auto point_size (matches plotEmbedding's formula) ---
     if point_size is None:
         n_cells = coords.shape[0]
@@ -1037,42 +1133,22 @@ def plot_embeddings_split(data,
     # stored-palette lookups need a label instead.
     _color_name = _value_array_name(color) if _is_value_array(color) else color
 
-    cat_to_color = {}
+    style = None
     if not is_numeric:
-        present = set(str(v) for v in full_color_data)
+        from ._categories import resolve_category_style
         if _is_value_array(color):
-            resolved_palette = palette
-            category_order = None
+            _order = None
             if isinstance(color, pd.Categorical):
-                category_order = [str(c) for c in color.categories]
+                _order = [str(c) for c in color.categories]
             elif isinstance(color, pd.Series) and isinstance(
                     getattr(color, "dtype", None), pd.CategoricalDtype):
-                category_order = [str(c) for c in color.cat.categories]
+                _order = [str(c) for c in color.cat.categories]
+            style = _style_for_values(full_color_data, palette, _order, na_color)
         else:
-            resolved_palette, category_order = _resolve_categorical_style(
-                data, color, palette)
-        if category_order:
-            ordered = [str(c) for c in category_order if str(c) in present]
-            all_color_cats = ordered + sorted(present - set(ordered),
-                                               key=natural_key)
-        else:
-            all_color_cats = sorted(present, key=natural_key)
-        if isinstance(resolved_palette, dict):
-            cat_to_color = {
-                cat: resolved_palette.get(
-                    cat, _color_mod.d_color4[i % len(_color_mod.d_color4)])
-                for i, cat in enumerate(all_color_cats)
-            }
-        else:
-            if resolved_palette is not None:
-                global_palette = list(resolved_palette)
-            else:
-                stored = palette_map.get(f'{_color_name}_colors')
-                global_palette = list(stored) if stored else list(_color_mod.d_color4)
-            cat_to_color = {
-                cat: global_palette[i % len(global_palette)]
-                for i, cat in enumerate(all_color_cats)
-            }
+            # Over the whole column, by name: every panel gets the same
+            # category -> colour map whatever it happens to contain.
+            style = resolve_category_style(data, color, full_color_data,
+                                           palette=palette, na_color=na_color)
 
     # --- 7. Per-panel: build a tiny proxy AnnData and delegate to plotEmbedding ---
     splitby_arr = np.asarray(splitby_series.values)
@@ -1147,12 +1223,10 @@ def plot_embeddings_split(data,
             axs[i].set_visible(False)
             continue
 
-        # Every panel gets the global category -> colour mapping, by name. A
-        # list here was built in sorted order while the renderer indexes it
-        # in the column's category order, so wherever the two orders differed
-        # (a categorical or stored order such as MGE-like before CGE-like)
-        # the colours landed on the wrong categories. A dict cannot.
-        panel_palette = None if is_numeric else dict(cat_to_color)
+        # Every panel gets the global style (category -> colour by name,
+        # resolved once above). A list here was built in sorted order while
+        # the renderer indexed it in the column's category order, so wherever
+        # the two orders differed the colours landed on the wrong categories.
 
         # Inject the resolved modality into per-panel titles when requested.
         if show_modality_in_title and resolved_modality_for_title:
@@ -1171,7 +1245,8 @@ def plot_embeddings_split(data,
             np.asarray(coords[mask], dtype=np.float64),
             np.asarray(full_color_data)[mask],
             (not is_numeric),
-            color=_color_name, palette=panel_palette,
+            color=_color_name, style=style, sort_order=sort_order,
+            na_color=na_color,
             point_size=_panel_point_size,
             alpha=alpha, rasterized=rasterized, legend_loc=panel_legend,
             # For a continuous colour the colorbar is the legend, so
@@ -1183,11 +1258,10 @@ def plot_embeddings_split(data,
             # alphabetically, so a dict palette's order (and a stored
             # categorical order) survived into the colours but not into the
             # legend. Panels must also agree with each other.
-            category_order=all_color_cats if not is_numeric else None,
             legend_fontbackground=legend_fontbackground,
             legend_fontbackground_alpha=legend_fontbackground_alpha,
             groups=groups, strict_groups=False,
-            cmap=cmap, vmin=expr_min, vmax=expr_max,
+            cmap=cmap, vmin=expr_min, vmax=expr_max, vcenter=vcenter,
             legend_fontsize=legend_fontsize, legend_fontoutline=legend_fontoutline,
             linewidths=linewidths, edgecolors=edgecolors,
         )
@@ -1214,11 +1288,13 @@ def plot_embeddings_split(data,
         # Each panel has scatter handles with `label=cat` attached but no
         # per-panel legend rendered. _create_global_legend de-duplicates
         # labels across panels and draws one figure-level legend.
+        from ._categories import NA_LABEL
         _create_global_legend(
             fig, axs, legend_loc="center left", bbox_to_anchor=(1.02, 0.5),
             frameon=frameon, marker_size=legend_marker_size,
             fontsize=legend_fontsize,
             max_rows_per_col=max(8, int(fig.get_figheight() * 1.8)),
+            order=(list(style.order) + [NA_LABEL]) if style is not None else None,
         )
 
     # --- 9. Final polish ---
@@ -1244,13 +1320,9 @@ def plot_embeddings_split(data,
             ax.grid(False)
             ax.tick_params(labelbottom=False, labelleft=False, length=0)
 
-    from ..settings import _savefig
-    _savefig(fig, save, writekey='plotEmbeddingsSplit')
-
-    if show_figure:
-        plt.show()
-    if save and not show_figure:
-        plt.close(fig)
+    from . import _figure
+    return _figure.finish(fig, created=True, show=bool(show_figure), save=save,
+                          writekey='plotEmbeddingsSplit')
 
         
 from functools import wraps
@@ -1408,10 +1480,39 @@ def _as_value_array(color, n_cells, what="color", names=None):
     return values
 
 
+def _prefetch_cytome_features(data, names, layer=None, modality=None,
+                              cytome_layer="counts", compute_on_fly=True,
+                              use_cached_stats=True):
+    """``{feature: (values, modality)}`` for the features among ``names``, read
+    in ONE pass over the store's matrix, for a grid of panels.
+
+    Each panel used to read its own feature, so a grid of N genes streamed the
+    matrix N times. Cells columns are left to the panels (they are cheap), and
+    when the batch reader cannot serve a feature -- it has no fallback for a
+    store without ``{modality}_counts``, which the single-feature reader reads
+    as ``{modality}_data`` with a warning -- nothing is prefetched and the
+    panels read one by one, as before.
+    """
+    if layer is not None and cytome_layer == "counts":
+        cytome_layer = layer            # the legacy mapping of _get_embedding_and_color
+    with _open_cytome(data, mode="r") as ds:
+        cells = set(ds.cells.columns)
+        feats = [n for n in dict.fromkeys(names)
+                 if isinstance(n, str) and n not in cells]
+        if len(feats) < 2:
+            return {}
+        try:
+            return _resolve_cytome_feature_values_batch(
+                ds, feats, modality=modality, cytome_layer=cytome_layer,
+                compute_on_fly=compute_on_fly, use_cached_stats=use_cached_stats)
+        except Exception:
+            return {}
+
+
 def _get_embedding_and_color(
     data, basis, color, layer=None,
     modality=None, cytome_layer="counts",
-    compute_on_fly=True, use_cached_stats=True,
+    compute_on_fly=True, use_cached_stats=True, prefetched=None,
 ):
     """Extract embedding coords and color values from cytome Dataset, path,
     or AnnData.
@@ -1466,7 +1567,8 @@ def _get_embedding_and_color(
     if _is_value_array(color):
         if _is_cytome_input(data):
             coords, _obs_df, _pal = _cytome_extract(data, basis=basis,
-                                                    obs_columns=["barcode"])
+                                                    obs_columns=["barcode"],
+                                                    modality=modality)
             _names = (_obs_df["barcode"].to_numpy() if "barcode" in _obs_df.columns
                       else None)
         else:
@@ -1475,9 +1577,16 @@ def _get_embedding_and_color(
         values = _as_value_array(color, coords.shape[0], names=_names)
         return coords, values, not _is_numeric_dtype(values), None, True
 
+    if _is_cytome_input(data) and prefetched is not None:
+        # a grid's panel: the feature was read with the others in one pass
+        coords, _obs, _pal = _cytome_extract(data, basis=basis, obs_columns=[],
+                                             modality=modality)
+        values, resolved = prefetched
+        return coords, values, False, resolved, False
+
     if _is_cytome_input(data):
         coords, obs_df, _palette_map = _cytome_extract(
-            data, basis=basis, obs_columns=[color]
+            data, basis=basis, obs_columns=[color], modality=modality,
         )
         if color in obs_df.columns:
             values = obs_df[color].values
@@ -1959,7 +2068,7 @@ def plotEmbedding(
     alpha=1.0,
     frameon=None,
     save=None,
-    show=True,
+    show=None,
     ax=None,
     palette=None,
     legend_loc="right",
@@ -2005,6 +2114,8 @@ def plotEmbedding(
     return_fig=False,
     linewidths: float = 0.0,
     edgecolors="none",
+    sort_order="category",
+    vcenter=None,
     **kwargs,
 ):
     """Plot a 2-D embedding colored by a cell annotation or continuous value.
@@ -2079,14 +2190,31 @@ def plotEmbedding(
         - Full path (``'/path/to/fig.png'``): save directly.
         - Suffix (``'_leiden'``): save to ``piaso.settings.figdir``.
         - ``True``: auto-name and save to ``piaso.settings.figdir``.
-    show : bool
-        Whether to call ``plt.show()``.
+    show : bool, optional
+        Whether to call ``plt.show()``. ``None`` (default) shows unless ``ax``
+        is given: drawing into a caller's axes leaves the showing to the caller.
+        When not shown, the figure is returned; a figure this function made is
+        closed only once it is saved (``save=``).
+
+        *Changed*: the default was True, which called ``plt.show()`` from
+        inside a composed figure.
     ax : matplotlib Axes, optional
-        Pre-existing axes to draw on.
-    palette : list[str], optional
-        Color palette for categorical data.  If None, checks
-        ``adata.uns['{color}_colors']`` first, then falls back to
-        ``piaso.pl.color.d_color4``.
+        Pre-existing axes to draw on. Its figure is never closed here.
+    palette : list[str], dict, or str, optional
+        Color palette for categorical data. A dict maps category to colour (by
+        name) and its key order leads the legend; a list is matched to the
+        column's category order; a string names a colormap or palette. If
+        None, the stored colours are used -- ``adata.uns['{color}_colors']``,
+        a cytome's ``set_categories``, or the colours an AnnData carried into
+        the store -- then ``piaso.pl.color.d_color4``. Colours are assigned by
+        name over the whole column, so ``cell_mask`` and ``groups`` never move
+        one.
+    sort_order : {'category', 'size', 'random'}, default ``'category'``
+        Drawing order of a categorical colour. ``'category'`` draws the
+        categories in legend order, each over the ones before; ``'size'``
+        draws the largest first so rare types end on top (a rare type drawn
+        first under a large one can have no visible pixel); ``'random'``
+        draws all cells in one shuffled, seeded pass.
     groups : str or list of str, optional
         For a **categorical** ``color``: highlight only these category values —
         they keep their palette colour while all other cells are greyed out
@@ -2097,7 +2225,9 @@ def plotEmbedding(
         The legend then lists the highlighted groups and one final entry for
         the grey — the colours on the plot, and nothing else.
     na_color : str, default ``'lightgray'``
-        Colour for the greyed-out (non-``groups``) cells.
+        Colour for the greyed-out (non-``groups``) cells, and for cells whose
+        value is missing (NaN, None), which are drawn first and, for a
+        categorical colour, listed as ``"NA"`` in the legend.
     na_label : str, default ``'other'``
         Legend label for that colour. Only appears when ``groups`` actually
         left something out.
@@ -2159,6 +2289,11 @@ def plotEmbedding(
         categorical colours and overridden by an explicit ``vmin``/``vmax``.
     cmap
         Colormap for continuous data.
+    vcenter : float, optional
+        For a continuous colour on a diverging map (the default for a numeric
+        cell column is ``'Spectral_r'``): the value drawn in the map's centre
+        colour, e.g. ``0`` for a signed score. Each side is stretched to its
+        own half of the map. Must lie between the colour limits.
     show_axes_arrow : bool
         Draw small coordinate arrows at a corner of the plot.
     axes_arrow_loc : str
@@ -2237,22 +2372,32 @@ def plotEmbedding(
     image_crop : bool, default True
         Crop the image to the plotted coordinates.
     cell_mask : ndarray, optional
-        Cytome only: plot these cells only (boolean mask or sorted indices).
+        Plot these cells only (boolean mask of length ``n_cells``, or integer
+        indices). Colours and the category order come from the whole column.
     return_fig : bool, default False
-        Return the figure instead of showing it.
+        Return ``(fig, ax)`` (``(fig, [axes])`` for a list ``color``).
 
     Returns
     -------
     fig, ax
-        For single-color: ``(fig, ax)`` where ``ax`` is the matplotlib
-        Axes that was drawn into.
+        With ``return_fig=True``, for single-color: ``(fig, ax)`` where
+        ``ax`` is the matplotlib Axes that was drawn into.
     fig, axs
-        For list-color: ``(fig, [ax0, ax1, ...])`` — one Axes per entry
-        in ``color``; trailing empty grid cells are hidden via
-        ``set_visible(False)``.
+        With ``return_fig=True``, for list-color: ``(fig, [ax0, ax1, ...])``
+        — one Axes per entry in ``color``; trailing empty grid cells are
+        hidden via ``set_visible(False)``.
+    fig
+        Otherwise the figure when it is not shown, and None when it is.
     """
+    # Every argument of this call, for the panels of a list `color`: a grid
+    # forwarded a hand-written subset, and cell_mask, image*, linewidths,
+    # edgecolors and na_label silently fell out of it (a mask of 412 of 600
+    # cells drew all 600).
+    _call = dict(locals())
+    _call.update(_call.pop("kwargs"))
     from . import color as _color_mod
     from .. import settings as _settings
+    from . import _figure
 
     # Resolve defaults from settings
     if frameon is None:
@@ -2276,6 +2421,10 @@ def plotEmbedding(
     # semantics. `ncol` defaults to ceil(sqrt(n)); `ax=` cannot host a
     # grid so combining the two raises a clean TypeError.
     # ------------------------------------------------------------------
+    # A grid's panels receive their feature's values read in one pass with
+    # the others (private; see _prefetch_cytome_features).
+    _prefetched = kwargs.pop('_prefetched', None)
+    _call.pop('_prefetched', None)
     # `ncols` accepted as an alias for `ncol` (scanpy convention).
     if 'ncols' in kwargs:
         if ncol is None:
@@ -2329,35 +2478,26 @@ def plotEmbedding(
             else:
                 _panel_titles = [None] * n
                 _suptitle = title
+            # The grid's own arguments stay here; everything else reaches
+            # every panel unchanged.
+            _grid_only = {"data", "color", "title", "figsize", "save", "show", "ax",
+                          "return_fig", "ncol", "ncols", "col_size", "row_size",
+                          "hspace", "wspace"}
+            _panel_kw = {k: v for k, v in _call.items() if k not in _grid_only}
+            # On a store, the grid's features are read in one pass, not one
+            # pass per panel (review I2 finding 15).
+            _pre = (_prefetch_cytome_features(
+                        data, color_list, layer=layer, modality=modality,
+                        cytome_layer=cytome_layer, compute_on_fly=compute_on_fly,
+                        use_cached_stats=use_cached_stats)
+                    if _is_cytome_input(data) else {})
             for i, color_i in enumerate(color_list):
+                _extra = ({'_prefetched': _pre[color_i]}
+                          if isinstance(color_i, str) and color_i in _pre else {})
                 plotEmbedding(
-                    data, color=color_i, basis=basis, layer=layer,
-                    title=_panel_titles[i],             # per-panel title (or None)
-                    figsize=None,
-                    point_size=point_size, alpha=alpha,
-                    frameon=frameon,
-                    save=None,                          # save the parent fig
-                    show=False, ax=axs_flat[i],
-                    palette=palette,
-                    legend_loc=legend_loc, legend_fontsize=legend_fontsize,
-                    legend_fontoutline=legend_fontoutline,
-                    legend_fontbackground=legend_fontbackground,
-                    legend_fontbackground_alpha=legend_fontbackground_alpha,
-                    legend_ncol=legend_ncol,
-                    rasterized=rasterized, dpi=dpi,
-                    vmin=vmin, vmax=vmax, vmin_pct=vmin_pct, vmax_pct=vmax_pct,
-                    cmap=cmap,
-                    show_axes_arrow=show_axes_arrow,
-                    axes_arrow_loc=axes_arrow_loc,
-                    modality=modality, cytome_layer=cytome_layer,
-                    compute_on_fly=compute_on_fly,
-                    use_cached_stats=use_cached_stats,
-                    show_modality_in_title=show_modality_in_title,
-                    fix_coordinate_ratio=fix_coordinate_ratio,
-                    show_axis_ticks=show_axis_ticks,
-                    x_min=x_min, x_max=x_max, y_min=y_min, y_max=y_max,
-                    legend_marker_size=legend_marker_size,
-                    groups=groups, na_color=na_color,
+                    data, color=color_i, title=_panel_titles[i],
+                    figsize=None, save=None, show=False, ax=axs_flat[i],
+                    return_fig=False, **_panel_kw, **_extra,
                 )
             # Hide trailing empty axes if n_colors < nrow*ncol
             for j in range(n, len(axs_flat)):
@@ -2377,19 +2517,40 @@ def plotEmbedding(
             _reserve_legend_space(fig)
             if _suptitle is not None:
                 fig.suptitle(_suptitle)
-            from ..settings import _savefig
-            _savefig(fig, save, writekey='plotEmbedding')
-            if show:
-                plt.show()
+            out = _figure.finish(fig, created=True, show=_figure.resolve_show(show),
+                                 save=save, writekey='plotEmbedding')
             if return_fig:
                 return fig, axs_flat
-            return None
+            return out
 
     coords, values, is_cat, resolved_modality, _from_obs = _get_embedding_and_color(
         data, basis, color, layer=layer,
         modality=modality, cytome_layer=cytome_layer,
         compute_on_fly=compute_on_fly, use_cached_stats=use_cached_stats,
+        prefetched=_prefetched,
     )
+
+    # Order and colours of a categorical colour are resolved here, over the
+    # WHOLE column, before any cell_mask: a category the mask leaves out must
+    # keep its place, or every later category takes the colour of the one
+    # before it (Inh was drawn in Exc's colour once a mask dropped Exc).
+    style = None
+    if is_cat:
+        from ._categories import resolve_category_style
+        if _is_value_array(color):
+            # An array passed as `color` names no stored palette, so only the
+            # user's own palette applies. A pandas Categorical does carry an
+            # order, though, and honouring it is the point of passing one.
+            _order = None
+            if isinstance(color, pd.Categorical):
+                _order = [str(c) for c in color.categories]
+            elif isinstance(color, pd.Series) and isinstance(
+                    getattr(color, "dtype", None), pd.CategoricalDtype):
+                _order = [str(c) for c in color.cat.categories]
+            style = _style_for_values(values, palette, _order, na_color)
+        else:
+            style = resolve_category_style(data, color, values, palette=palette,
+                                           na_color=na_color)
 
     # Plot a subset without writing a subset file: a boolean mask (length
     # n_cells) or integer indices, applied after the coordinates and colour
@@ -2428,11 +2589,9 @@ def plotEmbedding(
         n_cells = coords.shape[0]
         point_size = max(0.1, min(3, 22000 / n_cells))
 
-    if ax is None:
-        # figsize=None → matplotlib uses rcParams['figure.figsize']
-        fig, ax = plt.subplots(1, 1, figsize=figsize, dpi=dpi)
-    else:
-        fig = ax.figure
+    show = _figure.resolve_show(show, ax)
+    # figsize=None → matplotlib uses rcParams['figure.figsize']
+    fig, ax, _created = _figure.begin(ax, nrows=1, ncols=1, figsize=figsize, dpi=dpi)
 
     # Tissue image under the scatter (basis='spatial' workflows). The image
     # is drawn in full-resolution coordinate units with y increasing downward
@@ -2455,22 +2614,6 @@ def plotEmbedding(
     if cmap is None and not is_cat and _from_obs:
         cmap = "Spectral_r"
 
-    # Resolve the categorical palette + display order from the cytome
-    # ``set_categories`` store (or AnnData categorical dtype + uns) before
-    # delegating to the shared array-based renderer (no proxy AnnData needed).
-    category_order = None
-    if is_cat:
-        # An array passed as `color` names no stored palette, so only the
-        # user's own palette applies. A pandas Categorical does carry an order,
-        # though, and honouring it is the point of passing one.
-        if _is_value_array(color):
-            if isinstance(color, pd.Categorical):
-                category_order = [str(c) for c in color.categories]
-            elif isinstance(color, pd.Series) and isinstance(
-                    getattr(color, "dtype", None), pd.CategoricalDtype):
-                category_order = [str(c) for c in color.cat.categories]
-        else:
-            palette, category_order = _resolve_categorical_style(data, color, palette)
     # Continuous colour maps default by SOURCE, not by dtype: a feature
     # (gene, peak, gene-activity) keeps PIASO's sequential `color_1`, while a
     # numeric CELL column -- regulon activity, a QC metric, pseudotime -- gets
@@ -2482,8 +2625,7 @@ def plotEmbedding(
     _render_embedding(
         ax, coords, values, is_cat,
         color=(_value_array_name(color) if _is_value_array(color) else color),
-        palette=palette,
-        category_order=category_order,
+        style=style, sort_order=sort_order,
         point_size=point_size, alpha=alpha, rasterized=rasterized,
         groups=groups, na_color=na_color, na_label=na_label,
         legend_loc=legend_loc,
@@ -2492,7 +2634,7 @@ def plotEmbedding(
         legend_fontsize=legend_fontsize, legend_fontoutline=legend_fontoutline,
         legend_fontbackground=legend_fontbackground,
         legend_fontbackground_alpha=legend_fontbackground_alpha,
-        cmap=_cmap, vmin=vmin, vmax=vmax,
+        cmap=_cmap, vmin=vmin, vmax=vmax, vcenter=vcenter,
         linewidths=linewidths, edgecolors=edgecolors,
     )
 
@@ -2546,13 +2688,11 @@ def plotEmbedding(
     if show_axes_arrow:
         _draw_axes_arrow(ax, basis, loc=axes_arrow_loc)
 
-    from ..settings import _savefig
-    _savefig(fig, save, writekey='plotEmbedding')
-    if show:
-        plt.show()
+    out = _figure.finish(fig, created=_created, show=show, save=save,
+                         writekey='plotEmbedding')
     if return_fig:
         return fig, ax
-    return None
+    return out
 
 
 def _draw_axes_arrow(ax, basis, loc="bottom_left"):

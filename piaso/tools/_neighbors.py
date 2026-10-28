@@ -260,13 +260,9 @@ def neighbors(
     # n_masked rows (graph is a (n_masked, n_masked) adjacency). Used by
     # multi-batch GDR's per-batch auto-cluster.
     if cell_mask is not None:
-        cell_mask_arr = np.asarray(cell_mask).astype(bool)
-        if cell_mask_arr.shape[0] != X.shape[0]:
-            raise ValueError(
-                f"cell_mask length ({cell_mask_arr.shape[0]}) must match "
-                f"embedding rows ({X.shape[0]})."
-            )
-        X = X[cell_mask_arr]
+        # a boolean mask or cell indices, as documented (indices used to be cast to bool)
+        from ._leiden import _cell_mask_bool
+        X = X[_cell_mask_bool(cell_mask, X.shape[0])]
 
     n_cells = X.shape[0]
     if n_cells < 2:

@@ -29,6 +29,15 @@ def _catalogue(n=60, prefix="TF"):
     return "".join(f"{prefix}{i}\n" for i in range(n))
 
 
+def _serve(monkeypatch, write):
+    """Stand in for the network: ``write(url, path)`` fills the file piaso.data's
+    one download helper asks for (a temporary file, renamed once it passes)."""
+    from piaso.data import _download
+    monkeypatch.setattr(_download, "_fetch_once",
+                        lambda url, path, timeout, progress, expected_size: write(url, str(path)))
+    monkeypatch.setattr(_download.time, "sleep", lambda s: None)
+
+
 # --------------------------------------------------------------- sources --
 
 
@@ -106,7 +115,7 @@ def test_a_download_that_returns_a_page_is_not_left_in_the_cache(tmp_path, monke
     def _serve_a_captcha(url, filename):
         pathlib.Path(filename).write_text("<!doctype html><title>captcha</title>")
 
-    monkeypatch.setattr("urllib.request.urlretrieve", _serve_a_captcha)
+    _serve(monkeypatch, _serve_a_captcha)
     with pytest.raises(RuntimeError, match="Failed to download"):
         fetch_tf_list("human", dest_dir=str(tmp_path))
     assert not M._tf_list_cache_path("human", "cistarget", tmp_path).exists()
@@ -148,7 +157,7 @@ def test_the_1_2_3_fetcher_raises_without_touching_the_network(monkeypatch):
     def _never(*a, **k):                       # noqa: ARG001
         raise AssertionError("the shim must not make a request")
 
-    monkeypatch.setattr("urllib.request.urlretrieve", _never)
+    _serve(monkeypatch, _never)
     with pytest.raises(RuntimeError) as e:
         fetch_animaltfdb_tf_list("mouse")
     msg = str(e.value)
@@ -162,7 +171,7 @@ def test_other_sources_fail_with_the_plain_message(tmp_path, monkeypatch):
     def _boom(url, filename):
         raise urllib.error.URLError("no route")
 
-    monkeypatch.setattr("urllib.request.urlretrieve", _boom)
+    _serve(monkeypatch, _boom)
     with pytest.raises(RuntimeError, match="Failed to download the cistarget"):
         fetch_tf_list("mouse", dest_dir=str(tmp_path))
 
@@ -171,7 +180,7 @@ def test_fetch_writes_where_load_will_look(tmp_path, monkeypatch):
     def _fake(url, filename):
         pathlib.Path(filename).write_text("SOX9\nPAX6\n" + _catalogue())
 
-    monkeypatch.setattr("urllib.request.urlretrieve", _fake)
+    _serve(monkeypatch, _fake)
     monkeypatch.setattr(M, "_DEFAULT_CACHE_DIR", pathlib.Path(tmp_path))
     fetch_tf_list("human")
     assert {"SOX9", "PAX6"} <= load_tf_list("human")

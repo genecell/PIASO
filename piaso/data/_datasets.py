@@ -30,53 +30,78 @@ _BUILTIN_REGISTRY = None  # loaded lazily from _registry_builtin.json
 _registry_cache = None
 
 
+def _read_registry(path: Path) -> Optional[dict]:
+    try:
+        with open(path) as f:
+            reg = json.load(f)
+        return reg if isinstance(reg, dict) else None
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def _registry_version(reg: dict) -> int:
+    try:
+        return int(reg.get("version", 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _fetch_remote_registry(cache_path: Path) -> Optional[dict]:
+    """The registry on GitHub, cached under the data root (written atomically)."""
+    try:
+        import requests
+        resp = requests.get(_REGISTRY_URL, timeout=10)
+        resp.raise_for_status()
+        reg = resp.json()
+        if not isinstance(reg, dict):
+            return None
+    except Exception:
+        return None
+    try:
+        import tempfile
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(prefix=".datasets.json.", suffix=".part", dir=str(cache_path.parent))
+        with os.fdopen(fd, "w") as fh:
+            fh.write(resp.text)
+        from ._download import _umask
+        os.chmod(tmp, 0o666 & ~_umask())
+        os.replace(tmp, cache_path)
+    except OSError:
+        pass
+    return reg
+
+
 def _load_registry(force_refresh: bool = False) -> dict:
-    """Load dataset registry, trying: memory cache → local cache → remote → builtin."""
+    """The dataset registry: the newest of the cached, downloaded and packaged ones.
+
+    A registry cached by an older PIASO used to win over the one the installed
+    package ships, whatever their versions, so datasets added since were
+    reported as unknown. Each registry carries a ``version``; the highest wins,
+    and on a tie the downloaded or cached copy (it may hold fixes, or be a
+    user's own ``datasets.json``). The remote is asked when there is no cache,
+    or when ``force_refresh``.
+    """
     global _registry_cache
     if _registry_cache is not None and not force_refresh:
         return _registry_cache
 
     cache_path = resolve_data_dir() / "datasets.json"
-
-    # Try local cache (unless force refresh)
-    if not force_refresh and cache_path.exists():
-        try:
-            with open(cache_path) as f:
-                _registry_cache = json.load(f)
-            return _registry_cache
-        except (json.JSONDecodeError, OSError):
-            pass
-
-    # Try remote
-    try:
-        import requests
-        resp = requests.get(_REGISTRY_URL, timeout=10)
-        resp.raise_for_status()
-        _registry_cache = resp.json()
-        # Cache locally
-        cache_path.parent.mkdir(parents=True, exist_ok=True)
-        cache_path.write_text(resp.text)
-        return _registry_cache
-    except Exception:
-        pass
-
-    # Fallback: use builtin registry shipped with PIASO
-    builtin_path = Path(__file__).parent / "_registry_builtin.json"
-    if builtin_path.exists():
-        with open(builtin_path) as f:
-            _registry_cache = json.load(f)
-        return _registry_cache
-
-    # Last resort: use local cache even if we wanted refresh
-    if cache_path.exists():
-        with open(cache_path) as f:
-            _registry_cache = json.load(f)
-        return _registry_cache
-
-    raise RuntimeError(
-        "Could not load dataset registry. Check your internet connection, "
-        "or manually place datasets.json in ~/.piaso/data/"
-    )
+    cached = None if force_refresh else _read_registry(cache_path)
+    remote = _fetch_remote_registry(cache_path) if (force_refresh or cached is None) else None
+    builtin = _read_registry(Path(__file__).parent / "_registry_builtin.json")
+    candidates = [r for r in (remote, cached, builtin) if r is not None]
+    if not candidates and force_refresh:
+        # last resort: the local cache even though a refresh was asked for
+        cached = _read_registry(cache_path)
+        candidates = [cached] if cached is not None else []
+    if not candidates:
+        raise RuntimeError(
+            "Could not load dataset registry. Check your internet connection, "
+            "or manually place datasets.json in ~/.piaso/data/"
+        )
+    # max() keeps the first of equals: remote, then cached, then packaged
+    _registry_cache = max(candidates, key=_registry_version)
+    return _registry_cache
 
 
 def _md5_file(path: Path) -> str:
@@ -89,25 +114,9 @@ def _md5_file(path: Path) -> str:
 
 
 def _download_with_progress(url: str, dest: Path, expected_size: int = 0) -> None:
-    """Download a file with a progress bar."""
-    import urllib.request
-
-    def _reporthook(block_num, block_size, total_size):
-        if total_size <= 0:
-            total_size = expected_size
-        downloaded = block_num * block_size
-        if total_size > 0:
-            pct = min(100, downloaded * 100 // total_size)
-            mb_down = downloaded / 1e6
-            mb_total = total_size / 1e6
-            sys.stdout.write(f"\r  {mb_down:.1f} / {mb_total:.1f} MB ({pct}%)")
-        else:
-            sys.stdout.write(f"\r  {downloaded / 1e6:.1f} MB")
-        sys.stdout.flush()
-
-    urllib.request.urlretrieve(url, str(dest), reporthook=_reporthook)
-    sys.stdout.write("\n")
-    sys.stdout.flush()
+    """Download a file with a progress bar (a timeout, retries, and the server's length checked)."""
+    from ._download import fetch_with_retries
+    fetch_with_retries(url, dest, progress=True, expected_size=int(expected_size or 0))
 
 
 def list_datasets() -> Dict[str, dict]:
@@ -233,6 +242,18 @@ def fetch_dataset(name: str, force: bool = False, data_dir=None) -> Path:
                     f"The download is corrupted and was discarded; "
                     f"{'the existing file is unchanged; ' if dest.exists() else ''}"
                     f"try again.")
+        # The permissions a new file gets under the caller's umask (mkstemp
+        # makes 0600, which locked a shared data root to its downloader).
+        from ._download import _umask
+        os.chmod(tmp, 0o666 & ~_umask())
+        if str(dest).endswith((".cytome", ".db")):
+            # A store's -wal / -shm belong to the file being replaced: SQLite
+            # would replay the old -wal onto the new file.
+            for _suffix in ("-wal", "-shm", "-journal"):
+                try:
+                    os.remove(f"{dest}{_suffix}")
+                except FileNotFoundError:
+                    pass
         # Atomic on one file system: the final name only ever holds a
         # complete, verified file.
         os.replace(tmp, dest)

@@ -15,15 +15,23 @@ Usage
     # Query marker genes
     df = piaso.tl.queryPIASOmarkerDB(gene="Foxp2", species="Mouse")
     
-    # Get the marker dict, in the form predictCellTypeByMarker takes
+    # Get the marker dict, in the form kamon takes
     marker_dict = piaso.tl.queryPIASOmarkerDB(
-        study="AllenWholeMouseBrain_isocortex",
+        study="AllenWholeMouseBrain2023_isocortex",
         species="Mouse",
         as_dict=True
     )
     
     # List available studies
     studies = piaso.tl.queryPIASOmarkerDB(list_studies=True)
+
+    # Marker regions, named as a PIASO store's tiles: the dict that names nuclei from their tile counts
+    regions = piaso.tl.getMarkerRegions(
+        study="ZuRen2023_WholeBrain_ATAC",
+        genome="mm10",
+        top_n=200,
+        as_dict=True
+    )
     
     # Analyze gene lists for cell type inference
     df = piaso.tl.analyzeMarkers(["Syt6", "Tle4", "Foxp2", "Fezf2"])
@@ -35,12 +43,17 @@ Usage
         cosg_df, 
         n_top_genes=50,
         species="Mouse",
-        studies="AllenWholeMouseBrain_isocortex"
+        studies="AllenWholeMouseBrain2023_isocortex"
     )
 """
 
 from __future__ import annotations
 
+import hashlib
+import json
+import numbers
+import os
+import time
 import warnings
 from collections import defaultdict
 from functools import wraps
@@ -48,6 +61,12 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import requests
+from requests.adapters import HTTPAdapter
+
+try:                      # requests re-exports urllib3's Retry; urllib3 is not a declared dependency
+    from requests.adapters import Retry
+except ImportError:       # pragma: no cover - a requests without it retries connections only
+    Retry = None
 
 try:
     import pandas as pd
@@ -62,7 +81,7 @@ except ImportError:
 
 
 # ``as_dict=True`` used to return ``(DataFrame, dict)``. Almost every use of it
-# wanted the dict -- it is what feeds predictCellTypeByMarker -- and paid for it
+# wanted the dict -- it is what feeds kamon -- and paid for it
 # by unpacking a two-element tuple whose first element was then thrown away. It
 # now returns the dict alone. ``as_dict='both'`` is the old behaviour, kept for
 # one release so existing code has somewhere to go.
@@ -135,6 +154,57 @@ class AuthenticationError(PIASOmarkerDBError):
 
 
 # =============================================================================
+# Marker regions (Internal Use Only - Not Exported)
+# =============================================================================
+
+#: A marker region's fields, in the server's order (PIASOmarkerDB, regions.py: COLUMNS). The conservation fields
+#: come last and are empty where the database holds none.
+_REGION_COLUMNS = [
+    "cell_type", "region", "chrom", "start", "end", "cosg_score", "cosg_rank", "study_publication", "species",
+    "tissue", "condition", "genome", "ccre_class", "ccre_accession", "nearest_gene", "tss_distance", "nearby_genes",
+    "phylop_mean", "phastcons_mean", "bases_scored", "ortholog", "ortholog_markers", "ortholog_contexts",
+]
+_REGION_STUDY_COLUMNS = ["study_publication", "species", "genome", "tissue", "condition", "cell_types", "regions"]
+#: The genome build of each species' marker regions: the database keeps one build per species.
+_REGION_GENOMES = {"Human": "hg38", "Mouse": "mm10"}
+#: The most rows the server returns in one JSON page.
+_REGION_PAGE_MAX = 100_000
+#: The most marker rows the server returns for one request with a limit (/api/v1/markers caps ``limit`` there,
+#: so a larger page came back short and was read as the last one).
+_MARKER_PAGE_MAX = 100_000
+#: Genes per request when gene lists are looked up together (analyzeGenes): keeps each URL short.
+_GENE_BATCH = 200
+
+
+def _region_genome(value, what):
+    """``'Human'``, ``'human'``, ``'hg38'`` -> ``'hg38'``, the same for Mouse and mm10; ``None`` stays ``None``."""
+    if value is None:
+        return None
+    v = str(value).strip().lower()
+    for species, build in _REGION_GENOMES.items():
+        if v in (species.lower(), build):
+            return build
+    raise ValidationError(
+        f"{what}={value!r}: PIASOmarkerDB holds marker regions for Human (hg38) and Mouse (mm10) only.")
+
+
+def _tile_ids(chrom, start, end, tile_size):
+    """The tiles of a PIASO store's grid that ``[start, end)`` overlaps, named as the importer names them:
+    ``'chr1:3000500-3001000'``, the tile's start and its start plus ``tile_size`` (0-based, half-open). A
+    marker region is one 500 bp tile of that grid, so at the default tile size it maps to exactly one tile."""
+    lo, hi = start // tile_size, -(-end // tile_size)
+    return [f"{chrom}:{k * tile_size}-{(k + 1) * tile_size}" for k in range(lo, max(hi, lo + 1))]
+
+
+def _positive_int(name, value):
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, numbers.Integral) or value < 1:
+        raise ValidationError(f"{name} must be a positive integer, got {value!r}")
+    return int(value)
+
+
+# =============================================================================
 # Main Client Class
 # =============================================================================
 
@@ -154,8 +224,15 @@ class PIASOmarkerDB:
     timeout : int, optional
         Request timeout in seconds. Default: 30
     cache_dir : str or Path, optional
-        Directory for caching downloaded markers.
-        Default: ~/.piaso/markers
+        A directory to keep the server's answers in, one JSON file per request, reused for ``cache_ttl``
+        seconds (repeated analyses then send no request). Default ``None``: nothing is cached and no directory
+        is created. (It defaulted to ~/.piaso/markers, created on every client although nothing was ever
+        cached there, so a read-only home directory broke every call.)
+    cache_ttl : float, optional
+        Seconds a cached answer is reused. Default: 86400 (a day); ``None`` keeps them until deleted.
+    retries : int, optional
+        Retries, with exponential backoff, of a request that fails to connect or is answered 429, 500, 502,
+        503 or 504 (honouring Retry-After). Default: 3.
     
     Examples
     --------
@@ -169,7 +246,7 @@ class PIASOmarkerDB:
     >>> 
     >>> # Get as dict
     >>> marker_dict = client.getMarkers(
-    ...     study="AllenWholeMouseBrain_isocortex",
+    ...     study="AllenWholeMouseBrain2023_isocortex",
     ...     as_dict=True
     ... )
     >>> 
@@ -193,6 +270,7 @@ class PIASOmarkerDB:
     DEFAULT_BASE_URL = "https://piaso.org/piasomarkerdb"
     API_VERSION = "v1"
     DEFAULT_TIMEOUT = 30
+    DEFAULT_RETRIES = 3
     
     # Return value for no matches
     NO_MATCH_VALUE = "Unassigned"
@@ -202,18 +280,25 @@ class PIASOmarkerDB:
         base_url: str = None,
         timeout: int = None,
         cache_dir: str | Path | None = None,
+        cache_ttl: Optional[float] = 86400,
+        retries: int = None,
     ):
         self.base_url = (base_url or self.DEFAULT_BASE_URL).rstrip('/')
         self.timeout = timeout or self.DEFAULT_TIMEOUT
         self._session = requests.Session()
+        # transient failures are retried with backoff (none were: one dropped connection or a 503 from a
+        # restarting server failed the whole analysis)
+        n = self.DEFAULT_RETRIES if retries is None else int(retries)
+        adapter = HTTPAdapter(max_retries=n if Retry is None else Retry(
+            total=n, connect=n, read=n, status=n, backoff_factor=0.5,
+            status_forcelist=(429, 500, 502, 503, 504), allowed_methods=frozenset({"GET", "HEAD"}),
+            raise_on_status=False, respect_retry_after_header=True))
+        self._session.mount("https://", adapter)
+        self._session.mount("http://", adapter)
         self._aliases = None            # {former study name: current name}, read once (studyAliases)
-        
-        # Set up cache directory
-        if cache_dir:
-            self.cache_dir = Path(cache_dir)
-        else:
-            self.cache_dir = Path.home() / ".piaso" / "markers"
-        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        # an opt-in response cache; the directory is made on the first write
+        self.cache_dir = Path(cache_dir) if cache_dir else None
+        self.cache_ttl = cache_ttl
     
     def __repr__(self) -> str:
         return f"PIASOmarkerDB(base_url='{self.base_url}')"
@@ -249,7 +334,13 @@ class PIASOmarkerDB:
             JSON response data (can be dict or list depending on endpoint)
         """
         url = self._build_url(endpoint)
-        
+        key = None
+        if self.cache_dir is not None and method.upper() == "GET" and not kwargs:
+            key = self._cache_key(url, params)
+            cached = self._cache_read(key)
+            if cached is not None:
+                return cached["data"]
+
         try:
             response = self._session.request(
                 method=method,
@@ -269,8 +360,18 @@ class PIASOmarkerDB:
                 except Exception:
                     message = response.text
                 raise APIError(message, status_code=response.status_code)
-            
-            return response.json()
+
+            try:
+                data = response.json()
+            except ValueError as e:
+                # a proxy's or a maintenance page's HTML: say so, not a raw JSONDecodeError
+                raise APIError(
+                    f"{url} did not answer with JSON (status {response.status_code}, content type "
+                    f"{response.headers.get('Content-Type')!r}): {response.text[:200]!r}",
+                    status_code=response.status_code) from e
+            if key is not None:
+                self._cache_write(key, url, params, data)
+            return data
             
         except requests.exceptions.Timeout:
             raise MarkerDBConnectionError(
@@ -281,6 +382,36 @@ class PIASOmarkerDB:
                 f"Failed to connect to {url}: {e}"
             )
     
+    def _cache_key(self, url: str, params: Optional[dict]) -> str:
+        blob = json.dumps([url, sorted((str(k), str(v)) for k, v in (params or {}).items())])
+        return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+    def _cache_read(self, key: str) -> Optional[dict]:
+        path = self.cache_dir / f"{key}.json"
+        try:
+            with open(path, encoding="utf-8") as fh:
+                rec = json.load(fh)
+        except (OSError, ValueError):
+            return None
+        if not isinstance(rec, dict) or "data" not in rec:
+            return None
+        if self.cache_ttl is not None and time.time() - float(rec.get("time", 0)) > self.cache_ttl:
+            return None
+        return rec
+
+    def _cache_write(self, key: str, url: str, params: Optional[dict], data) -> None:
+        path = self.cache_dir / f"{key}.json"
+        tmp = path.with_name(f".{key}.{os.getpid()}.tmp")
+        try:
+            self.cache_dir.mkdir(parents=True, exist_ok=True)
+            with open(tmp, "w", encoding="utf-8") as fh:
+                json.dump({"url": url, "params": {str(k): str(v) for k, v in (params or {}).items()},
+                           "time": time.time(), "data": data}, fh)
+            os.replace(tmp, path)
+        except OSError as exc:
+            warnings.warn(f"PIASOmarkerDB: the response could not be cached in {self.cache_dir} ({exc})",
+                          UserWarning, stacklevel=3)
+
     def _extract_data(self, response: Union[dict, list]) -> list:
         """
         Extract data from API response.
@@ -351,7 +482,7 @@ class PIASOmarkerDB:
             Number of results to skip (for pagination). Default: 0.
         as_dict : bool or {'both'}, optional
             ``True`` returns the marker dictionary ``{cell_type: [genes]}``
-            alone — the form that feeds ``predictCellTypeByMarker``. ``False``
+            alone — the form that feeds ``kamon``. ``False``
             (the default) returns the DataFrame. ``'both'`` returns the old
             ``(DataFrame, dict)`` pair and is deprecated.
 
@@ -370,27 +501,45 @@ class PIASOmarkerDB:
         --------
         >>> df = client.getMarkers(gene="Foxp2", species="Mouse")
         >>> marker_dict = client.getMarkers(
-        ...     study="AllenWholeMouseBrain_isocortex",
+        ...     study="AllenWholeMouseBrain2023_isocortex",
         ...     as_dict=True
         ... )
         """
+        params, local_ct = self._marker_params(gene, cell_type, study, species, tissue, condition,
+                                               min_score, max_score)
+        rows = self._marker_rows(params, local_ct, limit=limit, offset=offset)
+
+        # Convert to DataFrame
+        if not HAS_PANDAS:
+            raise ImportError(
+                "pandas is required for PIASOmarkerDB. "
+                "Install with: pip install pandas"
+            )
+
+        df = pd.DataFrame(rows)
+
+        want_dict, want_frame = _resolve_as_dict(as_dict)
+        if want_dict:
+            marker_dict = self._to_marker_dict(df)
+            return (df, marker_dict) if want_frame else marker_dict
+        return df
+
+    def _marker_params(self, gene=None, cell_type=None, study=None, species=None, tissue=None,
+                       condition=None, min_score=None, max_score=None):
+        """The /markers query parameters, and the cell types to keep here (``None``: the server filters).
+
+        The server splits ``cell_type`` on commas, so a cell type whose name holds one could not be asked
+        for; a query naming one is sent without ``cell_type`` and filtered here, by exact name."""
         params = {}
-        
-        # Handle gene parameter
         if gene:
-            if isinstance(gene, list):
-                params['gene'] = ','.join(gene)
-            else:
-                params['gene'] = gene
-        
-        # Handle cell_type parameter
+            params['gene'] = ','.join(gene) if isinstance(gene, list) else gene
+        local_ct = None
         if cell_type:
-            if isinstance(cell_type, list):
-                params['cell_type'] = ','.join(cell_type)
+            cts = [cell_type] if isinstance(cell_type, str) else [str(c) for c in cell_type]
+            if any(',' in c for c in cts):
+                local_ct = set(cts)
             else:
-                params['cell_type'] = cell_type
-        
-        # Other filters
+                params['cell_type'] = ','.join(cts)
         if study:
             params['study'] = study
         if species:
@@ -399,43 +548,44 @@ class PIASOmarkerDB:
             params['tissue'] = tissue
         if condition:
             params['condition'] = condition
-        
-        # Score filters with validation
         if min_score is not None:
             if min_score < 0:
                 raise ValidationError("min_score must be non-negative")
             params['min_score'] = min_score
-        
         if max_score is not None:
             if max_score < 0:
                 raise ValidationError("max_score must be non-negative")
             params['max_score'] = max_score
-        
-        # Pagination
-        if limit is not None:
-            params['limit'] = limit
-        if offset > 0:
-            params['offset'] = offset
-        
-        # Make request
-        response = self._request('GET', 'markers', params=params)
-        data = self._extract_data(response)
-        
-        # Convert to DataFrame
-        if not HAS_PANDAS:
-            raise ImportError(
-                "pandas is required for PIASOmarkerDB. "
-                "Install with: pip install pandas"
-            )
-        
-        df = pd.DataFrame(data)
+        return params, local_ct
 
-        want_dict, want_frame = _resolve_as_dict(as_dict)
-        if want_dict:
-            marker_dict = self._to_marker_dict(df)
-            return (df, marker_dict) if want_frame else marker_dict
-        return df
-    
+    def _marker_rows(self, params, local_ct=None, limit=None, offset=0):
+        """Rows of /markers for ``params``: every row (``limit=None``: one request without a limit, which the
+        server answers whole), or ``limit`` rows from ``offset``, asked for in pages within the server's cap
+        (``_MARKER_PAGE_MAX``; a larger limit came back short, silently). Rows of ``local_ct`` only, when
+        given."""
+        if local_ct is not None:
+            rows = [r for r in self._extract_data(self._request('GET', 'markers', params=dict(params)))
+                    if str(r.get('cell_type')) in local_ct]
+            rows = rows[offset:]
+            return rows if limit is None else rows[:limit]
+        if limit is None:
+            # the server writes OFFSET without LIMIT then, which SQLite refuses: slice here
+            rows = self._extract_data(self._request('GET', 'markers', params=dict(params)))
+            return rows[offset:] if offset > 0 else rows
+        rows, want = [], int(limit)
+        while len(rows) < want:
+            n = min(want - len(rows), _MARKER_PAGE_MAX)
+            q = dict(params, limit=n)
+            if offset + len(rows) > 0:
+                q['offset'] = offset + len(rows)
+            response = self._request('GET', 'markers', params=q)
+            page = self._extract_data(response)
+            rows += page
+            has_more = response.get('has_more') if isinstance(response, dict) else None
+            if not page or has_more is False or (has_more is None and len(page) < n):
+                break
+        return rows
+
     def getAllMarkers(
         self,
         batch_size: int = 10000,
@@ -449,7 +599,7 @@ class PIASOmarkerDB:
         Parameters
         ----------
         batch_size : int, optional
-            Number of records per request. Default: 10000.
+            Number of records per request, at most 100,000 (the server's cap). Default: 10000.
         verbose : bool, optional
             Print progress information. Default: False.
         as_dict : bool or {'both'}, optional
@@ -463,45 +613,42 @@ class PIASOmarkerDB:
         pd.DataFrame, dict, or tuple
             All matching markers, in the form ``as_dict`` asks for.
         """
+        kwargs = dict(kwargs)
+        kwargs.pop('as_dict', None)
+        kwargs.pop('limit', None)
+        kwargs.pop('offset', None)
+        params, local_ct = self._marker_params(**kwargs)
+        # the server answers at most _MARKER_PAGE_MAX rows a page: a larger batch came back short and was
+        # read as the last page
+        batch_size = min(int(batch_size), _MARKER_PAGE_MAX)
+
         all_data = []
-        offset = 0
-        batch_num = 0
-        
-        # Remove as_dict from kwargs for internal calls
-        kwargs_copy = dict(kwargs)
-        kwargs_copy.pop('as_dict', None)
-        
-        while True:
-            batch_num += 1
-            
-            df_batch = self.getMarkers(
-                limit=batch_size,
-                offset=offset,
-                as_dict=False,
-                **kwargs_copy
-            )
-            
-            if len(df_batch) == 0:
-                break
-            
-            all_data.append(df_batch)
-            
-            if verbose:
-                print(f"Fetching markers... batch {batch_num} ({len(df_batch)} records)")
-            
-            if len(df_batch) < batch_size:
-                break
-            
-            offset += batch_size
-        
-        if not all_data:
-            df = pd.DataFrame()
+        if local_ct is not None:
+            all_data = self._marker_rows(params, local_ct)
         else:
-            df = pd.concat(all_data, ignore_index=True)
-        
+            offset = 0
+            batch_num = 0
+            while True:
+                batch_num += 1
+                q = dict(params, limit=batch_size)
+                if offset > 0:
+                    q['offset'] = offset
+                response = self._request('GET', 'markers', params=q)
+                page = self._extract_data(response)
+                if not page:
+                    break
+                all_data += page
+                if verbose:
+                    print(f"Fetching markers... batch {batch_num} ({len(page)} records)")
+                has_more = response.get('has_more') if isinstance(response, dict) else None
+                if has_more is False or (has_more is None and len(page) < batch_size):
+                    break
+                offset += len(page)
+
+        df = pd.DataFrame(all_data)
         if verbose:
             print(f"Total: {len(df)} markers")
-        
+
         want_dict, want_frame = _resolve_as_dict(as_dict)
         if want_dict:
             marker_dict = self._to_marker_dict(df)
@@ -787,7 +934,7 @@ class PIASOmarkerDB:
         ...     cosg_marker_df,
         ...     n_top_genes=50,
         ...     min_genes=5,
-        ...     studies=['AllenWholeMouseBrain_isocortex'],
+        ...     studies=['AllenWholeMouseBrain2023_isocortex'],
         ...     species="Mouse"
         ... )
         
@@ -907,6 +1054,24 @@ class PIASOmarkerDB:
         
         return self._resultsToDataFrame(result)
     
+    def _marker_rows_for_genes(self, genes: List[str], species: str = None, tissue: str = None):
+        """Every marker row of ``genes`` (with the species and tissue filters), asked for ``_GENE_BATCH``
+        genes at a time so each URL stays short, as a DataFrame sorted by specificity score (descending,
+        stable): the order one query for these genes returns."""
+        genes = list(dict.fromkeys(genes))
+        frames = []
+        for i in range(0, len(genes), _GENE_BATCH):
+            df = self.getAllMarkers(gene=genes[i:i + _GENE_BATCH], species=species, tissue=tissue,
+                                    as_dict=False)
+            if len(df):
+                frames.append(df)
+        if not frames:
+            return pd.DataFrame()
+        df = pd.concat(frames, ignore_index=True)
+        if len(frames) > 1 and 'specificity_score' in df.columns:
+            df = df.sort_values('specificity_score', ascending=False, kind='mergesort').reset_index(drop=True)
+        return df
+
     def _analyzeSingleGeneList(
         self,
         genes: List[str],
@@ -920,15 +1085,21 @@ class PIASOmarkerDB:
         """Internal method to analyze a single gene list."""
         if not genes:
             return []
-        
-        # Get all markers for the input genes
-        df = self.getAllMarkers(
-            gene=genes,
-            species=species,
-            tissue=tissue,
-            as_dict=False
-        )
-        
+        df = self._marker_rows_for_genes(genes, species=species, tissue=tissue)
+        return self._analyze_rows(df, studies=studies, min_genes=min_genes,
+                                  exclude_cell_types=exclude_cell_types, exclude_studies=exclude_studies)
+
+    def _analyze_rows(
+        self,
+        df: 'pd.DataFrame',
+        studies: List[str] = None,
+        min_genes: int = 1,
+        exclude_cell_types: List[str] = None,
+        exclude_studies: List[str] = None,
+    ) -> List[Dict]:
+        """The cell types a gene list's marker rows point to: rows grouped by context (cell type, study,
+        species, tissue, condition), each with its matched genes and their mean specificity, ranked by
+        matched-gene count, then mean specificity."""
         if len(df) == 0:
             return []
         
@@ -1012,36 +1183,30 @@ class PIASOmarkerDB:
         exclude_cell_types: List[str] = None,
         exclude_studies: List[str] = None,
     ) -> Tuple[Dict[str, 'pd.DataFrame'], Dict[str, str]]:
-        """Analyze multiple gene sets and return results with top hits."""
+        """Analyze multiple gene sets and return results with top hits.
+
+        The marker rows of every set's genes are asked for together (``_GENE_BATCH`` genes a request) and
+        each set is analysed on its own genes' rows, the rows one query per set returned: a COSG table of
+        30 clusters took 30 or more requests, now one per 200 distinct genes. The server matches gene
+        symbols in any case, and so does the split here."""
+        union = [g for genes in gene_sets.values() for g in genes]
+        rows = self._marker_rows_for_genes(union, species=species, tissue=tissue) if union else pd.DataFrame()
+        upper = rows['gene'].astype(str).str.upper() if len(rows) and 'gene' in rows.columns else None
+
         results_dict = {}
         top_hits_dict = {}
-        
         for set_name, genes_list in gene_sets.items():
-            if not genes_list:
+            if not genes_list or upper is None:
                 results_dict[set_name] = pd.DataFrame()
                 top_hits_dict[set_name] = self.NO_MATCH_VALUE
                 continue
-            
-            # Analyze this gene set
-            result = self._analyzeSingleGeneList(
-                genes=genes_list,
-                species=species,
-                tissue=tissue,
-                studies=studies,
-                min_genes=min_genes,
-                exclude_cell_types=exclude_cell_types,
-                exclude_studies=exclude_studies
-            )
-            
-            # Store results
+            mine = rows[upper.isin({str(g).upper() for g in genes_list}).to_numpy()]
+            result = self._analyze_rows(mine, studies=studies, min_genes=min_genes,
+                                        exclude_cell_types=exclude_cell_types,
+                                        exclude_studies=exclude_studies)
             results_dict[set_name] = self._resultsToDataFrame(result)
-            
-            # Get top hit
-            if result:
-                top_hits_dict[set_name] = result[0]['cell_type']
-            else:
-                top_hits_dict[set_name] = self.NO_MATCH_VALUE
-        
+            top_hits_dict[set_name] = result[0]['cell_type'] if result else self.NO_MATCH_VALUE
+
         return results_dict, top_hits_dict
     
     def _resultsToDataFrame(self, results: List[Dict]) -> 'pd.DataFrame':
@@ -1106,14 +1271,267 @@ class PIASOmarkerDB:
         
         if gene_col not in df.columns or celltype_col not in df.columns:
             return {}
-        
+
+        # One list per cell-type name. A name that several contexts (studies, tissues, conditions) use gets
+        # the union of their markers, now said in a warning; a gene in several of them is listed once (it
+        # was listed for each, and score() then counted it twice).
+        ctx = [c for c in ("study_publication", "species", "tissue", "condition") if c in df.columns]
+        if ctx:
+            n_ctx = df[[celltype_col] + ctx].astype(str).drop_duplicates().groupby(celltype_col).size()
+            merged = n_ctx[n_ctx > 1]
+            if len(merged):
+                warnings.warn(
+                    f"PIASOmarkerDB: {len(merged)} cell type name(s) occur in several contexts (study, tissue or "
+                    f"condition), each given one list, the union of its contexts' markers: "
+                    f"{', '.join(map(str, merged.index[:10]))}{' ...' if len(merged) > 10 else ''}. Query one "
+                    f"study and condition at a time to keep them apart.", UserWarning, stacklevel=3)
         marker_dict = {}
         for cell_type in df[celltype_col].unique():
-            genes = df[df[celltype_col] == cell_type][gene_col].tolist()
-            marker_dict[cell_type] = genes
-        
+            genes = df.loc[df[celltype_col] == cell_type, gene_col].tolist()
+            marker_dict[cell_type] = list(dict.fromkeys(genes))
+
         return marker_dict
     
+    # =========================================================================
+    # Marker regions
+    # =========================================================================
+
+    def listRegionStudies(self, species: str = None) -> 'pd.DataFrame':
+        """
+        The studies whose marker regions PIASOmarkerDB holds.
+
+        Parameters
+        ----------
+        species : str, optional
+            ``'Human'`` or ``'Mouse'``, or the build, ``'hg38'`` or ``'mm10'``.
+
+        Returns
+        -------
+        pd.DataFrame
+            One row per study and context: ``study_publication``, ``species``, ``genome``, ``tissue``,
+            ``condition``, ``cell_types`` and ``regions``.
+
+        Examples
+        --------
+        >>> client.listRegionStudies(species="Mouse")
+        """
+        if not HAS_PANDAS:
+            raise ImportError("pandas is required for PIASOmarkerDB. Install with: pip install pandas")
+        params = {}
+        build = _region_genome(species, "species")
+        if build:
+            params['species'] = build
+        data = self._extract_data(self._regions_request('region-studies', params))
+        df = pd.DataFrame(data)
+        if df.empty:
+            return pd.DataFrame(columns=_REGION_STUDY_COLUMNS)
+        return df[[c for c in _REGION_STUDY_COLUMNS if c in df.columns]
+                  + [c for c in df.columns if c not in _REGION_STUDY_COLUMNS]]
+
+    def _regions_request(self, endpoint: str, params: dict) -> Union[dict, list]:
+        """A request to a marker-region endpoint; a server without them says so plainly."""
+        try:
+            return self._request('GET', endpoint, params=params)
+        except APIError as e:
+            if e.status_code == 404:
+                raise APIError(
+                    f"{self.base_url} has no marker regions (/api/{self.API_VERSION}/{endpoint} was not found); "
+                    "they need a PIASOmarkerDB server from 2026-10 or later.", status_code=404) from e
+            raise
+
+    def getMarkerRegions(
+        self,
+        study: Union[str, List[str]] = None,
+        cell_type: Union[str, List[str]] = None,
+        species: str = None,
+        genome: str = None,
+        top_n: int = None,
+        tissue: str = None,
+        condition: str = None,
+        gene: Union[str, List[str]] = None,
+        region: Union[str, List[str]] = None,
+        ccre: str = None,
+        min_score: float = None,
+        tile_size: int = 500,
+        as_dict: bool = False,
+        batch_size: int = 50_000,
+    ) -> Union['pd.DataFrame', Dict[str, List[str]]]:
+        """
+        Query marker regions: the cell type-specific 500 bp tiles of single-nucleus chromatin atlases.
+
+        Each region study ranks the 500 bp tiles of its atlas by COSG for every cell type and keeps up to 1,000
+        per type, on one genome build (hg38 for human, mm10 for mouse). With ``as_dict=True`` the regions come
+        back named as the tiles of a PIASO store, ``{cell_type: ['chr1:3000500-3001000', ...]}``, so the dict
+        goes straight to ``kamon`` on a store's tile counts.
+
+        Parameters
+        ----------
+        study : str or list of str, optional
+            Region study or studies (see ``listRegionStudies``); a former study name works too.
+        cell_type : str or list of str, optional
+            Cell type(s) to keep.
+        species : str, optional
+            ``'Human'`` or ``'Mouse'``. Needed only when ``study`` and ``genome`` are both unset.
+        genome : str, optional
+            The genome build of your data, ``'hg38'`` or ``'mm10'``. A study on another build then raises an
+            error instead of matching nothing: the regions are not lifted over between builds or species.
+        top_n : int, optional
+            The top ``top_n`` regions of each cell type, by COSG rank. Default: all of them (up to 1,000).
+        tissue : str, optional
+            Tissue to filter by.
+        condition : str, optional
+            Condition to filter by.
+        gene : str or list of str, optional
+            Keep the regions whose nearest gene, or one of whose nearby genes, is one of these.
+        region : str or list of str, optional
+            Keep the regions that overlap these intervals, ``'chr1:1000000-2000000'``.
+        ccre : str, optional
+            Keep the regions in a candidate cis-regulatory element of this class (``'dELS'``, ``'pELS'``,
+            ``'PLS'``, ...).
+        min_score : float, optional
+            Minimum COSG score (non-negative).
+        tile_size : int, optional
+            The tile size, in bp, of the store whose tiles the IDs should name. Default: 500, PIASO's.
+        as_dict : bool, optional
+            ``True`` returns ``{cell_type: [tile IDs]}``, each list in rank order. ``False`` (the default)
+            returns the DataFrame.
+        batch_size : int, optional
+            Rows per request, at most 100,000. Default: 50,000.
+
+        Returns
+        -------
+        pd.DataFrame
+            One row per region (``as_dict=False``), sorted by study, cell type and rank, with the server's
+            fields: ``cell_type``, ``region``, ``chrom``, ``start`` and ``end`` (0-based, half-open),
+            ``cosg_score``, ``cosg_rank``, ``study_publication``, ``species``, ``tissue``, ``condition``,
+            ``genome``, ``ccre_class``, ``ccre_accession``, ``nearest_gene``, ``tss_distance``,
+            ``nearby_genes`` and the conservation fields.
+
+        dict
+            ``{cell_type: [tile IDs]}`` (``as_dict=True``). A cell type of the same name in several studies
+            gets one list; query one study at a time to keep them apart.
+
+        Examples
+        --------
+        >>> regions = client.getMarkerRegions(
+        ...     study="ZuRen2023_WholeBrain_ATAC", genome="mm10", top_n=200, as_dict=True
+        ... )
+        >>> df = client.getMarkerRegions(species="Human", gene="GAD2", ccre="dELS")
+        """
+        if not HAS_PANDAS:
+            raise ImportError("pandas is required for PIASOmarkerDB. Install with: pip install pandas")
+        if as_dict is not True and as_dict is not False:
+            raise ValueError(f"as_dict={as_dict!r} is not valid: pass True for the region dictionary or False "
+                             "for the DataFrame.")
+        top_n = _positive_int("top_n", top_n)
+        tile_size = _positive_int("tile_size", tile_size)
+        batch_size = min(_positive_int("batch_size", batch_size), _REGION_PAGE_MAX)
+        if min_score is not None and min_score < 0:
+            raise ValidationError("min_score must be non-negative")
+
+        # the build: from species or genome, and checked against the studies' own
+        want = _region_genome(genome, "genome")
+        from_species = _region_genome(species, "species")
+        if want and from_species and want != from_species:
+            raise ValidationError(f"species={species!r} has its marker regions on {from_species}, not {genome!r}.")
+        want = want or from_species
+        studies = None
+        if study is not None:
+            names = [study] if isinstance(study, str) else list(study)
+            names = [s.strip() for x in names for s in str(x).split(',') if s.strip()]
+            studies = self._resolve_studies(names)
+            known = self.listRegionStudies()
+            builds = dict(zip(known['study_publication'], known['genome'])) if len(known) else {}
+            folded = {s.lower(): s for s in builds}
+            studies = [s if s in builds else folded.get(s.lower(), s) for s in studies]
+            unknown = [s for s in studies if s not in builds]
+            if unknown:
+                raise ValidationError(
+                    f"PIASOmarkerDB holds no marker regions for {', '.join(map(repr, unknown))}. The region studies "
+                    f"are: {', '.join(sorted(builds)) or 'none'}. For marker genes, use getMarkers.")
+            on = sorted({builds[s] for s in studies})
+            if want and on != [want]:
+                wrong = ', '.join(f"{s} ({builds[s]})" for s in studies if builds[s] != want)
+                raise ValidationError(
+                    f"genome {want} was asked for, but these studies' marker regions are on another build: {wrong}. "
+                    "Marker regions are not lifted over between builds or species; choose a study on "
+                    f"{want} (listRegionStudies).")
+            if len(on) > 1:
+                raise ValidationError(f"The studies are on {' and '.join(on)}; query one genome build at a time.")
+            want = on[0]
+        if not want:
+            raise ValidationError("Pass species ('Human' or 'Mouse'), genome ('hg38' or 'mm10') or study: "
+                                  "marker regions are kept per genome build.")
+
+        base = {'species': want, 'sort': 'rank', 'order': 'asc'}
+        if studies:
+            base['study'] = ','.join(studies)
+        if tissue:
+            base['tissue'] = tissue
+        if condition:
+            base['condition'] = condition
+        if gene:
+            base['gene'] = gene if isinstance(gene, str) else ','.join(gene)
+        if region:
+            base['region'] = region if isinstance(region, str) else ';'.join(region)
+        if ccre:
+            base['ccre'] = ccre
+        if min_score is not None:
+            base['min_score'] = min_score
+        # the server matches one cell type whole even with a comma in its name, and otherwise splits on commas;
+        # a list holding such a name is asked for one cell type at a time
+        if cell_type is None:
+            groups = [None]
+        elif isinstance(cell_type, str):
+            groups = [cell_type]
+        else:
+            cts = [str(c) for c in cell_type]
+            groups = cts if any(',' in c for c in cts) else [','.join(cts)]
+
+        rows = []
+        for ct in groups:
+            params = dict(base)
+            if ct is not None:
+                params['cell_type'] = ct
+            offset = 0
+            while True:
+                params.update(limit=batch_size, offset=offset)
+                response = self._regions_request('regions', params)
+                if isinstance(response, dict) and response.get('genome') not in (None, want):
+                    raise APIError(f"{want} regions were asked for, and the server answered with "
+                                   f"{response.get('genome')} regions.")
+                page = self._extract_data(response)
+                rows += page
+                if not page:
+                    break
+                # pages come in rank order, so the top_n of every type is in once a page passes rank top_n
+                by_rank = isinstance(response, dict) and response.get('sort') == 'rank'
+                if by_rank and top_n is not None and (page[-1].get('cosg_rank') or 0) > top_n:
+                    break
+                has_more = response.get('has_more') if isinstance(response, dict) else None
+                if has_more is False or (has_more is None and len(page) < batch_size):
+                    break
+                offset += len(page)
+
+        df = pd.DataFrame(rows)
+        if df.empty:
+            df = pd.DataFrame(columns=_REGION_COLUMNS)
+        else:
+            if 'region' not in df.columns and {'chrom', 'start', 'end'} <= set(df.columns):
+                df['region'] = df['chrom'].astype(str) + ':' + df['start'].astype(str) + '-' + df['end'].astype(str)
+            df = df[[c for c in _REGION_COLUMNS if c in df.columns]
+                    + [c for c in df.columns if c not in _REGION_COLUMNS]]
+            if top_n is not None:
+                df = df[df['cosg_rank'] <= top_n]
+            order = [c for c in ('study_publication', 'cell_type', 'cosg_rank', 'chrom', 'start') if c in df.columns]
+            df = df.sort_values(order, kind='mergesort').reset_index(drop=True)
+        if not as_dict:
+            return df
+        out: Dict[str, List[str]] = {}
+        for ct, chrom, start, end in zip(df['cell_type'], df['chrom'], df['start'], df['end']):
+            out.setdefault(ct, []).extend(_tile_ids(chrom, int(start), int(end), tile_size))
+        return {ct: list(dict.fromkeys(ids)) for ct, ids in out.items()}
+
     # =========================================================================
     # Download
     # =========================================================================
@@ -1208,8 +1626,8 @@ class PIASOmarkerDB:
         marker_dict = {}
         for cell_type in df[celltype_col].unique():
             genes = df[df[celltype_col] == cell_type][gene_col].tolist()
-            marker_dict[cell_type] = genes
-        
+            marker_dict[cell_type] = list(dict.fromkeys(genes))      # a repeated gene once
+
         return marker_dict
     
     def getRecommendedStudy(
@@ -1235,16 +1653,16 @@ class PIASOmarkerDB:
         Examples
         --------
         >>> client.getRecommendedStudy("human", "blood")
-        'AllenHumanImmuneHealthAtlas_L2'
+        'AllenHumanImmuneHealthAtlas2025_L2'
         >>> client.getRecommendedStudy("mouse", "cortex")
-        'AllenWholeMouseBrain_isocortex'
+        'AllenWholeMouseBrain2023_isocortex'
         """
         recommendations = {
-            ("human", "blood"): "AllenHumanImmuneHealthAtlas_L2",
-            ("human", "pbmc"): "AllenHumanImmuneHealthAtlas_L2",
-            ("human", "immune"): "AllenHumanImmuneHealthAtlas_L2",
-            ("human", "brain"): "SilettiLinnarssonWholeHumanBrain2023_class",
-            ("human", "cortex"): "SEAAD2024_MTG_Subclass",
+            ("human", "blood"): "AllenHumanImmuneHealthAtlas2025_L2",
+            ("human", "pbmc"): "AllenHumanImmuneHealthAtlas2025_L2",
+            ("human", "immune"): "AllenHumanImmuneHealthAtlas2025_L2",
+            ("human", "brain"): "SilettiLinnarsson2023_WholeBrain_class",
+            ("human", "cortex"): "SEAAD2024_MTG_subclass",
             ("human", "hippocampus"): "XuTeichmann2023_HippocampalFormation",
             ("human", "heart"): "XuTeichmann2023_Heart",
             ("human", "lung"): "XuTeichmann2023_Lung",
@@ -1253,8 +1671,8 @@ class PIASOmarkerDB:
             ("human", "pancreas"): "XuTeichmann2023_Pancreas",
             ("human", "spleen"): "XuTeichmann2023_Spleen",
             ("human", "intestine"): "XuTeichmann2023_Intestine",
-            ("mouse", "cortex"): "AllenWholeMouseBrain_isocortex",
-            ("mouse", "brain"): "AllenWholeMouseBrain_Neuron",
+            ("mouse", "cortex"): "AllenWholeMouseBrain2023_isocortex",
+            ("mouse", "brain"): "AllenWholeMouseBrain2023_Neuron",
         }
         
         key = (species.lower(), tissue.lower())
@@ -1322,7 +1740,7 @@ def queryPIASOmarkerDB(
         Maximum results to return. Default: None (no limit).
     as_dict : bool or {'both'}, optional
         ``True`` returns the ``{cell_type: [genes]}`` dictionary alone — the
-        form ``predictCellTypeByMarker`` takes. ``False`` (the default) returns
+        form ``kamon`` takes. ``False`` (the default) returns
         the DataFrame. ``'both'`` returns the old ``(DataFrame, dict)`` pair
         and is deprecated; it will be removed in the next release.
     list_studies : bool, optional
@@ -1357,15 +1775,15 @@ def queryPIASOmarkerDB(
     >>> df = piaso.tl.queryPIASOmarkerDB(gene="Foxp2", species="Mouse")
     >>> df = piaso.tl.queryPIASOmarkerDB(gene=["Foxp2", "Syt6", "Tle4"])
     
-    Get the marker dictionary, ready for predictCellTypeByMarker:
+    Get the marker dictionary, ready for kamon:
 
     >>> marker_dict = piaso.tl.queryPIASOmarkerDB(
-    ...     study="AllenWholeMouseBrain_isocortex",
+    ...     study="AllenWholeMouseBrain2023_isocortex",
     ...     species="Mouse",
     ...     as_dict=True
     ... )
     >>> print(f"Cell types in dict: {len(marker_dict)}")
-    >>> piaso.tl.predictCellTypeByMarker(adata, marker_gene_set=marker_dict)
+    >>> piaso.tl.kamon(adata, marker_gene_set=marker_dict)
     
     List available studies:
     
@@ -1425,6 +1843,127 @@ def getMarkers(*args, **kwargs):
     Please refer to the main function for full documentation.
     """
     return queryPIASOmarkerDB(*args, **kwargs)
+
+
+def getMarkerRegions(
+    study: Union[str, List[str]] = None,
+    cell_type: Union[str, List[str]] = None,
+    species: str = None,
+    genome: str = None,
+    top_n: int = None,
+    tissue: str = None,
+    condition: str = None,
+    gene: Union[str, List[str]] = None,
+    region: Union[str, List[str]] = None,
+    ccre: str = None,
+    min_score: float = None,
+    tile_size: int = 500,
+    as_dict: bool = False,
+    list_studies: bool = False,
+) -> Union['pd.DataFrame', Dict[str, List[str]]]:
+    """
+    Query PIASOmarkerDB for marker regions, the cell type-specific tiles of chromatin atlases.
+
+    Each region study ranks the 500 bp tiles of a single-nucleus chromatin atlas by COSG for every cell type and
+    keeps up to 1,000 per type, on one genome build (hg38 for human, mm10 for mouse). ``as_dict=True`` returns them
+    named as the tiles of a PIASO store, ``{cell_type: ['chr1:3000500-3001000', ...]}``: the form
+    ``kamon`` takes, here on a store's tile counts rather than on genes.
+
+    Parameters
+    ----------
+    study : str or list of str, optional
+        Region study or studies (``list_studies=True`` lists them); a former study name works too.
+    cell_type : str or list of str, optional
+        Cell type(s) to keep.
+    species : str, optional
+        ``'Human'`` or ``'Mouse'``. Needed only when ``study`` and ``genome`` are both unset.
+    genome : str, optional
+        The genome build of your data, ``'hg38'`` or ``'mm10'``. A study on another build then raises an error
+        instead of matching nothing: regions are not lifted over between builds or species.
+    top_n : int, optional
+        The top ``top_n`` regions of each cell type, by COSG rank. Default: all of them (up to 1,000).
+    tissue : str, optional
+        Tissue to filter by.
+    condition : str, optional
+        Condition to filter by.
+    gene : str or list of str, optional
+        Keep the regions whose nearest gene, or one of whose nearby genes, is one of these.
+    region : str or list of str, optional
+        Keep the regions that overlap these intervals, ``'chr1:1000000-2000000'``.
+    ccre : str, optional
+        Keep the regions in a candidate cis-regulatory element of this class (``'dELS'``, ``'pELS'``, ``'PLS'``,
+        ...).
+    min_score : float, optional
+        Minimum COSG score (non-negative).
+    tile_size : int, optional
+        The tile size, in bp, of the store whose tiles the IDs should name. Default: 500, PIASO's.
+    as_dict : bool, optional
+        ``True`` returns ``{cell_type: [tile IDs]}``, each list in rank order. ``False`` (the default) returns
+        the DataFrame.
+    list_studies : bool, optional
+        If True, return the region studies (a DataFrame) instead of regions. Default: False.
+
+    Returns
+    -------
+    pd.DataFrame
+        One row per region (default), sorted by study, cell type and rank: the region (``chrom``, ``start`` and
+        ``end``, 0-based and half-open), its cell type and study, the COSG score and rank, the genome build, the
+        cCRE class, the nearest and nearby genes, and the conservation fields.
+
+    dict
+        ``{cell_type: [tile IDs]}`` (as_dict=True). A cell type of the same name in several studies gets one list;
+        query one study at a time to keep them apart.
+
+    pd.DataFrame
+        The region studies (list_studies=True).
+
+    Examples
+    --------
+    Name single nuclei from their tile counts, with the whole-brain atlas's regions:
+
+    >>> import piaso
+    >>> regions = piaso.tl.getMarkerRegions(
+    ...     study="ZuRen2023_WholeBrain_ATAC", genome="mm10", top_n=200, as_dict=True
+    ... )
+    >>> # tiles: an AnnData of a PIASO store's 500 bp tile counts (var_names such as 'chr1:3000500-3001000'),
+    >>> # normalized by piaso.tl.infog into layers['infog'], with the nuclei's embedding in obsm['X_svd']
+    >>> piaso.tl.kamon(tiles, marker_gene_set=regions, use_rep="X_svd")
+
+    The distal elements near a gene, in every human study:
+
+    >>> df = piaso.tl.getMarkerRegions(species="Human", gene="GAD2", ccre="dELS")
+
+    List the region studies:
+
+    >>> piaso.tl.getMarkerRegions(list_studies=True)
+
+    See Also
+    --------
+    getMarkers : Marker genes
+    kamon : Name cells from a marker dict (also available as ``predictCellTypeByMarker``)
+
+    Notes
+    -----
+    PIASOmarkerDB website: https://piaso.org/piasomarkerdb/
+    """
+    client = _get_client()
+    if list_studies:
+        return client.listRegionStudies(species=species or genome)
+    return client.getMarkerRegions(
+        study=study,
+        cell_type=cell_type,
+        species=species,
+        genome=genome,
+        top_n=top_n,
+        tissue=tissue,
+        condition=condition,
+        gene=gene,
+        region=region,
+        ccre=ccre,
+        min_score=min_score,
+        tile_size=tile_size,
+        as_dict=as_dict,
+    )
 
 
 def analyzeMarkers(
@@ -1514,7 +2053,7 @@ def analyzeMarkers(
     ...     cosg_marker_df,
     ...     n_top_genes=50,
     ...     min_genes=5,
-    ...     studies=['AllenWholeMouseBrain_isocortex'],
+    ...     studies=['AllenWholeMouseBrain2023_isocortex'],
     ...     species="Mouse"
     ... )
     >>> print(top_hits)

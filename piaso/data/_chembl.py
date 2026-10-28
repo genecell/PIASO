@@ -107,10 +107,8 @@ def fetch_chembl(dest_dir: Optional[str] = None, force: bool = False) -> str:
     if os.path.exists(out) and not force:
         return out
 
-    import urllib.request
-    tmp = out + ".part"
-    urllib.request.urlretrieve(CHEMBL_URL, tmp)
-    os.replace(tmp, out)
+    from ._download import download
+    download(CHEMBL_URL, out)
     return out
 
 

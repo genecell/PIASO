@@ -331,6 +331,7 @@ def runGDR(
             n_svd_dims=n_svd_dims,
             n_svd_iter=n_svd_iter,
             n_highly_variable_genes=n_highly_variable_genes,
+            use_highly_variable=use_highly_variable,
             resolution=resolution,
             max_batch_cache_bytes=max_batch_cache_bytes,
             stage1_workers=stage1_workers,
@@ -417,9 +418,24 @@ def runGDR(
                     print(f"Running SVD with {n_svd_dims} dimensions and {n_highly_variable_genes} highly variable genes")
 
 
+                # The clustering runs on an AnnData of its own that shares the
+                # caller's matrices (nothing is copied). infog_svd recomputes
+                # INFOG and selects n_highly_variable_genes, and wrote both into
+                # the caller's object, replacing their layers['infog'] and
+                # var['highly_variable'] (a trim=False INFOG and a 100-gene
+                # selection were both overwritten), and the kNN graphs it built
+                # stayed in the caller's obsp.
+                import anndata as _ad
+                _work = _ad.AnnData(
+                    X=adata.X, obs=pd.DataFrame(index=adata.obs_names.copy()),
+                    var=adata.var[[c for c in ('highly_variable',) if c in adata.var.columns]].copy())
+                for _l in {layer, infog_layer} - {None, 'infog' if layer == 'infog' else None}:
+                    if _l in adata.layers:
+                        _work.layers[_l] = adata.layers[_l]
+
                 ### Run SVD in a lazy mode
                 infog_svd(
-                    adata,
+                    _work,
                     copy=False,
                     n_components=n_svd_dims,
                     n_top_genes=n_highly_variable_genes,
@@ -440,7 +456,7 @@ def runGDR(
                     print("Computing clustering")
 
                 _piaso_neighbors(
-                    adata,
+                    _work,
                     use_rep='X_svd_TMP_GDR',
                     n_neighbors=15,
                     random_state=random_seed,
@@ -448,12 +464,14 @@ def runGDR(
                 )
                 # Self-contained: leiden reads the graph from obsp via adjacency_key.
                 _piaso_leiden(
-                    adata,
+                    _work,
                     resolution=resolution,
                     key_added='gdr_local_TMP_GDR',
                     adjacency_key='neighbors_TMP_GDR_connectivities',
                     random_state=random_seed,
                 )
+                adata.obs['gdr_local_TMP_GDR'] = _work.obs['gdr_local_TMP_GDR'].values
+                del _work
                 groupby = 'gdr_local_TMP_GDR'
 
             if verbosity>0:
@@ -492,11 +510,17 @@ def runGDR(
 
             if scoring_method == 'piaso':
                 from ._normalization import score as _score
-                score_list, _, _ = _score(
+                score_list, _scored_names, _ = _score(
                     adata, gene_list=marker_gene,
                     layer=score_layer, random_seed=random_seed,
                     compute_pvalues=False,
                 )
+                # A set with no gene to score is dropped by score(): drop it from
+                # the recorded marker sets too, as the store path does, so the
+                # reference recipe names exactly the columns of X_gdr.
+                _keep, _ = _scored_blocks(marker_gene.columns, [0, marker_gene.shape[1]], _scored_names)
+                if not _keep.all():
+                    marker_gene = marker_gene.loc[:, _keep]
             elif scoring_method == 'scanpy':
                 score_list = []
                 adata_tmp = adata.copy()
@@ -523,11 +547,9 @@ def runGDR(
             marker_gene_scores=np.hstack(score_list_collection_collection)
 
 
-            ### Make sure the order are matched to the adata
+            # Already in the object's order. Indexing it again by obs_names, as
+            # before, expanded a repeated name into every copy of it.
             marker_gene_scores=pd.DataFrame(marker_gene_scores)
-            marker_gene_scores.index=adata.obs_names
-            # marker_gene_scores.index=np.hstack([adata_list[0].obs_names.values, adata_list[1].obs_names.values])
-            marker_gene_scores=marker_gene_scores.loc[adata.obs_names]
 
         ### Have multiple batches
         else:
@@ -573,6 +595,7 @@ def runGDR(
                 from tqdm import tqdm
                 score_list_collection = []
                 cellbarcode_info = list()
+                gene_set_names_collection = []
                 for batch_u in tqdm(batch_list, desc="Calculating cell embeddings", unit="batch"):
                     _mask_u = (adata.obs[batch_key] == batch_u).values
                     cellbarcode_info.append(adata.obs_names[_mask_u].values)
@@ -582,15 +605,34 @@ def runGDR(
                         score_method=scoring_method, score_layer=score_layer,
                         max_workers=max_workers, random_seed=random_seed,
                     )
-                    score_list = normalize(score_list, norm='l2', axis=0)
-                    for start, end in zip(batch_n_groups_indices[:-1], batch_n_groups_indices[1:]):
-                        score_list[:, start:end] = normalize(score_list[:, start:end], norm='l2', axis=1)
-                    score_list_collection.append(score_list)
+                    _keep, _blocks = _scored_blocks(marker_gene.columns, batch_n_groups_indices,
+                                                    gene_set_names)
+                    score_list_collection.append(_normalize_batch_scores(score_list, _blocks))
+                    gene_set_names_collection.append(gene_set_names)
 
-            score_list_collection = np.vstack(score_list_collection)
-            marker_gene_scores = pd.DataFrame(score_list_collection)
-            marker_gene_scores.index = np.hstack(cellbarcode_info)
-            marker_gene_scores = marker_gene_scores.loc[adata.obs_names]
+            # A marker set none of whose genes could be scored is dropped by the
+            # scorer, the same one in every batch (it goes by gene name): drop
+            # it from the marker table and the blocks too, so X_gdr's columns,
+            # the recipe's marker sets and its block boundaries stay aligned.
+            _scored = [str(n) for n in gene_set_names_collection[0]]
+            if any([str(n) for n in g] != _scored for g in gene_set_names_collection[1:]):
+                raise RuntimeError("runGDR: the batches scored different marker sets")
+            _keep, batch_n_groups_indices = _scored_blocks(marker_gene.columns, batch_n_groups_indices,
+                                                           _scored)
+            if not _keep.all():
+                _dropped = [str(c) for c, k in zip(marker_gene.columns, _keep) if not k]
+                warnings.warn(f"runGDR: {len(_dropped)} marker set(s) had no gene to score and are "
+                              f"left out of X_gdr: {_dropped}", stacklevel=2)
+                marker_gene = marker_gene.loc[:, _keep]
+
+            # Back in the object's order, by position: obs_names may repeat
+            # (two libraries sharing a barcode), and `.loc` by name then
+            # returned every copy of a repeated name, so the shape error came
+            # after all the work.
+            marker_gene_scores = np.empty((adata.n_obs, int(batch_n_groups_indices[-1])), dtype=np.float64)
+            for batch_u, score_list in zip(batch_list, score_list_collection):
+                marker_gene_scores[np.flatnonzero((adata.obs[batch_key] == batch_u).values)] = score_list
+            marker_gene_scores = pd.DataFrame(marker_gene_scores)
 
             # max_workers=1 used to take a SEPARATE branch here, and it was not
             # "the same thing, serially" -- it was a different algorithm. It
@@ -972,7 +1014,7 @@ def calculateScoreParallel(
     verbosity: int = 0,
     # Cytome streaming parameters
     modality: str = "RNA",
-    cytome_layer: str = "counts",
+    cytome_layer: Optional[str] = None,
     batch_size: int = 1024,
     cell_mask=None,
     score_chunk_size: Optional[int] = None,
@@ -1016,7 +1058,10 @@ def calculateScoreParallel(
         With ``score_method='piaso'``, draw each gene's controls from its
         nearest genes outside its own set (see :func:`piaso.tl.score`).
     score_layer : str or None, default None
-        Layer of the AnnData object to use. If None, `adata.X` is used.
+        The layer to score, on both backends: an AnnData's ``layers[score_layer]``
+        or a store's ``{modality}_{score_layer}`` (INFOG normalised on the fly
+        from its stored parameters when the matrix is not written). ``None``
+        scores the values as stored: ``adata.X``, or a store's counts.
     max_workers : int or None, default None
         Number of parallel worker processes to use. If None, defaults to the number
         of CPU cores available. Only used when score_method='scanpy'.
@@ -1032,8 +1077,11 @@ def calculateScoreParallel(
         of rebuilding it.
     modality : str, default 'RNA'
         Cytome only: the modality to score.
-    cytome_layer : str, default 'counts'
-        Cytome only: the layer to read.
+    cytome_layer : str, optional
+        Cytome only, kept for older calls: when given it is the layer read,
+        whatever ``score_layer`` says. Before, a store read it (default
+        ``'counts'``) and ignored ``score_layer``, so ``score_layer='infog'``
+        scored INFOG on an AnnData and raw counts on the same data in a store.
     batch_size : int, default 1024
         Cytome only: rows per streaming chunk.
     cell_mask : ndarray, optional
@@ -1098,10 +1146,15 @@ def calculateScoreParallel(
     # per-set ProcessPoolExecutor path.
     if score_method == 'piaso':
         from ._normalization import score as _score, _is_cytome_dataset
-        # Round 26: score() now has a unified `layer` for both backends — use the
-        # cytome measurement for a cytome, the AnnData layer otherwise (no more
-        # deprecated cytome_layer= which would warn on every internal call).
-        _score_layer = cytome_layer if _is_cytome_dataset(adata) else score_layer
+        # Round 26: score() now has a unified `layer` for both backends. A store
+        # scores score_layer, as an AnnData does; cytome_layer, when given,
+        # overrides it (every internal caller passes it); neither given means
+        # the stored counts, as None means .X on an AnnData.
+        if _is_cytome_dataset(adata):
+            _score_layer = (cytome_layer if cytome_layer is not None
+                            else score_layer if score_layer is not None else "counts")
+        else:
+            _score_layer = score_layer
         score_matrix, gene_set_names, pval_matrix = _score(
             adata, gene_list=gene_set, gene_weights=gene_weights,
             compute_pvalues=return_pvals,
@@ -1214,6 +1267,43 @@ def calculateScoreParallel(
     score_matrix = np.vstack(results).T
     return score_matrix, gene_set_names
 
+def _scored_blocks(marker_columns, block_indices, scored_names):
+    """The marker sets a batch's scores hold, and the block boundaries over them.
+
+    ``calculateScoreParallel`` drops a gene set none of whose genes it can map
+    (a rare cluster whose markers were all filtered out), so a score matrix can
+    have fewer columns than there are marker sets. The per-block row
+    normalisation must then run over each block's scored columns: run over the
+    original boundaries, every block after a dropped set was shifted by one
+    column (AnnData), or the assembly failed on the column count (store).
+
+    Returns ``(keep, blocks)``: a boolean over ``marker_columns`` and the
+    cumulative boundaries of the kept columns, block by block (a block that
+    lost every set has width 0). With nothing dropped, ``blocks`` is
+    ``block_indices`` itself.
+    """
+    cols = [str(c) for c in marker_columns]
+    scored = [str(c) for c in scored_names]
+    scored_set = set(scored)
+    keep = np.fromiter((c in scored_set for c in cols), dtype=bool, count=len(cols))
+    if [c for c, k in zip(cols, keep) if k] != scored:
+        raise RuntimeError("runGDR: the scored gene sets are not the marker sets in their order "
+                           f"({len(scored)} scored, {int(keep.sum())} matched)")
+    if keep.all():
+        return keep, np.asarray(block_indices)
+    widths = [int(keep[a:b].sum()) for a, b in zip(block_indices[:-1], block_indices[1:])]
+    return keep, np.cumsum([0] + widths)
+
+
+def _normalize_batch_scores(score_list, blocks):
+    """One batch's GDR normalisation: L2 over each column, then over each block of each row."""
+    score_list = normalize(score_list, norm="l2", axis=0)
+    for start, end in zip(blocks[:-1], blocks[1:]):
+        if end > start:
+            score_list[:, start:end] = normalize(score_list[:, start:end], norm="l2", axis=1)
+    return score_list
+
+
 ### Calculate gene set score for different batches, separately, but in parallel
 def _calculateScoreParallel_single_batch(batch_key, shared_data, batch_i, marker_gene, marker_gene_n_groups_indices, max_workers, score_method, random_seed):
     """
@@ -1251,10 +1341,9 @@ def _calculateScoreParallel_single_batch(batch_key, shared_data, batch_i, marker
     )
 
 
-    score_list = normalize(score_list, norm="l2", axis=0)
-    for start, end in zip(marker_gene_n_groups_indices[:-1], marker_gene_n_groups_indices[1:]):
-        score_list[:, start:end] = normalize(score_list[:, start:end], norm="l2", axis=1)
-        
+    _keep, _blocks = _scored_blocks(marker_gene.columns, marker_gene_n_groups_indices, gene_set_names)
+    score_list = _normalize_batch_scores(score_list, _blocks)
+
     cell_barcodes = adata.obs_names.values
     ### Return batch_i at the start of the tuple
     return batch_i, score_list, cell_barcodes, gene_set_names
@@ -1404,9 +1493,9 @@ def calculateScoreParallel_multiBatch(
                 random_seed=random_seed,
             )
 
-            score_list = normalize(score_list, norm="l2", axis=0)
-            for start, end in zip(marker_gene_n_groups_indices[:-1], marker_gene_n_groups_indices[1:]):
-                score_list[:, start:end] = normalize(score_list[:, start:end], norm="l2", axis=1)
+            _keep, _blocks = _scored_blocks(marker_gene.columns, marker_gene_n_groups_indices,
+                                            gene_set_names)
+            score_list = _normalize_batch_scores(score_list, _blocks)
 
             return idx, score_list, adata_batch.obs_names.values, gene_set_names
 
@@ -1508,89 +1597,70 @@ import os
 import sys
 import logging
 
+def _shared_csr_or_dense(shared):
+    """The matrix a worker was handed in shared memory (no copy)."""
+    if 'shm_indices' in shared:
+        data = np.ndarray(shared['shapes']['data_shape'], dtype=shared['dtypes']['data_dtype'],
+                          buffer=shared['shm_data'].buf)
+        indices = np.ndarray(shared['shapes']['indices_shape'], dtype=shared['dtypes']['indices_dtype'],
+                             buffer=shared['shm_indices'].buf)
+        indptr = np.ndarray(shared['shapes']['indptr_shape'], dtype=shared['dtypes']['indptr_dtype'],
+                            buffer=shared['shm_indptr'].buf)
+        return csr_matrix((data, indices, indptr), shape=shared['shapes']['matrix_shape'])
+    return np.ndarray(shared['shapes']['matrix_shape'], dtype=shared['dtypes']['data_dtype'],
+                      buffer=shared['shm_data'].buf)
+
+
+def _share_matrix(matrix):
+    """Put ``matrix`` in shared memory, in the schema the workers read (sparse or dense)."""
+    if issparse(matrix):
+        if not isinstance(matrix, csr_matrix):
+            raise ValueError("Sparse matrix must be in CSR format.")
+        return _setup_shared_memory_sparse(matrix)
+    shared = _setup_shared_memory_dense(np.ascontiguousarray(matrix))
+    # _setup_shared_memory_dense returns {"shm", "shape", "dtype"}, but the
+    # workers read {"shm_data", "shapes": {...}, "dtypes": {...}}, the sparse
+    # schema. Without this, runGDR(batch_key=...) on a dense matrix died with
+    # KeyError: 'shapes' inside the worker.
+    return {"shm_data": shared["shm"], "shapes": {"matrix_shape": shared["shape"]},
+            "dtypes": {"data_dtype": shared["dtype"]}}
+
+
+def _release_shared(shared):
+    """Close and unlink a shared matrix; tolerates one that was never fully built."""
+    for key in ('shm_data', 'shm_indices', 'shm_indptr'):
+        shm = shared.get(key) if isinstance(shared, dict) else None
+        if shm is None:
+            continue
+        try:
+            shm.close()
+            shm.unlink()
+        except FileNotFoundError:
+            pass
+
+
 def _runCOSGParallel_single_batch(
-    batch_key, shared_data, batch_i, groupby, n_svd_dims, n_svd_iter, n_highly_variable_genes, verbosity, resolution, mu, n_gene, use_highly_variable, layer, random_seed, expressed_pct=0.1, allow_non_integer=False, n_threads=0):
-    """
-    Process a single batch using shared memory and perform clustering and marker gene identification.
+    batch_key, shared_data, batch_i, groupby, n_svd_dims, n_svd_iter, n_highly_variable_genes, verbosity,
+    resolution, mu, n_gene, use_highly_variable, layer, random_seed, expressed_pct=0.1,
+    allow_non_integer=False, n_threads=0, shared_svd=None, infog_in_worker=False):
+    """Markers of one batch, from the matrices the parent shared.
 
-    Parameters
-    ----------
-    batch_key : str
-        The key to identify batches in the data.
-    shared_data : dict
-        Dictionary containing shared memory and metadata to reconstruct the matrix.
-    batch_i : str or int
-        The batch identifier to process.
-    groupby : str or None
-        The key to group observations for clustering. If None, clustering will be performed.
-    n_svd_dims : int
-        Number of SVD components to calculate.
-    n_svd_iter : int, optional, default=7
-        Number of iterations for randomized SVD solver. The default is larger than the default in randomized_svd to handle sparse matrices that may have large slowly decaying spectrum. Also larger than the `n_iter` default value (5) in the TruncatedSVD function.
-    n_highly_variable_genes : int
-        Number of highly variable genes to use.
-    verbosity : int
-        Verbosity level.
-    resolution : float
-        Resolution parameter for clustering.
-    mu : float
-        Parameter for cosg.
-    n_gene : int
-        Number of genes to use in cosg.
-    use_highly_variable : bool
-        Whether to use highly variable genes for SVD.
-    layer : str
-        Layer in `adata.layers` to use for the analysis. Defaults to None, which uses `adata.X`.
-    random_seed : int
-        Random seed for reproducibility. Default is 1927.
-    
+    ``shared_data`` holds the matrix COSG reads: the layer itself (the INFOG
+    layer for ``layer='infog'``, the matrix the scoring reads too), or, with
+    ``infog_in_worker``, raw counts from which this batch's INFOG is computed
+    here. ``shared_svd`` holds the raw counts the de-novo clustering normalises
+    with this batch's own INFOG (``groupby=None`` and ``layer='infog'``), when
+    they are not the COSG matrix; ``None`` means the COSG matrix serves both.
 
-    Returns
-    -------
-    DataFrame
-        Marker gene DataFrame with batch-specific suffix.
+    Returns ``(batch_i, marker DataFrame)``, columns suffixed ``@<batch>``.
     """
-    
     import warnings
-    
-    
-    # Reconstruct matrix from shared memory
-    if 'shm_indices' in shared_data:
-        data = np.ndarray(
-            shared_data['shapes']['data_shape'],
-            dtype=shared_data['dtypes']['data_dtype'],
-            buffer=shared_data['shm_data'].buf
-        )
-        indices = np.ndarray(
-            shared_data['shapes']['indices_shape'],
-            dtype=shared_data['dtypes']['indices_dtype'],
-            buffer=shared_data['shm_indices'].buf
-        )
-        indptr = np.ndarray(
-            shared_data['shapes']['indptr_shape'],
-            dtype=shared_data['dtypes']['indptr_dtype'],
-            buffer=shared_data['shm_indptr'].buf
-        )
-        matrix = csr_matrix((data, indices, indptr), shape=shared_data['shapes']['matrix_shape'])
-    else:
-        matrix = np.ndarray(
-            shared_data['shapes']['matrix_shape'],
-            dtype=shared_data['dtypes']['data_dtype'],
-            buffer=shared_data['shm_data'].buf
-        )
-
-    # adata = AnnData(matrix)
-    # adata.obs = shared_data['obs'].copy()
-    # ### No need to create a adata_i, because adata here is rebuilt from the matrix
-    # # Filter the AnnData object for the current batch
-    # adata = adata[adata.obs[batch_key] == batch_i].copy()
-    
-
-    ### Only directly select slices
     from anndata import AnnData
-    batch_mask = shared_data['obs'][batch_key] == batch_i
-    adata = AnnData(matrix[batch_mask.to_numpy()])
-    adata.obs = shared_data['obs'][batch_mask.to_numpy()].copy()
+
+    batch_mask = (shared_data['obs'][batch_key] == batch_i).to_numpy()
+    obs_b = shared_data['obs'][batch_mask].copy()
+    adata = AnnData(_shared_csr_or_dense(shared_data)[batch_mask])
+    adata.obs = obs_b
 
     # A batch with fewer cells than one cell's neighbor list (15 neighbors and
     # itself) cannot be clustered here: it gives no markers of its own, and its
@@ -1599,87 +1669,74 @@ def _runCOSGParallel_single_batch(
     if groupby is None and adata.n_obs < _MIN_CELLS_LOCAL_CLUSTERS:
         return batch_i, pd.DataFrame()
 
-    try:
-        # Extract marker gene signatures
-        if groupby is None:
-            # Run SVD lazily
-            if layer=='infog':
-                ### in this case, adata.X will be the raw UMI counts, the infog_layer will be transferred as adata.X in this function input
-                infog_svd(
-                    adata,
-                    copy=False,
-                    n_components=n_svd_dims,
-                    n_top_genes=n_highly_variable_genes,
-                    use_highly_variable=use_highly_variable,
-                    verbosity=verbosity,
-                    batch_key=None,
-                    scale_data=False,
-                    n_iter=n_svd_iter,
-                    layer='infog', ### Use INFOG normalization
-                    infog_layer=None, ### By default, adata.X will be used for INFOG normalization
-                    infog_trim=True,
-                    key_added='X_svd',
-                    random_state=random_seed,
-                    allow_non_integer=allow_non_integer,
-                )
-            else:
-                infog_svd(
-                    adata,
-                    copy=False,
-                    n_components=n_svd_dims,
-                    n_top_genes=n_highly_variable_genes,
-                    use_highly_variable=use_highly_variable,
-                    verbosity=verbosity,
-                    batch_key=None,
-                    scale_data=False,
-                    n_iter=n_svd_iter,
-                    layer=None,
-                    infog_layer=None,
-                    infog_trim=True,
-                    key_added='X_svd',
-                    random_state=random_seed,
-                    allow_non_integer=allow_non_integer,
-                )
-
-
-
-            # Run clustering
-            _piaso_neighbors(adata, use_rep='X_svd', n_neighbors=15, random_state=random_seed)
-
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore", category=FutureWarning)
-                # This worker's share of the cores: every batch clusters at the
-                # same time, each in a process of its own.
-                _piaso_leiden(adata, resolution=resolution, key_added='gdr_local', random_state=random_seed,
-                              n_threads=n_threads)
-            groupby_i = 'gdr_local'
-
+    adata_svd = None
+    if groupby is None:
+        if shared_svd is not None:
+            adata_svd = AnnData(_shared_csr_or_dense(shared_svd)[batch_mask])
+            adata_svd.obs = obs_b.copy()
         else:
-            groupby_i = groupby
-
-        if verbosity > 0:
-            print(f'Processing batch {batch_i} with {len(np.unique(adata.obs[groupby_i]))} clusters.')
-
-        
-        # Run marker gene identification
-        ### Because only one layer is transferred, so just use the adata.X
-        cosg.cosg(
-            adata,
-            key_added='cosg',
-            mu=mu,
-            expressed_pct=expressed_pct,
-            remove_lowly_expressed=True,
-            n_genes_user=n_gene,
-            groupby=groupby_i
+            adata_svd = adata
+        # Run SVD lazily. With layer='infog' the matrix is raw UMI counts and
+        # INFOG is computed for THIS batch (infog_svd writes it to
+        # layers['infog']); otherwise the matrix is factorised as it is.
+        infog_svd(
+            adata_svd,
+            copy=False,
+            n_components=n_svd_dims,
+            n_top_genes=n_highly_variable_genes,
+            use_highly_variable=use_highly_variable,
+            verbosity=verbosity,
+            batch_key=None,
+            scale_data=False,
+            n_iter=n_svd_iter,
+            layer='infog' if layer == 'infog' else None,
+            infog_layer=None,
+            infog_trim=True,
+            key_added='X_svd',
+            random_state=random_seed,
+            allow_non_integer=allow_non_integer,
         )
+        _piaso_neighbors(adata_svd, use_rep='X_svd', n_neighbors=15, random_state=random_seed)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=FutureWarning)
+            # This worker's share of the cores: every batch clusters at the
+            # same time, each in a process of its own.
+            _piaso_leiden(adata_svd, resolution=resolution, key_added='gdr_local', random_state=random_seed,
+                          n_threads=n_threads)
+        adata.obs['gdr_local'] = adata_svd.obs['gdr_local'].values
+        groupby_i = 'gdr_local'
+    else:
+        groupby_i = groupby
 
-        marker_gene = pd.DataFrame(adata.uns['cosg']['names'])
-        marker_gene = marker_gene.add_suffix(f'@{batch_i}')
+    if infog_in_worker:
+        # No INFOG layer to read: this batch's INFOG, from its raw counts --
+        # the one infog_svd just computed for the clustering, when it ran.
+        if adata_svd is not None and 'infog' in adata_svd.layers:
+            adata.X = adata_svd.layers['infog']
+        else:
+            from ._normalization import infog as _infog
+            _infog(adata, layer=None, key_added='infog', verbosity=0,
+                   allow_non_integer=allow_non_integer)
+            adata.X = adata.layers['infog']
 
-        # return marker_gene
-        return batch_i, marker_gene
-    except Exception as e:
-        raise e
+    if verbosity > 0:
+        print(f'Processing batch {batch_i} with {len(np.unique(adata.obs[groupby_i]))} clusters.')
+
+    # COSG reads adata.X: the one matrix this worker was asked to find markers in.
+    cosg.cosg(
+        adata,
+        key_added='cosg',
+        mu=mu,
+        expressed_pct=expressed_pct,
+        remove_lowly_expressed=True,
+        n_genes_user=n_gene,
+        groupby=groupby_i,
+        use_raw=False,
+    )
+
+    marker_gene = pd.DataFrame(adata.uns['cosg']['names'])
+    marker_gene = marker_gene.add_suffix(f'@{batch_i}')
+    return batch_i, marker_gene
 
 # The smallest batch runCOSGParallel clusters on its own: one cell and the 15
 # neighbors of its kNN graph.
@@ -1785,35 +1842,47 @@ def runCOSGParallel(
     # Generate batch list
     batch_list = np.unique(adata.obs[batch_key])
 
-    # Determine the input matrix
+    # The matrix COSG reads, per batch: the layer itself whenever the object
+    # has it -- for layer='infog' the INFOG layer, the matrix the scoring reads
+    # too, as on the single-batch path and on a store (run_cosg_cytome reads
+    # `{modality}_infog` restricted to the batch). Before, layer='infog' handed
+    # the workers the raw counts of `infog_layer` (or adata.X) and COSG ran on
+    # them: on two batches of five types the markers were COSG's on raw counts
+    # in 20 of 20 genes, and 16 to 20 of 20 of COSG's on INFOG.
+    counts = adata.layers[infog_layer] if infog_layer is not None else adata.X
+    infog_in_worker = False
     if layer is None:
-        gene_expression_data = adata.X
+        cosg_matrix = adata.X
+    elif layer in adata.layers:
+        cosg_matrix = adata.layers[layer]
     elif layer == 'infog':
+        # No INFOG layer on the object: each batch's INFOG is computed from its
+        # raw counts in the worker, so COSG still reads INFOG.
         if infog_layer is None:
-            warnings.warn("Please set 'infog_layer'. Using adata.X.")
-            gene_expression_data = adata.X
-        else:
-            gene_expression_data = adata.layers[infog_layer]
+            warnings.warn("runCOSGParallel(layer='infog'): adata has no layers['infog'] and no "
+                          "infog_layer was given, so each batch's INFOG is computed from adata.X, "
+                          "which must hold raw counts. Run piaso.tl.infog(adata) first, or pass "
+                          "infog_layer.", stacklevel=2)
+        cosg_matrix = counts
+        infog_in_worker = True
     else:
-        gene_expression_data = adata.layers[layer]
+        raise KeyError(f"runCOSGParallel: layer {layer!r} not found in adata.layers "
+                       f"(available: {list(adata.layers.keys())})")
+    # The de-novo clustering normalises raw counts with each batch's own INFOG
+    # (layer='infog'), or factorises the COSG matrix as it is (any other layer).
+    svd_matrix = None
+    if groupby is None and layer == 'infog' and counts is not cosg_matrix:
+        svd_matrix = counts
 
-    if issparse(gene_expression_data):
-        if not isinstance(gene_expression_data, csr_matrix):
-            raise ValueError("Sparse matrix must be in CSR format.")
-        shared_data = _setup_shared_memory_sparse(gene_expression_data)
-    else:
-        shared_data = _setup_shared_memory_dense(gene_expression_data)
-        # _setup_shared_memory_dense returns {"shm", "shape", "dtype"}, but the
-        # worker below reads {"shm_data", "shapes": {...}, "dtypes": {...}} —
-        # the schema the sparse setup returns. Other callers still use the
-        # dense keys, so translate here rather than changing that function.
-        # Without this, runGDR(batch_key=...) on a dense matrix died with
-        # KeyError: 'shapes' inside the worker.
-        shared_data = {
-            "shm_data": shared_data["shm"],
-            "shapes": {"matrix_shape": shared_data["shape"]},
-            "dtypes": {"data_dtype": shared_data["dtype"]},
-        }
+    shared_data, shared_svd = {}, None
+    try:
+        shared_data = _share_matrix(cosg_matrix)
+        if svd_matrix is not None:
+            shared_svd = _share_matrix(svd_matrix)
+    except Exception:
+        _release_shared(shared_data)
+        _release_shared(shared_svd)
+        raise
 
     shared_data['obs'] = adata.obs[[batch_key] + ([groupby] if groupby else [])].copy()
 
@@ -1839,15 +1908,13 @@ def runCOSGParallel(
                         mu, n_gene, use_highly_variable, layer, random_seed,
                         expressed_pct, allow_non_integer,
                         max(1, (os.cpu_count() or 1) // max(1, min(int(max_workers or 1), len(batch_list)))),
+                        shared_svd, infog_in_worker,
                     )
                 )
             # Collect results into a list first
             raw_results = []
             for future in tqdm(as_completed(futures), total=len(futures), desc="Calculating marker genes", unit="batch"):
                 raw_results.append(future.result()) # Tuple of (batch_i, data)
-                # marker_gene = future.result()
-                # marker_genes.append(marker_gene)
-                # batch_n_groups.append(marker_gene.shape[1])
                 
         # Sort results based on the original batch_list order
         raw_results.sort(key=lambda x: batch_order_map[x[0]])
@@ -1874,15 +1941,8 @@ def runCOSGParallel(
         # This block used to index 'shm_data' unconditionally, so a failure
         # during setup raised KeyError here and *replaced* the real traceback
         # with a misleading one.
-        for key in ('shm_data', 'shm_indices', 'shm_indptr'):
-            shm = shared_data.get(key) if isinstance(shared_data, dict) else None
-            if shm is None:
-                continue
-            try:
-                shm.close()
-                shm.unlink()
-            except FileNotFoundError:
-                pass
+        _release_shared(shared_data)
+        _release_shared(shared_svd)
 
     # Merge and Format
     marker_genes = pd.concat(marker_genes, axis=1)
@@ -1973,6 +2033,37 @@ def _estimate_batch_cache_bytes(ds, modality, layer, n_batch_cells):
     return int(n_batch_cells * per_cell_nnz * (itemsize + 4) + (n_batch_cells + 1) * 4)
 
 
+def _drop_temporaries(ds, modality, embedding=None, neighbors_key=None):
+    """Remove a temporary embedding and kNN graph a de-novo run wrote to a store."""
+    from ._embedding_names import storage_name
+    from ._neighbors import _neighbors_graph_keys
+    if embedding is not None:
+        for name in {storage_name(embedding, modality), embedding}:
+            try:
+                if name in ds.embeddings:
+                    ds.delete_embedding(name)
+            except Exception:
+                pass
+    if neighbors_key is not None:
+        conn_key, dist_key, nn_key = _neighbors_graph_keys(neighbors_key)
+        for g in (conn_key, dist_key):
+            try:
+                ds.graphs[g]._drop()
+            except Exception:
+                pass
+        for k in (nn_key, nn_key.replace('n_neighbors', 'use_rep')):
+            try:
+                if k in ds.metadata:
+                    del ds.metadata[k]
+            except Exception:
+                pass
+        try:
+            ds._conn.commit()
+            ds.flush()
+        except Exception:
+            pass
+
+
 def _runGDRParallel_cytome(
     ds, groupby, n_gene, mu, scoring_method, key_added, max_workers,
     random_seed, verbosity, modality, cytome_layer, batch_size_cytome,
@@ -1994,6 +2085,7 @@ def _runGDRParallel_cytome(
     n_svd_iter: int = 7,
     n_highly_variable_genes: int = 5000,
     resolution: float = 1.0,
+    use_highly_variable: bool = True,
 ):
     """Cytome streaming path for runGDRParallel.
 
@@ -2091,6 +2183,7 @@ def _runGDRParallel_cytome(
             max_score_batch_cache_bytes=max_score_batch_cache_bytes,
             n_svd_dims=n_svd_dims, n_svd_iter=n_svd_iter,
             n_highly_variable_genes=n_highly_variable_genes,
+            use_highly_variable=use_highly_variable,
             resolution=resolution,
             max_batch_cache_bytes=max_batch_cache_bytes,
             stage1_workers=stage1_workers,
@@ -2101,7 +2194,8 @@ def _runGDRParallel_cytome(
     # Step 1: cluster labels — single-batch path.
     # D-1: when groupby is None, run de novo SVD + Leiden inline,
     # mirroring the AnnData runGDR single-batch path.
-    if groupby is None:
+    _denovo = groupby is None
+    if _denovo:
         if verbosity > 0:
             print(
                 "  No groupby provided; running de novo SVD + Leiden "
@@ -2110,11 +2204,24 @@ def _runGDRParallel_cytome(
         # piaso functions exposed via the local imports already used by
         # this file
         import piaso as _piaso_mod
+        # The genes, as the AnnData path chooses them (infog_svd): INFOG's top
+        # n_highly_variable_genes, here computed without writing, since the
+        # store's own highly_variable column is the user's. The SVD read that
+        # column instead, whatever its count, and n_highly_variable_genes did
+        # nothing. Another layer keeps its stored selection, as on AnnData.
+        _hvg = None
+        if use_highly_variable and cytome_layer == 'infog':
+            from ._normalization import _infog_streaming
+            _hvg = _infog_streaming(
+                ds, n_top_genes=n_highly_variable_genes, write=False, verbosity=0,
+                modality=modality, batch_size=batch_size_cytome,
+                allow_non_integer=allow_non_integer)['hvg_indices']
         _piaso_mod.tl.runSVD(
             ds, modality=modality, n_components=n_svd_dims,
             n_iter=n_svd_iter, random_state=random_seed,
             key_added='X_svd_TMP_GDR', verbosity=0,
             streaming=True, measurement=cytome_layer,
+            use_highly_variable=use_highly_variable, hvg_indices_override=_hvg,
         )
         knn_tmp = _piaso_mod.tl.neighbors(
             ds, use_rep=f'X_svd_TMP_GDR',
@@ -2124,14 +2231,19 @@ def _runGDRParallel_cytome(
         # neighbors() on a cytome writes the graph to disk and returns None, so
         # knn_tmp is None — leiden must be told which stored graph to read via
         # neighbors_key (else it defaults to 'connectivities' and KeyErrors).
+        # The labels are kept as `gdr_local`, as on AnnData: the GDR dimensions
+        # are these clusters, and the reference recipe names the column.
         _piaso_mod.tl.leiden(
             ds, resolution=resolution,
-            key_added='gdr_local_TMP_GDR',
+            key_added='gdr_local',
             random_state=random_seed,
             neighbors_key='neighbors_TMP_GDR',
             knn_result=knn_tmp, n_iterations=10,
         )
-        groupby = 'gdr_local_TMP_GDR'
+        groupby = 'gdr_local'
+        # The temporary embedding and graph are removed, as on AnnData; left in
+        # the store, the SVD embedding was one more for a later step to pick up.
+        _drop_temporaries(ds, modality, embedding='X_svd_TMP_GDR', neighbors_key='neighbors_TMP_GDR')
 
     cluster_labels = np.array(ds.cells[groupby])
     n_clusters = len(np.unique(cluster_labels))
@@ -2236,7 +2348,6 @@ def _runGDRParallel_cytome(
             # _set_state encodes the DataFrame/ndarray members for the JSON-backed cytome
             # metadata; a raw assignment silently failed to serialise (round-9 bug).
             from ._projectGDR import _make_reference_recipe, _set_state, GDR_REFERENCE_KEY
-            _denovo = groupby == 'gdr_local_TMP_GDR'
             _set_state(ds, _make_reference_recipe(
                 marker_gene, block_indices=None, layer=_scoring_layer,
                 groupby=(None if _denovo else groupby),
@@ -2290,6 +2401,7 @@ def _runGDR_multibatch_cytome(
     stage1_workers: int = None,
     stage3_workers: int = None,
     _opened_here: bool = False,
+    use_highly_variable: bool = True,
 ):
     """Multi-batch cytome streaming GDR — mirrors AnnData multi-batch path.
 
@@ -2327,7 +2439,10 @@ def _runGDR_multibatch_cytome(
     from ._normalization import _infog_streaming
 
     _t_stage1 = time.time()
-    if groupby is None:
+    # Defined here, not inside `if save_reference:` -- the params record below
+    # reads it too, and with save_reference=False it raised NameError.
+    _denovo = groupby is None
+    if _denovo:
         if verbosity > 0:
             print(
                 "  No groupby; running per-batch SVD + Leiden via cell_mask"
@@ -2466,7 +2581,9 @@ def _runGDR_multibatch_cytome(
                     cell_mask=cell_mask,
                     cache_chunks=use_cache,
                     infog_params=_info['infog_params'],
-                    hvg_indices_override=_info['hvg_indices'],
+                    # every gene with use_highly_variable=False, as infog_svd on AnnData
+                    hvg_indices_override=_info['hvg_indices'] if use_highly_variable else None,
+                    use_highly_variable=use_highly_variable,
                 )
                 knn_batch = _piaso_mod.tl.neighbors(
                     svd_emb, n_neighbors=15, random_state=random_seed,
@@ -2507,9 +2624,11 @@ def _runGDR_multibatch_cytome(
 
         for cell_mask, labels_batch in stage1:
             gdr_local_col[cell_mask] = labels_batch.astype(str)
-        ds.cells['gdr_local_TMP_GDR'] = gdr_local_col
+        # Each batch's own clusters, under the name the reference recipe gives
+        # them (`gdr_local`; a label names a marker set within its batch).
+        ds.cells['gdr_local'] = gdr_local_col
         ds.flush()
-        groupby = 'gdr_local_TMP_GDR'
+        groupby = 'gdr_local'
 
     cluster_labels = np.asarray(ds.cells[groupby])
 
@@ -2589,7 +2708,6 @@ def _runGDR_multibatch_cytome(
             f"  Per-batch scoring on {n_total_markers} markers "
             f"(streaming on {modality}_{_scoring_layer})"
         )
-    score_full = np.zeros((n_cells, n_total_markers), dtype=np.float32)
 
     # Scoring a batch is independent of every other batch. Measured on a
     # 5-batch cytome, stage 3 alone: 20.2 s serial, 10.4 s at two workers,
@@ -2655,30 +2773,44 @@ def _runGDR_multibatch_cytome(
             if _n_score_workers > 1:
                 _ds.close()
 
+    # Each batch's scores are normalised and placed as they arrive, in batch
+    # order, and dropped: holding every batch's float64 scores until the end, as
+    # before, cost a second copy of the embedding at twice its precision.
+    def _assemble(results):
+        nonlocal batch_n_groups_indices, marker_gene
+        score_full, scored0 = None, None
+        for (batch_idx, batch), (score_list, _gene_set_names) in zip(enumerate(batches), results):
+            names = [str(n) for n in _gene_set_names]
+            if scored0 is None:
+                # A marker set with no gene to score is dropped by the scorer,
+                # the same one in every batch (it goes by gene name); the
+                # blocks are taken over the scored sets, and the marker table
+                # loses the same columns, so X_gdr and the recipe agree.
+                scored0 = names
+                keep, batch_n_groups_indices = _scored_blocks(
+                    marker_gene.columns, batch_n_groups_indices, names)
+                if not keep.all():
+                    if verbosity > 0:
+                        print(f"  Dropped {int((~keep).sum())} marker set(s) with no gene to score: "
+                              f"{[str(c) for c, k in zip(marker_gene.columns, keep) if not k]}")
+                    marker_gene = marker_gene.loc[:, keep]
+                score_full = np.zeros((n_cells, int(batch_n_groups_indices[-1])), dtype=np.float32)
+            elif names != scored0:
+                raise RuntimeError("runGDR: the batches scored different marker sets")
+            # L2 normalize within this batch's cells: axis=0 over all
+            # markers, then axis=1 within each batch-marker block.
+            score_full[batch_labels == batch] = _normalize_batch_scores(
+                score_list, batch_n_groups_indices).astype(np.float32)
+        return score_full
+
     if _n_score_workers > 1:
         if verbosity > 0:
             print(f"    {_n_score_workers} batches at a time", flush=True)
         from concurrent.futures import ThreadPoolExecutor
         with ThreadPoolExecutor(max_workers=_n_score_workers) as _sx:
-            _stage3_results = list(_sx.map(_score_one_batch,
-                                           list(enumerate(batches))))
+            score_full = _assemble(_sx.map(_score_one_batch, list(enumerate(batches))))
     else:
-        _stage3_results = [_score_one_batch(a) for a in enumerate(batches)]
-
-    for batch_idx, batch in enumerate(batches):
-        cell_mask = batch_labels == batch
-        score_list, _gene_set_names = _stage3_results[batch_idx]
-        # L2 normalize within this batch's cells: axis=0 over all
-        # markers, then axis=1 within each batch-marker block.
-        score_list = normalize(score_list, norm='l2', axis=0)
-        for start, end in zip(
-            batch_n_groups_indices[:-1], batch_n_groups_indices[1:]
-        ):
-            if end > start:
-                score_list[:, start:end] = normalize(
-                    score_list[:, start:end], norm='l2', axis=1,
-                )
-        score_full[cell_mask] = score_list.astype(np.float32)
+        score_full = _assemble(_score_one_batch(a) for a in enumerate(batches))
 
     # Step 4: persist or return (same convention as single-batch path).
     if write_to_cytome:
@@ -2695,7 +2827,6 @@ def _runGDR_multibatch_cytome(
         # reproduces the same per-block row normalisation from `block_indices`.
         if save_reference:
             from ._projectGDR import _make_reference_recipe, _set_state, GDR_REFERENCE_KEY
-            _denovo = groupby == 'gdr_local_TMP_GDR'
             _set_state(ds, _make_reference_recipe(
                 marker_gene, block_indices=batch_n_groups_indices,
                 layer=_scoring_layer,

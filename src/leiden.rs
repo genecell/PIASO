@@ -1326,7 +1326,9 @@ fn run(indptr: &[i64], indices: &[i32], data: Weights, n: usize, gamma: f64, n_i
 /// Returns ``(membership, modularity)``: one community per node, the largest
 /// numbered 0, and the modularity at ``resolution`` of that partition.
 /// ``n_iterations`` runs the whole algorithm again from the previous result
-/// (negative: until a run changes nothing, as igraph's ``-1``);
+/// (negative: until a run changes nothing, as igraph's ``-1``); its default is
+/// ``piaso.tl.leiden``'s, 10, which always passes it (it was 2 here, so a
+/// direct call and ``tl.leiden`` clustered differently);
 /// ``initial`` starts from a given partition instead of singletons.
 ///
 /// One graph and one ``seed`` give one partition, whatever ``n_threads``
@@ -1335,7 +1337,7 @@ fn run(indptr: &[i64], indices: &[i32], data: Weights, n: usize, gamma: f64, n_i
 /// pass touches memory in order. ``seed=None`` refines greedily, with no
 /// random choice.
 #[pyo3::pyfunction]
-#[pyo3(signature = (indptr, indices, data, n_nodes, resolution=1.0, n_iterations=2, initial=None, max_levels=1000, reorder=true, seed=Some(0), theta=0.01, n_threads=0))]
+#[pyo3(signature = (indptr, indices, data, n_nodes, resolution=1.0, n_iterations=10, initial=None, max_levels=1000, reorder=true, seed=Some(0), theta=0.01, n_threads=0))]
 #[allow(clippy::too_many_arguments)]
 pub fn leiden_csr<'py>(
     py: pyo3::Python<'py>,

@@ -1,6 +1,6 @@
 [package]
 name = "piaso-rust"
-version = "0.3.0"
+version = "1.2.8"
 edition = "2021"
 license = "BSD-3-Clause"
 description = "Rust acceleration for PIASO: gene-set scoring + scATAC peak calling + quantification + fragment import"

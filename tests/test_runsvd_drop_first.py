@@ -82,6 +82,7 @@ SNAKEMAKE = os.environ.get("PIASO_SNAKEMAKE") or shutil.which("snakemake")
 WORKFLOW = Path(__file__).resolve().parents[1] / "workflow"
 
 
+@pytest.mark.snakemake
 @pytest.mark.skipif(not SNAKEMAKE, reason="snakemake (PIASO_SNAKEMAKE or PATH) not available")
 def test_the_workflow_drops_it_for_the_final_embedding_only(tmp_path):
     cfg = yaml.safe_load(open(WORKFLOW / "config.yaml"))
@@ -97,7 +98,7 @@ def test_the_workflow_drops_it_for_the_final_embedding_only(tmp_path):
             path.write_text(yaml.safe_dump(cfg))
         r = subprocess.run([SNAKEMAKE, "-s", str(WORKFLOW / "Snakefile"), "--configfile", str(path), "-np",
                             f"{cfg['outdir']}/e18_unsup/svd/.done"],
-                           capture_output=True, text=True, cwd=WORKFLOW.parent)
+                           capture_output=True, text=True, cwd=str(tmp_path))
         assert r.returncode == 0, (r.stdout + r.stderr)[-3000:]
         return [l for l in (r.stdout + r.stderr).splitlines() if "select_tfidf_svd.py" in l]
 

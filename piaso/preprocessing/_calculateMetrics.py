@@ -28,6 +28,28 @@ _CELL_METRIC_NAMES = {
 _FRAGMENT_BACKED = {"ATAC", "tiles"}
 
 
+def _matrix_counting(ds, matrix_name, counting=None):
+    """``(counting, binary)`` of a stored matrix: ``counting`` when given,
+    else ``counting:<matrix>``, else 'insertions' (the importer's and the
+    quantifier's default, and the pipeline's stage-2 rule) with a warning; and
+    whether ``binary:<matrix>`` marks it a presence matrix."""
+    def _get(key):
+        row = ds._conn.execute("SELECT value FROM _metadata WHERE key = ?", (key,)).fetchone()
+        return None if row is None else str(row[0]).strip().strip('"')
+    if counting is None:
+        counting = _get(f"counting:{matrix_name}")
+        if counting is None:
+            import warnings
+            warnings.warn(
+                f"{matrix_name} does not record how it counted (counting:{matrix_name}); FRiP "
+                f"takes its counts as insertions, two per fragment. Pass counting='overlaps' "
+                f"for a matrix of fragments in peaks.", stacklevel=3)
+            counting = "insertions"
+    if counting not in ("insertions", "overlaps"):
+        raise ValueError(f"counting must be 'insertions' or 'overlaps', got {counting!r}")
+    return counting, (_get(f"binary:{matrix_name}") or "").lower() == "true"
+
+
 def _canon_modality(modality: str) -> str:
     """Normalise a modality name to its registry key (RNA/GA/ATAC upper, tiles lower)."""
     up = modality.upper()
@@ -62,7 +84,8 @@ def calculateCellMetrics(source, layer: Optional[str] = None,
                          batch_size: int = 1024, verbose: bool = True,
                          prefix_vars: Optional[dict] = None,
                          feature_set_vars: Optional[dict] = None,
-                         feature_name_column: Optional[str] = None):
+                         feature_name_column: Optional[str] = None,
+                         counting: Optional[str] = None):
     """
     Calculate per-cell QC metrics and store them in adata.obs or cytome cells table.
 
@@ -73,10 +96,23 @@ def calculateCellMetrics(source, layer: Optional[str] = None,
     - nnz-per-cell  — number of active features (modality-specific column name)
     - ``n_fragments`` — total fragments from the fragment_chunks table
       (ATAC / tiles only; cytome mode).
-    - ``frip`` — fraction of fragments in peaks =
-      ``n_fragments_in_peak / n_fragments`` (ATAC only, cytome mode, written
-      automatically when ``n_fragments`` is available). Filter on it directly,
-      e.g. ``piaso.pp.filter_cells(ds, modality='ATAC', mask={'frip': (0.2, None)})``.
+    - ``frip`` — fraction of fragments in peaks, in one unit on both sides:
+      the peak matrix's row sum over the fragments' evidence in that unit
+      (ATAC only, cytome mode, written when ``n_fragments`` is available). The
+      matrix's ``counting:<matrix>`` says what a count is: ``'insertions'``
+      (the default) counts the two cut sites of a fragment, so FRiP is
+      ``n_fragments_in_peak / (2 * n_fragments)``; ``'overlaps'`` counts a
+      fragment once, ``n_fragments_in_peak / n_fragments``. Capped at 1, the
+      pipeline's stage-2 rule. (Until this release the library divided
+      insertions by fragments, about twice the FRiP, while the pipeline's
+      stage 2 has used this rule since 2026-09-26.) Filter on it directly,
+      e.g. ``piaso.pp.filter_cells(ds, modality='ATAC', mask={'frip': (0.1, None)})``.
+      A presence matrix (``binary:<matrix>``) has no FRiP; the column is not
+      written.
+
+    ``n_fragments_in_peak`` keeps its name for the QC configs that read it:
+    it is the peak matrix's row sum in the matrix's unit (insertions by
+    default, two per fragment inside a peak), not a number of fragments.
 
     The column names depend on ``modality`` (cytome mode):
 
@@ -122,12 +158,19 @@ def calculateCellMetrics(source, layer: Optional[str] = None,
         Which feature-name column to match against. AnnData: a ``var`` column
         (default ``var_names``). Cytome: a column of the modality's var table
         (default: the modality's canonical name column, e.g. ``gene_id``).
+    counting : {'insertions', 'overlaps'}, optional
+        What a count of the ATAC matrix is, for FRiP (cytome mode). Default:
+        the matrix's ``counting:<matrix>`` record, which the importer and the
+        quantifier write; for a matrix without one (converted from AnnData,
+        say) ``'insertions'``, the pipeline's stage-2 rule, with a warning.
+        Pass ``'overlaps'`` for a matrix of fragments in peaks.
     """
     if isinstance(source, str) or _is_cytome(source):
         _calculateCellMetrics_cytome(source, modality, measurement, batch_size, verbose,
                                      prefix_vars=prefix_vars,
                                      feature_set_vars=feature_set_vars,
-                                     feature_name_column=feature_name_column)
+                                     feature_name_column=feature_name_column,
+                                     counting=counting)
     else:
         _calculateCellMetrics_anndata(source, layer, modality=modality,
                                       prefix_vars=prefix_vars,
@@ -178,7 +221,7 @@ def _cytome_feature_names(ds, modality, feature_name_column):
 
 def _calculateCellMetrics_cytome(source, modality, measurement, batch_size, verbose,
                                  prefix_vars=None, feature_set_vars=None,
-                                 feature_name_column=None):
+                                 feature_name_column=None, counting=None):
     """Cytome streaming path — modality-aware per-cell metrics."""
     ds = _open_cytome(source) if isinstance(source, str) else source
     n_cells = ds.n_cells
@@ -281,41 +324,46 @@ def _calculateCellMetrics_cytome(source, modality, measurement, batch_size, verb
         except Exception:
             pass
 
-    # FRiP (ATAC peaks only): fraction of a cell's fragments that fall in peaks.
-    #   frip = n_fragments_in_peak / n_fragments
-    # Numerator is the per-cell peak-matrix row sum (cell_sum, already computed);
-    # denominator is the importer-provided total n_fragments. Auto-written for
-    # ATAC when n_fragments is populated. Tiles are excluded on purpose — the
-    # "fraction in tiles" is ~1 by construction and isn't FRiP. Matches the
-    # pipeline's Stage-2 QC definition (qc_filter_stage2.py).
+    # FRiP (ATAC peaks only): the fraction of a cell's evidence that falls in
+    # peaks, in one unit on both sides, as the pipeline's stage 2 computes it.
+    # The numerator is the peak matrix's row sum (cell_sum), in the matrix's
+    # counting unit: insertions count the two cut sites of each fragment, so
+    # the denominator is 2 x n_fragments; overlaps count a fragment once.
+    # Dividing insertions by fragments reported about twice the FRiP (2.0 for
+    # a cell whose fragments all lie in peaks). Tiles are excluded on purpose
+    # -- the "fraction in tiles" is ~1 by construction and isn't FRiP.
     if canon == 'ATAC' and has_fragments:
-        try:
-            nfrag_rows = conn.execute(
-                "SELECT n_fragments FROM cells ORDER BY cell_idx"
-            ).fetchall()
-            n_frags = np.array(
-                [(r[0] if r[0] is not None else 0) for r in nfrag_rows],
-                dtype=np.float64,
+        counting, binary = _matrix_counting(ds, matrix_name, counting)
+        nfrag_rows = conn.execute(
+            "SELECT n_fragments FROM cells ORDER BY cell_idx"
+        ).fetchall()
+        n_frags = np.array(
+            [(r[0] if r[0] is not None else 0) for r in nfrag_rows],
+            dtype=np.float64,
+        )
+        if binary:
+            if verbose:
+                print(f"  frip: not written ({matrix_name} is a presence matrix)")
+        elif np.any(n_frags > 0):
+            per_fragment = 2.0 if counting == "insertions" else 1.0
+            denom = per_fragment * n_frags
+            frip = np.divide(cell_sum, denom, out=np.zeros(n_cells, dtype=np.float64),
+                             where=denom > 0)
+            frip = np.minimum(frip, 1.0)
+            existing_cols = {
+                r[1].lower() for r in conn.execute("PRAGMA table_info(cells)").fetchall()
+            }
+            if 'frip' not in existing_cols:
+                conn.execute("ALTER TABLE cells ADD COLUMN frip REAL")
+            conn.executemany(
+                "UPDATE cells SET frip = ? WHERE cell_idx = ?",
+                [(float(frip[i]), i) for i in range(n_cells)],
             )
-            if np.any(n_frags > 0):
-                safe = np.where(n_frags > 0, n_frags, 1.0)
-                frip = np.where(n_frags > 0, cell_sum / safe, 0.0).astype(np.float64)
-                existing_cols = {
-                    r[1] for r in conn.execute("PRAGMA table_info(cells)").fetchall()
-                }
-                if 'frip' not in existing_cols:
-                    conn.execute("ALTER TABLE cells ADD COLUMN frip REAL")
-                conn.executemany(
-                    "UPDATE cells SET frip = ? WHERE cell_idx = ?",
-                    [(float(frip[i]), i) for i in range(n_cells)],
-                )
-                if verbose:
-                    print(f"  frip (fragments-in-peaks / n_fragments): "
-                          f"median={np.median(frip):.3f}, mean={np.mean(frip):.3f}")
-            elif verbose:
-                print("  frip: skipped (n_fragments not populated by importer)")
-        except Exception:
-            pass
+            if verbose:
+                print(f"  frip ({counting} in peaks / {per_fragment:g} x n_fragments): "
+                      f"median={np.median(frip):.3f}, mean={np.mean(frip):.3f}")
+        elif verbose:
+            print("  frip: skipped (n_fragments not populated by importer)")
 
     # Per-prefix / per-feature-set counts + percentages
     if masks:

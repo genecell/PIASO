@@ -5,18 +5,15 @@ bit-identical results on repeated runs with the same random_seed.
 import sys, os
 import numpy as np
 import pytest
-from conftest import E18_CYTOME
+from conftest import E18_CYTOME, ensure
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-sys.path.insert(0, "/path/to/project")
-sys.path.insert(0, "/path/to/project/COSG")
 
 # E18_CYTOME comes from conftest.py; @pytest.mark.requires_e18 applies the skip
 
 
 def _skip_if_no_e18():
-    if not os.path.exists(E18_CYTOME):
-        pytest.skip("E18 cytome not available")
+    ensure(E18_CYTOME, "the E18 store")
 
 
 def _get_gene_sets(ds, n_sets=5, n_genes=20, seed=123):
@@ -51,14 +48,14 @@ def test_score_reproducibility():
 
     sm1, names1, _ = score(
         ds, gene_sets,
-        modality="RNA", cytome_layer="counts",
-        batch_size=1024, layer=None,
+        modality="RNA", layer="counts",
+        batch_size=1024,
         random_seed=42, use_rust=False, verbosity=0,
     )
     sm2, names2, _ = score(
         ds, gene_sets,
-        modality="RNA", cytome_layer="counts",
-        batch_size=1024, layer=None,
+        modality="RNA", layer="counts",
+        batch_size=1024,
         random_seed=42, use_rust=False, verbosity=0,
     )
 
@@ -81,27 +78,29 @@ def test_gdr_reproducibility():
 
     result1, markers1 = piaso.tl.runGDRParallel(
         ds,
-        groupby="leiden_0.8",
+        groupby="leiden_1.0",
         n_gene=30,
         mu=1.0,
         scoring_method="piaso",
         random_seed=42,
         modality="RNA",
-        cytome_layer="counts",
+        layer="raw",
         batch_size_cytome=1024,
         verbosity=0,
+        write_to_cytome=False,
     )
     result2, markers2 = piaso.tl.runGDRParallel(
         ds,
-        groupby="leiden_0.8",
+        groupby="leiden_1.0",
         n_gene=30,
         mu=1.0,
         scoring_method="piaso",
         random_seed=42,
         modality="RNA",
-        cytome_layer="counts",
+        layer="raw",
         batch_size_cytome=1024,
         verbosity=0,
+        write_to_cytome=False,
     )
 
     ds.close()

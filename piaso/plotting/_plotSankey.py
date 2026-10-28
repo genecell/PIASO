@@ -17,7 +17,7 @@ from functools import wraps
 
 
 from ..utils._cytome_compat import is_cytome_input as _is_cytome_input
-from ..utils._cytome_compat import read_cells_columns as _read_cells_columns
+from ._store_io import read_cells_columns as _read_cells_columns  # read-only
 from ._group_order import resolve_group_order
 from ._seriation import resolve_pair_order
 
@@ -397,7 +397,7 @@ def sankey(
     gap: float = 0.03,
     title: Optional[str] = None,
     fontsize: int = 9,
-    show: bool = True,
+    show: Optional[bool] = None,
     save: Optional[str] = None,
     ax: Optional[plt.Axes] = None,
     return_fig: bool = False,
@@ -412,10 +412,20 @@ def sankey(
         Left-side category column.
     right : str
         Right-side category column.
-    palette : list or dict, optional
-        Colors. If None, uses ``d_color4``.
+    palette : list, dict or str, optional
+        Colors. A dict maps category names (on either rail) to colours; a list
+        or a colormap name colours the ``color_by`` column, matched to its
+        category order. Without it, each column's stored colours (by name:
+        ``adata.uns``, a cytome's ``set_categories``), then ``d_color4``. A
+        rail without colours of its own continues the palette after the
+        coloured column's categories, so the two rails do not repeat colours.
     color_by : str
         Color flows by ``'left'`` or ``'right'`` categories.
+
+        *Changed*: ``color_by='right'`` coloured the right column's categories
+        with the palette offset by the number of left categories, and
+        ``left_order='auto'`` recoloured the reordered nodes; colours now
+        follow each category by name.
     flow_scale : {'linear', 'sqrt', 'log'}, default ``'linear'``
         Shape of the count-to-width map. ``'linear'`` is proportional and is
         what a Sankey normally promises. ``'sqrt'`` and ``'log'`` (``log1p``)
@@ -497,8 +507,11 @@ def sankey(
         Title.
     fontsize : int
         Label font size.
-    show, save, ax, return_fig
-        Output options.
+    show : bool, optional
+        Call ``plt.show()``; ``None`` (default) shows unless ``ax`` is given.
+    save, ax, return_fig
+        Output options. Without ``return_fig`` the figure is returned when it
+        is not shown. A figure passed in through ``ax`` is never closed.
 
     Notes
     -----
@@ -542,8 +555,13 @@ def sankey(
         raise ValueError(f"sankey: size_legend_loc={size_legend_loc!r} is "
                          f"not one of {_SIZE_LEGEND_LOCS}")
 
-    df = _get_category_pairs(data, left, right)
-    df = df.dropna()
+    from ._categories import resolve_category_style, missing_mask, label_strings
+    from . import _figure
+
+    df_all = _get_category_pairs(data, left, right)
+    # a cell is drawn only when both of its labels are known
+    keep = ~(missing_mask(df_all[left]) | missing_mask(df_all[right]))
+    df = df_all[keep].copy()
 
     # Order first, stringify second. `.astype(str)` throws away the categorical
     # dtype, and the categorical order is what plotEmbedding draws the legend
@@ -553,13 +571,33 @@ def sankey(
     # until the crosstab does. Everything else resolves from the labels.
     _auto_l = isinstance(left_order, str) and left_order == "auto"
     _auto_r = isinstance(right_order, str) and right_order == "auto"
-    left_cats = resolve_group_order(df[left],
-                                    categories_order=None if _auto_l else left_order)
-    right_cats = resolve_group_order(df[right],
-                                     categories_order=None if _auto_r else right_order)
 
-    df[left] = df[left].astype(str)
-    df[right] = df[right].astype(str)
+    # Colours: each rail from its own column, by name, over the whole column
+    # (the resolver every plot uses), so neither color_by nor a reordering can
+    # move one. The coloured column takes `palette` (a list or colormap name);
+    # the other rail's defaults continue that palette after the coloured
+    # column's categories, as the two rails always did, so they do not repeat.
+    from . import color as _color_mod
+    _coloured, _other = (left, right) if color_by == 'left' else (right, left)
+    style_c = resolve_category_style(data, _coloured, df_all[_coloured], palette=palette)
+    _base = (list(palette) if isinstance(palette, (list, tuple, np.ndarray)) and len(palette)
+             else list(_color_mod.d_color4))
+    _n_c = len(style_c.canonical)
+    _rotated = [_base[(_n_c + i) % len(_base)] for i in range(len(_base))]
+    style_o = resolve_category_style(
+        data, _other, df_all[_other],
+        palette=palette if isinstance(palette, dict) else None,
+        default_palette=_rotated)
+    style_l, style_r = (style_c, style_o) if color_by == 'left' else (style_o, style_c)
+
+    # display orders: the caller's, else the stored/categorical one, else
+    # natural (resolve_group_order's rule, now reading a store's order too)
+    left_cats = resolve_category_style(
+        data, left, df[left], order=None if _auto_l else left_order).present(df[left])
+    right_cats = resolve_category_style(
+        data, right, df[right], order=None if _auto_r else right_order).present(df[right])
+    df[left] = label_strings(df[left])
+    df[right] = label_strings(df[right])
 
     ct = pd.crosstab(df[left], df[right])
     total = ct.values.sum()
@@ -572,31 +610,14 @@ def sankey(
             default_left=left_cats, default_right=right_cats,
         )
 
-    # Resolve palette
-    all_cats = left_cats + right_cats
-    if palette is None:
-        if not _is_cytome_input(data) and hasattr(data, 'uns'):
-            key = f'{left}_colors' if color_by == 'left' else f'{right}_colors'
-            if key in data.uns:
-                palette = list(data.uns[key])
-        if palette is None:
-            palette = _color_mod.d_color4
-    if isinstance(palette, dict):
-        color_list = [palette.get(c, _color_mod.d_color4[i % len(_color_mod.d_color4)])
-                      for i, c in enumerate(all_cats)]
-    else:
-        color_list = [palette[i % len(palette)] for i in range(len(all_cats))]
-
-    left_colors = {c: color_list[i] for i, c in enumerate(left_cats)}
-    right_colors = {c: color_list[len(left_cats) + i] for i, c in enumerate(right_cats)}
+    left_colors = {c: style_l.color(c) for c in left_cats}
+    right_colors = {c: style_r.color(c) for c in right_cats}
 
     if figsize is None:
         figsize = (8, max(4, max(len(left_cats), len(right_cats)) * 0.4 + 1))
 
-    if ax is None:
-        fig, ax = plt.subplots(figsize=figsize)
-    else:
-        fig = ax.figure
+    show = _figure.resolve_show(show, ax)
+    fig, ax, _created = _figure.begin(ax, figsize=figsize)
 
     def _compute_positions(cats, heights):
         """Stack blocks of given height down the rail, gap between each."""
@@ -857,7 +878,7 @@ def sankey(
         ax.text(x_right, -0.03, right, ha='center', va='top',
                 fontsize=fontsize + 1, fontweight='bold')
 
-    plt.tight_layout()
+    _figure.layout(fig, quiet=False)
 
     # tight_layout resizes the axes to fit the labels, so the conversion above
     # is an estimate. An axis-off subplot normally expands, making ribbons
@@ -930,15 +951,10 @@ def sankey(
             *_rail_span_fraction(ax, layout, node_width))
 
 
-    from ..settings import _savefig
-    _savefig(fig, save, writekey='sankey')
-    if show:
-        plt.show()
-    else:
-        plt.close(fig)
-
+    out = _figure.finish(fig, created=_created, show=show, save=save, writekey='sankey')
     if return_fig:
         return fig, ax
+    return out
 
 
 @wraps(sankey)

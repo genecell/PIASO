@@ -420,6 +420,12 @@ def test_neighbors_can_build_its_graph_in_rust():
 
 def test_ctrl_c_stops_a_layout():
     import os, signal, threading, time
+    if signal.getsignal(signal.SIGINT) is not signal.default_int_handler:
+        # A job started with `&` from a non-interactive shell inherits SIGINT
+        # ignored, and Python then installs no KeyboardInterrupt handler: the
+        # SIGINT below would never arrive and the layout would run all its
+        # epochs (about 4 hours on a loaded machine).
+        pytest.skip("SIGINT is not handled in this process (a detached run)")
     n = 40000
     G = _ring(n)
     init = _start(n)

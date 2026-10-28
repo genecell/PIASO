@@ -445,10 +445,41 @@ fn check_graph(indptr: &[i64], indices: &[i32], w: &[f32], n: usize, identity: &
         }
         seen[id as usize] = true;
     }
+    // Rows in order (columns strictly increasing, so no edge twice) are
+    // searched as they are; otherwise each row's (column, weight) pairs are
+    // sorted into a copy first. Either way an edge's reverse is found by binary
+    // search: the linear search before cost the sum of the squared degrees,
+    // which hub rows make large.
+    let range = |i: usize| indptr[i] as usize..indptr[i + 1] as usize;
+    let in_order = (0..n).into_par_iter().all(|i| indices[range(i)].windows(2).all(|p| p[0] < p[1]));
+    let sorted_copy: Option<(Vec<i32>, Vec<f32>)> = if in_order {
+        None
+    } else {
+        let rows: Vec<Vec<(i32, f32)>> = (0..n)
+            .into_par_iter()
+            .map(|i| {
+                let mut r: Vec<(i32, f32)> = range(i).map(|e| (indices[e], w[e])).collect();
+                r.sort_by_key(|x| x.0);
+                r
+            })
+            .collect();
+        let mut ix = Vec::with_capacity(indices.len());
+        let mut wt = Vec::with_capacity(w.len());
+        for r in rows {
+            for (c, x) in r {
+                ix.push(c);
+                wt.push(x);
+            }
+        }
+        Some((ix, wt))
+    };
+    let (ix, wt): (&[i32], &[f32]) = match &sorted_copy {
+        Some((a, b)) => (a, b),
+        None => (indices, w),
+    };
     // each neighbor once per row, and no node its own neighbor
     let flaw = (0..n).into_par_iter().map(|i| {
-        let mut row: Vec<i32> = indices[indptr[i] as usize..indptr[i + 1] as usize].to_vec();
-        row.sort_unstable();
+        let row = &ix[range(i)];
         if row.windows(2).any(|p| p[0] == p[1]) {
             Some(format!("the graph holds an edge twice in row {}: sum the duplicates first", i))
         } else if row.binary_search(&(i as i32)).is_ok() {
@@ -462,12 +493,11 @@ fn check_graph(indptr: &[i64], indices: &[i32], w: &[f32], n: usize, identity: &
     }
     // symmetric, values included: umap-learn's fuzzy union is
     let bad = (0..n).into_par_iter().find_first(|&i| {
-        for e in indptr[i] as usize..indptr[i + 1] as usize {
-            let j = indices[e] as usize;
-            let row = &indices[indptr[j] as usize..indptr[j + 1] as usize];
-            let found = row.iter().position(|&c| c as usize == i);
-            match found {
-                Some(p) if w[indptr[j] as usize + p] == w[e] => {}
+        for e in range(i) {
+            let j = ix[e] as usize;
+            let rj = range(j);
+            match ix[rj.clone()].binary_search(&(i as i32)) {
+                Ok(p) if wt[rj.start + p] == wt[e] => {}
                 _ => return true,
             }
         }
@@ -1085,6 +1115,118 @@ mod tests {
             assert!(fired > 0);
             assert_eq!(drawn + 1, (last as f64 * (f * r as f64)).floor() as i64);
         }
+    }
+
+    /// A second construction of the graph, written out plainly, to check the module's against.
+    fn reference_fuzzy(idx: &[i64], dist: &[f32], n: usize, k: usize) -> Csr {
+        fn to_csr(n: usize, rows: Vec<Vec<(i32, f32)>>) -> Csr {
+            let mut indptr = vec![0i64];
+            let (mut indices, mut data) = (Vec::new(), Vec::new());
+            for r in rows {
+                for (c, v) in r {
+                    indices.push(c);
+                    data.push(v);
+                }
+                indptr.push(indices.len() as i64);
+            }
+            Csr { n, indptr, indices, data }
+        }
+        let mean_all = dist.iter().map(|&x| x as f64).sum::<f64>() / dist.len() as f64;
+        let sr: Vec<(f32, f32)> = (0..n).map(|i| smooth_knn_row(&dist[i * k..(i + 1) * k], mean_all, 1.0, 1.0)).collect();
+        let rows: Vec<Vec<(i32, f32)>> = (0..n).map(|i| {
+            let mut row = Vec::new();
+            for j in 0..k {
+                let c = idx[i * k + j];
+                if c < 0 { continue; }
+                let d = dist[i * k + j];
+                let (sig, rho) = sr[i];
+                let v: f32 = if c as usize == i { 0.0 } else if d - rho <= 0.0 || sig == 0.0 { 1.0 }
+                             else { libm::expf(-((d - rho) / sig)) };
+                row.push((c as i32, v));
+            }
+            row.sort_by_key(|x| x.0);
+            let mut out: Vec<(i32, f32)> = Vec::new();
+            for (c, v) in row {
+                match out.last_mut() { Some(l) if l.0 == c => l.1 += v, _ => out.push((c, v)) }
+            }
+            out.retain(|x| x.1 != 0.0);
+            out
+        }).collect();
+        let a = to_csr(n, rows);
+        let t = transpose(&a);
+        let rows: Vec<Vec<(i32, f32)>> = (0..n).map(|i| {
+            let mut m: Vec<(i32, f32, f32)> = Vec::new();
+            for e in a.indptr[i] as usize..a.indptr[i + 1] as usize { m.push((a.indices[e], a.data[e], 0.0)); }
+            for e in t.indptr[i] as usize..t.indptr[i + 1] as usize {
+                match m.iter_mut().find(|x| x.0 == t.indices[e]) { Some(x) => x.2 = t.data[e],
+                                                                  None => m.push((t.indices[e], 0.0, t.data[e])) }
+            }
+            m.sort_by_key(|x| x.0);
+            m.into_iter().map(|(c, x, y)| (c, (x + y) - x * y)).filter(|x| x.1 != 0.0).collect()
+        }).collect();
+        to_csr(n, rows)
+    }
+
+    #[test]
+    fn the_fuzzy_graph_matches_a_plain_construction() {
+        let (n, k) = (700usize, 9usize);
+        let mut s = 12345u64;
+        let mut rnd = || { s = mix(s.wrapping_add(GOLD)); s };
+        let mut idx = Vec::new();
+        let mut dist = Vec::new();
+        for i in 0..n {
+            idx.push(i as i64);
+            dist.push(0.0f32);
+            let mut d = 0.0f32;
+            for t in 1..k {
+                let r = rnd();
+                // a missing neighbor now and then, and repeated ones
+                let c = if r % 23 == 0 { -1 } else if r % 17 == 0 { idx[i * k + t - 1] } else { (r % n as u64) as i64 };
+                idx.push(if c == i as i64 { ((i + 1) % n) as i64 } else { c });
+                d += 0.1 + (r % 97) as f32 * 0.01;
+                dist.push(d);
+            }
+        }
+        let (g, _, _) = fuzzy_graph(&idx, &dist, n, k, 1.0, 1.0);
+        let r = reference_fuzzy(&idx, &dist, n, k);
+        assert_eq!(g.indptr, r.indptr);
+        assert_eq!(g.indices, r.indices);
+        assert_eq!(g.data.iter().map(|x| x.to_bits()).collect::<Vec<_>>(),
+                   r.data.iter().map(|x| x.to_bits()).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn rows_out_of_order_are_checked_as_rows_in_order() {
+        let (n, k) = (300usize, 6usize);
+        let mut idx = Vec::new();
+        let mut dist = Vec::new();
+        for i in 0..n {
+            idx.push(i as i64);
+            dist.push(0.0f32);
+            for t in 1..k {
+                idx.push(((i + t * 7) % n) as i64);
+                dist.push(t as f32 * 0.3);
+            }
+        }
+        let (g, _, _) = fuzzy_graph(&idx, &dist, n, k, 1.0, 1.0);
+        let id: Vec<u32> = (0..n as u32).collect();
+        // every row reversed: still symmetric, still valid
+        let (mut ix, mut w) = (g.indices.clone(), g.data.clone());
+        for i in 0..n {
+            let (a, b) = (g.indptr[i] as usize, g.indptr[i + 1] as usize);
+            ix[a..b].reverse();
+            w[a..b].reverse();
+        }
+        assert!(check_graph(&g.indptr, &ix, &w, n, &id).is_ok());
+        // one weight changed on one side: not symmetric
+        let mut w2 = w.clone();
+        w2[g.indptr[5] as usize] += 0.5;
+        assert!(check_graph(&g.indptr, &ix, &w2, n, &id).unwrap_err().contains("not symmetric"));
+        // an edge listed twice
+        let mut ix3 = ix.clone();
+        let a = g.indptr[3] as usize;
+        ix3[a + 1] = ix3[a];
+        assert!(check_graph(&g.indptr, &ix3, &w, n, &id).unwrap_err().contains("twice"));
     }
 
     #[test]
