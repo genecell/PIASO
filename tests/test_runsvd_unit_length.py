@@ -16,7 +16,6 @@ import anndata as ad
 import numpy as np
 import pytest
 import scipy.sparse as sp
-import yaml
 
 import piaso
 
@@ -159,6 +158,10 @@ WORKFLOW = Path(__file__).resolve().parents[1] / "workflow"
 @pytest.mark.snakemake
 @pytest.mark.skipif(not SNAKEMAKE, reason="snakemake (PIASO_SNAKEMAKE or PATH) not available")
 def test_the_workflow_scales_every_atac_embedding(tmp_path):
+    # Imported here, not at the top: PyYAML is not a dependency of piaso-tools, and the module's other tests
+    # must run where it is absent (a fresh Python 3.10 install has none; the wheel test of 1.2.8 failed on it).
+    import yaml
+
     cfg = yaml.safe_load(open(WORKFLOW / "config.yaml"))
     assert cfg["params"]["svd_unit_length"] is True
     cfg["outdir"] = str(tmp_path / "out")
